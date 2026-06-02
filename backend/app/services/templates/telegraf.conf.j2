@@ -53,6 +53,29 @@
 [[inputs.kernel]]
 
 [[inputs.linux_sysctl_fs]]
+
+# ── Per-core CPU (single field — keeps per-core storage tiny) ────────────────
+[[inputs.cpu]]
+  percpu = true
+  totalcpu = false
+  collect_cpu_time = false
+  report_active = true
+  fieldpass = ["usage_active"]
+  [inputs.cpu.tags]
+    scope = "percore"
+
+# ── Agent service health (scoped to our two agents only) ─────────────────────
+[[inputs.systemd_units]]
+  pattern = "telegraf.service fluent-bit.service"
+
+# ── Top-N processes (proctop) — bounded, 30s ─────────────────────────────────
+[[inputs.exec]]
+  interval = "30s"
+  timeout = "5s"
+  data_format = "influx"
+  commands = [
+    "sh -c \"top -bn2 -d0.3 -w512 | awk 'BEGIN{b=\\\"\\\"} /^[[:space:]]*PID/{b=\\\"\\\";next} {b=b $0 \\\"\\n\\\"} END{printf \\\"%s\\\",b}' | awk 'NF>=12 && $1 ~ /^[0-9]+$/ {name=$12; gsub(/[ ,=]/,\\\"_\\\",name); print $9\\\" \\\"$10\\\" \\\"$1\\\" \\\"name}' | sort -k1 -rn | head -10 | awk '{printf \\\"proctop,by=cpu,pid=%s,name=%s cpu_pct=%s,mem_pct=%s\\n\\\",$3,$4,$1,$2}'; top -bn2 -d0.3 -w512 | awk 'BEGIN{b=\\\"\\\"} /^[[:space:]]*PID/{b=\\\"\\\";next} {b=b $0 \\\"\\n\\\"} END{printf \\\"%s\\\",b}' | awk 'NF>=12 && $1 ~ /^[0-9]+$/ {name=$12; gsub(/[ ,=]/,\\\"_\\\",name); print $10\\\" \\\"$9\\\" \\\"$1\\\" \\\"name}' | sort -k1 -rn | head -10 | awk '{printf \\\"proctop,by=mem,pid=%s,name=%s cpu_pct=%s,mem_pct=%s\\n\\\",$3,$4,$2,$1}'\""
+  ]
 {% if mysql_dsn %}
 
 # ── MySQL/MariaDB input (DBCredential present at onboarding time) ────────────
