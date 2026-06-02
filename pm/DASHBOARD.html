@@ -70,19 +70,19 @@
 <div class="overall">
   <div>
     <div class="label">Overall Progress</div>
-    <div class="bar-wrap"><div class="bar" style="width:29%"></div></div>
-    <div class="sub">56 of 191 tasks completed</div>
+    <div class="bar-wrap"><div class="bar" style="width:39%"></div></div>
+    <div class="sub">75 of 191 tasks completed</div>
   </div>
   <div>
-    <div class="pct">29<span>%</span></div>
-    <div class="counts">56 done &middot; 0 in progress &middot; 135 pending</div>
+    <div class="pct">39<span>%</span></div>
+    <div class="counts">75 done &middot; 2 in progress &middot; 114 pending</div>
   </div>
 </div>
 <div class="stats">
-  <div class="stat"><div class="label">Phases Done</div><div class="val g">0</div><div class="sub">of 11 phases</div></div>
-  <div class="stat"><div class="label">Tasks Complete</div><div class="val a">56</div><div class="sub">of 191 total</div></div>
-  <div class="stat"><div class="label">Smoke Tests Passed</div><div class="val b">2</div><div class="sub">of 16 gates</div></div>
-  <div class="stat"><div class="label">In Progress</div><div class="val am">0</div><div class="sub">tasks active</div></div>
+  <div class="stat"><div class="label">Phases Done</div><div class="val g">1</div><div class="sub">of 11 phases</div></div>
+  <div class="stat"><div class="label">Tasks Complete</div><div class="val a">75</div><div class="sub">of 191 total</div></div>
+  <div class="stat"><div class="label">Smoke Tests Passed</div><div class="val b">5</div><div class="sub">of 16 gates</div></div>
+  <div class="stat"><div class="label">In Progress</div><div class="val am">2</div><div class="sub">tasks active</div></div>
 </div>
 <div class="sec-title">Phases</div>
 <div class="grid" id="grid"></div>
@@ -143,27 +143,27 @@ const phases = [
     { text: "Enable slow_query_log if MariaDB detected", status: "done", smoke: false },
     { text: "Write configs to /etc/telegraf/ and /etc/fluent-bit/", status: "done", smoke: false },
     { text: "Enable + start both services via systemctl", status: "done", smoke: false },
-    { text: "Wait up to 30s for first metric row in TimescaleDB *(verified on Lima Ubuntu 24.04 VM — first metric in 6s)*", status: "done", smoke: false },
+    { text: "Wait up to 30s for first metric row in TimescaleDB *(verified on Lima Ubuntu 24.04 VM — \"first metric in 6s\")*", status: "done", smoke: false },
     { text: "Mark server active, push onboarding_complete WS event *(verified live over WS — onboarding_complete received, duration_sec 8)*", status: "done", smoke: false },
     { text: "OnboardingLog rows written per step", status: "done", smoke: false },
     { text: "Re-deploy agents endpoint (steps 6–10 only)", status: "done", smoke: false },
     { text: "WS channel: onboarding:{server_id} — progress events pushed live", status: "done", smoke: false },
     { text: "Onboarding UI: progress steps, error display, SSH log output", status: "done", smoke: false },
-    { text: "Smoke test: add server, watch onboarding complete, see first metric in DB *(verified end-to-end on Lima Ubuntu 24.04 VM — all 10 steps done over WS, onboarding_complete received, server online, metrics flowing. Fixed gzip-ingestion bug found during test.)*", status: "done", smoke: true },
+    { text: "Smoke test: add server, watch onboarding complete, see first metric in DB *(verified end-to-end on Lima Ubuntu 24.04 VM — all 10 steps done over WS, onboarding_complete received, server `online`, ~633 metric rows flowing. Fixed a gzip-ingestion bug found during the test: `/api/ingest/metrics` now decompresses gzip/deflate bodies, see ingest.py.)*", status: "done", smoke: true },
   ]},
   { id: 2, title: "Live Dashboard & Charts", subtitle: "WebSocket live dashboard, historical metric charts", tasks: [
-    { text: "FastAPI WS fan-out (in-process live bus — see PRD §5.4.8)", status: "done", smoke: false },
-    { text: "500ms event batching before WS push", status: "done", smoke: false },
-    { text: "WS channel authorization per subscribe message", status: "done", smoke: false },
+    { text: "FastAPI WS fan-out *(implemented as in-process live bus, not LISTEN/NOTIFY — see PRD §5.4.8; verified live on lima-ubuntu)*", status: "done", smoke: false },
+    { text: "500ms event batching before WS push *(verified: 211-row Telegraf flush coalesced into one WS message)*", status: "done", smoke: false },
+    { text: "WS channel authorization per subscribe message *(verified: non-member denied with `forbidden` frame)*", status: "done", smoke: false },
     { text: "subscribe_org / subscribe (server) / unsubscribe + unsubscribe_org actions", status: "done", smoke: false },
-    { text: "Smoke test: open dashboard, verify live metric updates arrive", status: "pending", smoke: true },
-    { text: "GET /api/organizations/:org_id/dashboard — summary + server latest metrics", status: "pending", smoke: false },
-    { text: "GET /api/organizations/:org_id/alerts/recent — last 10 alerts", status: "pending", smoke: false },
-    { text: "Summary stat cards (Servers, Services, Alerts, SSL/Domains)", status: "pending", smoke: false },
-    { text: "Server card grid with live metric bars (CPU/RAM/Disk progress bars)", status: "pending", smoke: false },
-    { text: "Recent Alerts panel with [Ack] button", status: "pending", smoke: false },
-    { text: "Live card updates via WS (applyMetricPush)", status: "pending", smoke: false },
-    { text: "Smoke test: dashboard loads, cards update live, [Ack] works", status: "pending", smoke: true },
+    { text: "Smoke test: open dashboard, verify live metric updates arrive *(verified on lima-ubuntu via Playwright — CPU bar rose 0%→100% live with no reload when the VM was load-spiked)*", status: "done", smoke: true },
+    { text: "GET /api/organizations/:org_id/dashboard — summary + server latest metrics", status: "done", smoke: false },
+    { text: "GET /api/organizations/:org_id/alerts/recent — last 10 alerts *(returns [] until Phase 8 populates alerts)*", status: "done", smoke: false },
+    { text: "Summary stat cards (Servers, Services, Alerts, SSL/Domains) *(Servers live; Services/Alerts/SSL return 0 until their phases)*", status: "done", smoke: false },
+    { text: "Server card grid with live metric bars (CPU/RAM/Disk progress bars)", status: "done", smoke: false },
+    { text: "Recent Alerts panel with [Ack] button *(panel + empty state shipped; [Ack] deferred to Phase 8 per design)*", status: "inprogress", smoke: false },
+    { text: "Live card updates via WS (applyMetricPush)", status: "done", smoke: false },
+    { text: "Smoke test: dashboard loads, cards update live, [Ack] works *(dashboard loads + live CPU/RAM/Disk bars verified on lima-ubuntu via Playwright; [Ack] deferred to Phase 8)*", status: "inprogress", smoke: true },
     { text: "GET /api/servers/:id/metrics — chart data (range + metric filter)", status: "pending", smoke: false },
     { text: "GET /api/servers/:id/metrics/latest — live gauge initial state", status: "pending", smoke: false },
     { text: "GET /api/servers/:id/processes — top_processes snapshot", status: "pending", smoke: false },
