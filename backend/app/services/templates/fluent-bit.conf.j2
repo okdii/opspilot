@@ -85,6 +85,15 @@
     Match   *
     Add     server_id {{ server_id }}
 
+# ── Stamp the log source (the input's tag) onto every record ─────────────────
+# The http/json output drops the Fluent Bit tag, so without this the backend
+# can't categorise logs and every record falls back to source="unknown".
+[FILTER]
+    Name   lua
+    Match  *
+    call   set_source
+    code   function set_source(tag, ts, record) record['source'] = tag; return 1, ts, record end
+
 # ── Output: push to OpsPilot backend over HTTPS ──────────────────────────────
 [OUTPUT]
     Name              http
