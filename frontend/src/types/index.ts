@@ -108,3 +108,43 @@ export interface RecentAlert {
   state: string
   sent_at: string | null
 }
+
+// ── Settings (Phase 10) ──────────────────────────────────────────────────────
+export interface Session {
+  jti: string
+  is_current: boolean
+  ip_address: string | null
+  user_agent: string | null
+  issued_at: string
+  expires_at: string
+}
+
+export interface OrgAssignment {
+  org_id: string
+  org_name: string
+  role: 'operator' | 'viewer'
+}
+
+export interface TeamMember {
+  id: string
+  username: string
+  role: 'admin' | 'member'
+  created_at: string
+  org_assignments: OrgAssignment[]
+}
+
+export interface PendingInvite {
+  id: string
+  email: string
+  org_id: string
+  org_name: string
+  role: 'operator' | 'viewer'
+  expires_at: string
+}
+
+export interface RotationServer {
+  server_id: string
+  server_name: string
+  status: 'pending' | 'deploying' | 'ok' | 'error'
+  message: string
+}
