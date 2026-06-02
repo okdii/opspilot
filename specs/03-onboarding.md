@@ -303,7 +303,7 @@ Clicking `View Progress →` opens a right-side slide-over panel (600px wide on 
 
 ## 6. WebSocket Events
 
-Onboarding progress is pushed via LISTEN/NOTIFY on channel `onboarding:{server_id}`.
+Onboarding progress is pushed over WebSocket on channel `onboarding:{server_id}` via the in-process live fan-out (`ws_manager.broadcast_onboarding`) — see PRD §5.4.8. (Earlier drafts said LISTEN/NOTIFY; the shipped implementation is in-process.)
 
 ### 6.1 Event Shape
 

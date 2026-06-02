@@ -189,7 +189,7 @@ When a server is deleted from the UI:
 
 Collected by **Telegraf agent** installed on each server during onboarding, pushing every 10 seconds.  
 All metrics stored as **TimescaleDB hypertables**, auto-partitioned by time.  
-**Real-time:** Streamed live to dashboard via WebSocket (PostgreSQL LISTEN/NOTIFY).  
+**Real-time:** Streamed live to dashboard via WebSocket (in-process live bus — see §5.4.8).  
 **History:** Queryable for last 1h, 6h, 24h, 7d, 30d.
 
 ---
@@ -326,19 +326,25 @@ server_metrics (
 
 ---
 
-#### 5.4.8 WebSocket / LISTEN/NOTIFY Architecture
+#### 5.4.8 WebSocket / Live Fan-out Architecture
 
-PostgreSQL NOTIFY is used to push new metric rows to connected browser clients without polling.
+New metric (and log) rows are pushed to connected browser clients without polling. The backend and the ingest endpoint run in the **same process** (single backend container), so fan-out is done **in-process** rather than through PostgreSQL `LISTEN/NOTIFY`.
 
-**Channel naming:** One channel per server — `server_metrics:{server_id}` (e.g. `server_metrics:550e8400-e29b-41d4-a716-446655440000`). The backend trigger fires `NOTIFY` on that channel whenever a new row is inserted into `server_metrics`.
+> **Design note (v2.5 → implementation):** Earlier drafts specified PostgreSQL `LISTEN/NOTIFY` as the transport. That was changed during Phase 2 to an in-process bus for two reasons: (1) `NOTIFY` payloads are capped at 8 KB, which a `top_processes` metric batch can exceed; (2) with a single backend process, `NOTIFY`'s only real benefit — cross-process delivery — is unused. Phase 1 onboarding progress already uses this in-process pattern (`ws_manager.broadcast_onboarding`). `LISTEN/NOTIFY` remains the documented upgrade path if the backend is ever scaled to multiple worker processes (see "Future: multi-process").
 
-**Backend fan-out:** The FastAPI backend has one PostgreSQL LISTEN connection per active channel. When a NOTIFY arrives on `server_metrics:{server_id}`, the backend looks up all WebSocket connections subscribed to that server and pushes the payload. Connections viewing a different server receive nothing.
+**Live bus:** When `write_metrics()` persists rows, it also hands the parsed rows to an in-process `LiveBus` keyed by `server_id`. A single background task flushes each server's buffer every **500ms** (see Batching) and fans the batch out via the WebSocket manager.
 
-**Frontend subscription:** When the admin navigates to a server detail page, the frontend sends a subscribe message over the existing WebSocket connection: `{"action": "subscribe", "server_id": "..."}`. On navigation away, it sends `{"action": "unsubscribe", "server_id": "..."}`. A single WebSocket connection handles all subscriptions for the session.
+**Channel naming:** One logical channel per server — `server_metrics:{server_id}` (e.g. `server_metrics:550e8400-e29b-41d4-a716-446655440000`). The flushed batch carries this `channel` field so the client can route it.
 
-**Batching:** The backend buffers NOTIFY events for up to **500ms** before flushing to WebSocket clients — this collapses bursts (e.g. 30 metric rows arriving at once after a 10s interval) into a single push, reducing frontend render churn.
+**Backend fan-out:** A flushed batch for a server is delivered to every WebSocket connection that is subscribed to **that server** (`{"action":"subscribe"}`) **or to that server's org** (`{"action":"subscribe_org"}` — the global dashboard). Connections viewing a different server/org receive nothing.
 
-**Log live tail** uses the same pattern on channel `server_logs:{server_id}`.
+**Frontend subscription:** A single WebSocket connection handles all subscriptions for the session. The server detail page sends `{"action":"subscribe","server_id":"..."}` on mount and `{"action":"unsubscribe",...}` on unmount; the global dashboard sends `{"action":"subscribe_org","org_id":"..."}`. Every subscribe is **authorized** server-side against the user's role/org membership before it takes effect.
+
+**Batching:** The backend buffers new rows for up to **500ms** before flushing to WebSocket clients — this collapses bursts (e.g. ~30 metric rows arriving at once after a 10s interval) into a single push, reducing frontend render churn.
+
+**Log live tail** uses the same in-process pattern on channel `server_logs:{server_id}`.
+
+**Future: multi-process.** If the backend is scaled to multiple worker processes, the `LiveBus` is the single seam to change: replace the in-process buffer with a PostgreSQL `LISTEN/NOTIFY` transport (NOTIFY a lightweight `server_id` signal; the listening worker re-queries recent rows and fans out), keeping the same WebSocket-facing API.
 
 ---
 
@@ -499,7 +505,7 @@ server_logs (
 | Filter by severity | info / warn / error / fatal |
 | Full-text search | Search within `message` field |
 | Time range picker | Last 15m / 1h / 6h / 24h / 7d / custom |
-| Live tail mode | Real-time push via WebSocket (PostgreSQL LISTEN/NOTIFY on `server_logs`) — no polling |
+| Live tail mode | Real-time push via WebSocket (in-process live bus on `server_logs:{server_id}` — see §5.4.8) — no polling |
 | Expandable rows | Click a row to see all parsed JSONB fields |
 | Pagination | Cursor-based — API returns max **500 rows** per request with a `next_cursor` token; frontend loads the next page on scroll. Prevents unbounded result sets on broad time-range queries. |
 
@@ -1245,7 +1251,7 @@ Changing a retention setting updates the TimescaleDB retention policy via `SELEC
 
 | Requirement | Target |
 |---|---|
-| Real-time latency | Metric updates visible within 2s — PostgreSQL LISTEN/NOTIFY triggers WebSocket push on new TimescaleDB rows |
+| Real-time latency | Metric updates visible within 2s — in-process live bus triggers WebSocket push on new TimescaleDB rows (see §5.4.8) |
 | Check reliability | Service checks run once per configured interval. A service is marked down after **2 consecutive failed intervals** — no within-interval retries. |
 | Alert evaluation | Rolling 5-min average for metric alerts, evaluated every 30s. Auto-resolve after 2 consecutive clean evaluations. |
 | Data retention | Metrics: 30 days raw / 1 year aggregated. Logs: 30 days. ServiceChecks: 90 days. Alerts: 90 days. |
@@ -1406,7 +1412,7 @@ opspilot/
 | Log sources | System, auth, Nginx, PHP-FPM, PHP app, MariaDB error + slow query |
 | Log storage | TimescaleDB hypertable `server_logs` — 30-day, tsvector full-text search |
 | Log alert evaluation | SQL pattern match on `server_logs` every 60s |
-| Log live tail | WebSocket (LISTEN/NOTIFY) — not polling |
+| Log live tail | WebSocket (in-process live bus) — not polling |
 | PHP app log path | Defaults to `/var/log/php_errors.log`; overridable per server via UI post-onboarding |
 | MariaDB slow query log | Auto-enabled by onboarding script — no manual step |
 | Log path distro differences | Onboarding detects OS — sets correct paths per distro |
@@ -1420,7 +1426,7 @@ opspilot/
 | Maintenance mode | Per-server — suppresses alerts, collection continues; auto-expiry via APScheduler (60s tick) |
 | Maintenance audit trail | Start/end events written to Alert table with `type = 'maintenance'` |
 | Alert ack/snooze | Ack stops repeat emails; snooze pauses then re-fires (or resolves if condition clears) |
-| WebSocket push | PostgreSQL LISTEN/NOTIFY — no polling, <2s latency |
+| WebSocket push | In-process live bus, 500ms batched — no polling, <2s latency (see §5.4.8) |
 | Alembic migration ordering | `migrate` one-shot service runs before backend; port 5432 firewall + deploy runbook ensures no agent connects before migrations complete |
 | Agent DB user | `opspilot_writer` — INSERT-only on hypertables |
 | Settings encryption | `value TEXT` column — backend encrypts sensitive values (SMTP password, keys) before storage; non-sensitive values stored plain |
@@ -1465,7 +1471,7 @@ opspilot/
 | acknowledged → snoozed | State machine allows snoozing an already-acknowledged alert |
 | HTTP SSL validation | Enabled by default; per-service `ignore_ssl_errors` boolean disables for self-signed cert use cases |
 | Continuous aggregates filter | Aggregate policies must exclude `metric_name = 'top_processes'` (NULL value rows with no numeric meaning) |
-| LISTEN/NOTIFY channels | Per-server channels `server_metrics:{server_id}` and `server_logs:{server_id}`; backend buffers events 500ms before WebSocket push; frontend subscribes/unsubscribes per viewed server |
+| Live fan-out channels | Per-server channels `server_metrics:{server_id}` and `server_logs:{server_id}` via the in-process live bus; backend buffers events 500ms before WebSocket push; frontend subscribes/unsubscribes per viewed server or org (see §5.4.8) |
 | WHOIS library | `python-whois` |
 | SSL check library | Python `ssl` module + `cryptography` |
 | SSH sudo requirement | NOPASSWD required — onboarding runs sudo non-interactively; password-prompted sudo hangs silently |
