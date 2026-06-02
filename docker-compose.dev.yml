@@ -1,0 +1,38 @@
+# Dev override — run with:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# - Frontend: Vite HMR at http://localhost:5173 (or http://localhost:9090 via nginx-dev)
+# - Backend:  Uvicorn --reload at http://localhost:8765
+#
+# Source files are volume-mounted — edits are reflected instantly, no rebuild needed.
+
+services:
+  backend:
+    volumes:
+      - ./backend:/app
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --reload
+    user: root   # volume mount needs write access for .pyc cache
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: opspilot-frontend
+    restart: unless-stopped
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules        # keeps container-installed node_modules intact
+    ports:
+      - "127.0.0.1:5173:5173"
+    environment:
+      VITE_API_TARGET: http://backend:8000
+      VITE_WS_TARGET: ws://backend:8000
+    depends_on:
+      - backend

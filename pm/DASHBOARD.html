@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpsPilot — Dev Progress</title>
+<style>
+  :root {
+    --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3354;
+    --accent:#6366f1;--accent2:#818cf8;--green:#22c55e;--amber:#f59e0b;
+    --red:#ef4444;--blue:#3b82f6;--grey:#6b7280;--text:#e2e8f0;--muted:#94a3b8;
+    --r:12px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;padding:32px 24px}
+  .header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:32px;flex-wrap:wrap;gap:16px}
+  .header h1{font-size:24px;font-weight:700;letter-spacing:-.5px;color:#fff}
+  .header p{color:var(--muted);margin-top:4px;font-size:13px}
+  .badge{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:12px;color:var(--muted)}
+  .badge span{color:var(--accent2);font-weight:600}
+  .overall{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px 28px;margin-bottom:28px;display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center}
+  .label{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+  .bar-wrap{background:var(--surface2);border-radius:999px;height:10px;overflow:hidden;margin-bottom:8px}
+  .bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:999px}
+  .sub{font-size:12px;color:var(--muted)}
+  .pct{font-size:42px;font-weight:800;color:#fff;letter-spacing:-2px;line-height:1;text-align:right}
+  .pct span{font-size:20px;color:var(--muted);font-weight:400}
+  .counts{font-size:12px;color:var(--muted);margin-top:4px;text-align:right}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px}
+  .stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px}
+  .stat .val{font-size:28px;font-weight:700;line-height:1;margin-bottom:4px}
+  .stat .sub{font-size:12px;color:var(--muted)}
+  .g{color:var(--green)}.a{color:var(--accent2)}.b{color:var(--blue)}.am{color:var(--amber)}
+  .sec-title{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;margin-bottom:32px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;transition:border-color .2s}
+  .card:hover{border-color:var(--accent)}
+  .card.done{border-color:rgba(34,197,94,.3)}
+  .card.active{border-color:rgba(99,102,241,.4)}
+  .card-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .card-title{font-size:13px;font-weight:600}
+  .card-count{font-size:12px;color:var(--muted);margin-bottom:8px}
+  .card-count b{color:var(--text)}
+  .ph-bar-wrap{background:var(--surface2);border-radius:999px;height:6px;overflow:hidden;margin-bottom:12px}
+  .ph-bar{height:100%;border-radius:999px}
+  .card-sub{font-size:11px;color:var(--muted);margin-bottom:10px}
+  ul{list-style:none}
+  ul.hidden{display:none}
+  li{display:flex;align-items:flex-start;gap:8px;padding:4px 0;font-size:12px;color:var(--muted);border-bottom:1px solid rgba(255,255,255,.04)}
+  li:last-child{border-bottom:none}
+  li.done{color:var(--text)}
+  li.done .dot{color:var(--green)}
+  li.inprogress{color:var(--accent2)}
+  li.inprogress .dot{color:var(--amber)}
+  li.smoke{color:var(--blue);font-style:italic}
+  li.smoke.done{color:var(--green)}
+  .dot{width:14px;flex-shrink:0;margin-top:1px;font-size:11px}
+  .task-text{flex:1;line-height:1.4}
+  .toggle{background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:11px;padding:3px 10px;cursor:pointer;width:100%;margin-top:8px;transition:all .15s}
+  .toggle:hover{border-color:var(--accent);color:var(--accent2)}
+  footer{text-align:center;color:var(--muted);font-size:12px;margin-top:16px;padding-top:20px;border-top:1px solid var(--border)}
+  @media(max-width:600px){.stats{grid-template-columns:repeat(2,1fr)}.overall{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="header">
+  <div><h1>OpsPilot &mdash; Dev Progress</h1><p>11 phases &middot; 191 tasks &middot; Python + FastAPI + Vue 3 + TimescaleDB</p></div>
+  <div class="badge">Generated: <span>2026-06-02</span></div>
+</div>
+<div class="overall">
+  <div>
+    <div class="label">Overall Progress</div>
+    <div class="bar-wrap"><div class="bar" style="width:29%"></div></div>
+    <div class="sub">56 of 191 tasks completed</div>
+  </div>
+  <div>
+    <div class="pct">29<span>%</span></div>
+    <div class="counts">56 done &middot; 0 in progress &middot; 135 pending</div>
+  </div>
+</div>
+<div class="stats">
+  <div class="stat"><div class="label">Phases Done</div><div class="val g">0</div><div class="sub">of 11 phases</div></div>
+  <div class="stat"><div class="label">Tasks Complete</div><div class="val a">56</div><div class="sub">of 191 total</div></div>
+  <div class="stat"><div class="label">Smoke Tests Passed</div><div class="val b">2</div><div class="sub">of 16 gates</div></div>
+  <div class="stat"><div class="label">In Progress</div><div class="val am">0</div><div class="sub">tasks active</div></div>
+</div>
+<div class="sec-title">Phases</div>
+<div class="grid" id="grid"></div>
+<footer>Source: PROGRESS.md &nbsp;&middot;&nbsp; Regenerate: <code>python3 generate_dashboard.py</code></footer>
+<script>
+const phases = [
+  { id: 1, title: "Foundation", subtitle: "Project setup, Docker, DB schema, auth, server CRUD, onboarding SSH", tasks: [
+    { text: "Docker Compose stack (migrate, backend, frontend, postgres, nginx)", status: "done", smoke: false },
+    { text: "PostgreSQL + TimescaleDB container configured", status: "done", smoke: false },
+    { text: "`migrate` one-shot service (alembic upgrade head before backend starts)", status: "done", smoke: false },
+    { text: "Environment variables validated on startup (abort if missing)", status: "done", smoke: false },
+    { text: "Nginx reverse proxy config (route /api → backend, / → frontend)", status: "done", smoke: false },
+    { text: "All relational tables created (Organization, User, UserOrganization, Invite, Session, Server, Service, Incident, Domain, SSLCert, Alert, AlertRule, LogAlertRule, MaintenanceWindow, CronJob, CronJobRun, BackupJob, BackupRun, DBCredential, Settings, OnboardingLog)", status: "done", smoke: false },
+    { text: "TimescaleDB hypertables created (server_metrics, server_logs, service_checks)", status: "done", smoke: false },
+    { text: "Continuous aggregate views (server_metrics_hourly, server_metrics_daily)", status: "done", smoke: false },
+    { text: "Indexes created (server_metrics: server_id + metric_name + time DESC, server_logs: source/severity + time DESC, tsvector on message)", status: "done", smoke: false },
+    { text: "Retention policies applied (metrics 30d, logs 30d, service_checks 90d)", status: "done", smoke: false },
+    { text: "`opspilot_writer` user created with INSERT-only grants on hypertables", status: "done", smoke: false },
+    { text: "POST /api/setup/register — first-run admin account creation", status: "done", smoke: false },
+    { text: "GET /api/setup/status — returns setup_required flag", status: "done", smoke: false },
+    { text: "POST /api/auth/login — JWT httpOnly cookie issued", status: "done", smoke: false },
+    { text: "POST /api/auth/logout — session revoked, cookie cleared", status: "done", smoke: false },
+    { text: "GET /api/auth/me — current user + orgs", status: "done", smoke: false },
+    { text: "GET /api/ws-ticket — one-time WS upgrade ticket", status: "done", smoke: false },
+    { text: "GET /api/invite/:token — validate invite token", status: "done", smoke: false },
+    { text: "POST /api/invite/:token/accept — accept invite, create user, issue cookie", status: "done", smoke: false },
+    { text: "PATCH /api/auth/password — change own password", status: "done", smoke: false },
+    { text: "Session table jti revocation on every request", status: "done", smoke: false },
+    { text: "Login rate limiting (10 attempts / IP / 15 min)", status: "done", smoke: false },
+    { text: "Nightly session cleanup APScheduler job", status: "done", smoke: false },
+    { text: "Smoke test: login, logout, 401 redirect, WS ticket flow", status: "done", smoke: true },
+    { text: "/setup page (first-run admin registration)", status: "done", smoke: false },
+    { text: "/login page (username + password, show/hide, error states)", status: "done", smoke: false },
+    { text: "/invite/:token page (validate token, create account)", status: "done", smoke: false },
+    { text: "/profile page (all roles — password change)", status: "done", smoke: false },
+    { text: "Route guards (setup → login → app flow)", status: "done", smoke: false },
+    { text: "Global 401 interceptor → redirect to /login?reason=expired", status: "done", smoke: false },
+    { text: "WS reconnect logic (exponential backoff, re-subscribe)", status: "done", smoke: false },
+    { text: "Pinia auth store (isAdmin, canEdit, canActOnAlerts getters)", status: "done", smoke: false },
+    { text: "Smoke test: full login/logout, session expiry, invite acceptance", status: "done", smoke: true },
+    { text: "GET/POST/PATCH/DELETE /api/organizations", status: "done", smoke: false },
+    { text: "Org switcher in sidebar (Admin sees all + aggregate; Members see assigned)", status: "done", smoke: false },
+    { text: "Org delete blocked if resources exist", status: "done", smoke: false },
+    { text: "Smoke test: create, edit, switch org, delete guard", status: "done", smoke: true },
+    { text: "GET/POST/PATCH/DELETE /api/servers", status: "done", smoke: false },
+    { text: "Server list/grid page (/servers)", status: "done", smoke: false },
+    { text: "Add/edit server form (SSH key or password auth)", status: "done", smoke: false },
+    { text: "SSH credentials stored AES-256 encrypted", status: "done", smoke: false },
+    { text: "Server soft-delete (cascade to services, alert rules, etc.)", status: "done", smoke: false },
+    { text: "Reusable async SSH executor service (asyncssh) — `app/services/ssh.py`", status: "done", smoke: false },
+    { text: "SSH connection validation endpoint (POST /api/servers/:id/ssh-test)", status: "done", smoke: false },
+    { text: "OS detection (Ubuntu/Debian vs RHEL/CentOS)", status: "done", smoke: false },
+    { text: "Add vendor repos (InfluxData for Telegraf, Chronosphere for Fluent Bit)", status: "done", smoke: false },
+    { text: "Install Telegraf via apt/yum", status: "done", smoke: false },
+    { text: "Install Fluent Bit via apt/yum", status: "done", smoke: false },
+    { text: "Generate telegraf.conf from Jinja2 template (server_id, writer credentials, plugins)", status: "done", smoke: false },
+    { text: "Generate fluent-bit.conf from Jinja2 template (server_id, log paths per distro)", status: "done", smoke: false },
+    { text: "Enable slow_query_log if MariaDB detected", status: "done", smoke: false },
+    { text: "Write configs to /etc/telegraf/ and /etc/fluent-bit/", status: "done", smoke: false },
+    { text: "Enable + start both services via systemctl", status: "done", smoke: false },
+    { text: "Wait up to 30s for first metric row in TimescaleDB *(blocked: test target lacks systemd — services can't start, see note below)*", status: "pending", smoke: false },
+    { text: "Mark server active, push onboarding_complete WS event *(blocked: success path unreachable on test target)*", status: "pending", smoke: false },
+    { text: "OnboardingLog rows written per step", status: "done", smoke: false },
+    { text: "Re-deploy agents endpoint (steps 6–10 only)", status: "done", smoke: false },
+    { text: "WS channel: onboarding:{server_id} — progress events pushed live", status: "done", smoke: false },
+    { text: "Onboarding UI: progress steps, error display, SSH log output", status: "done", smoke: false },
+    { text: "Smoke test: add server, watch onboarding complete, see first metric in DB *(running + failed states verified live in browser; \"complete\" path blocked — `ssh-target` container runs sshd as PID 1, not systemd, so `systemctl enable --now` fails at step 9. Needs a systemd-capable test target.)*", status: "pending", smoke: true },
+  ]},
+  { id: 2, title: "Live Dashboard & Charts", subtitle: "WebSocket live dashboard, historical metric charts", tasks: [
+    { text: "PostgreSQL LISTEN/NOTIFY → FastAPI WS fan-out", status: "pending", smoke: false },
+    { text: "500ms event batching before WS push", status: "pending", smoke: false },
+    { text: "WS channel authorization per subscribe message", status: "pending", smoke: false },
+    { text: "subscribe_org / subscribe (server) / unsubscribe actions", status: "pending", smoke: false },
+    { text: "Smoke test: open dashboard, verify live metric updates arrive", status: "pending", smoke: true },
+    { text: "GET /api/organizations/:org_id/dashboard — summary + server latest metrics", status: "pending", smoke: false },
+    { text: "GET /api/organizations/:org_id/alerts/recent — last 10 alerts", status: "pending", smoke: false },
+    { text: "Summary stat cards (Servers, Services, Alerts, SSL/Domains)", status: "pending", smoke: false },
+    { text: "Server card grid with live metric bars (CPU/RAM/Disk progress bars)", status: "pending", smoke: false },
+    { text: "Recent Alerts panel with [Ack] button", status: "pending", smoke: false },
+    { text: "Live card updates via WS (applyMetricPush)", status: "pending", smoke: false },
+    { text: "Smoke test: dashboard loads, cards update live, [Ack] works", status: "pending", smoke: true },
+    { text: "GET /api/servers/:id/metrics — chart data (range + metric filter)", status: "pending", smoke: false },
+    { text: "GET /api/servers/:id/metrics/latest — live gauge initial state", status: "pending", smoke: false },
+    { text: "GET /api/servers/:id/processes — top_processes snapshot", status: "pending", smoke: false },
+    { text: "4 live gauge cards (CPU, RAM, Disk, Network)", status: "pending", smoke: false },
+    { text: "Tab navigation (Overview, CPU, Memory, Disk, Network, System, Processes)", status: "pending", smoke: false },
+    { text: "Time range selector (1h/6h/24h/7d/30d) — correct data source per range", status: "pending", smoke: false },
+    { text: "All chart types (area, stacked area, line, dual-line, bar, radial gauge, donut, horizontal bar)", status: "pending", smoke: false },
+    { text: "24h live WS update: rightmost hourly bucket updated in place (no re-fetch)", status: "pending", smoke: false },
+    { text: "Maintenance mode badge + slide-over (enable, active state, end maintenance)", status: "pending", smoke: false },
+    { text: "POST/DELETE/GET /api/servers/:id/maintenance", status: "pending", smoke: false },
+    { text: "Smoke test: all 7 tabs render, charts update live, 24h bucket behavior", status: "pending", smoke: true },
+  ]},
+  { id: 3, title: "Log Viewer", subtitle: "Backend reads server_logs, Log Viewer UI", tasks: [
+    { text: "GET /api/servers/:id/logs — paginated (cursor, max 500 rows)", status: "pending", smoke: false },
+    { text: "Filters: server, source (9 sources), severity, time range, full-text search", status: "pending", smoke: false },
+    { text: "Live tail mode via WS (server_logs:{server_id} channel)", status: "pending", smoke: false },
+    { text: "Expandable rows (all JSONB fields)", status: "pending", smoke: false },
+    { text: "Log volume stacked bar chart (by hour, stacked by severity)", status: "pending", smoke: false },
+    { text: "Smoke test: filter logs, search, live tail shows new entries", status: "pending", smoke: true },
+  ]},
+  { id: 4, title: "Service Monitoring", subtitle: "HTTP/TCP probes, ServiceCheck hypertable, Incident model, uptime timeline", tasks: [
+    { text: "GET /api/organizations/:org_id/services — list all services", status: "pending", smoke: false },
+    { text: "POST /api/services — create service (Admin)", status: "pending", smoke: false },
+    { text: "PATCH/DELETE /api/services/:id (Admin)", status: "pending", smoke: false },
+    { text: "GET /api/services/:id/checks — check history", status: "pending", smoke: false },
+    { text: "GET /api/services/:id/uptime — uptime % (24h/7d/30d)", status: "pending", smoke: false },
+    { text: "GET /api/services/:id/incidents — incident list", status: "pending", smoke: false },
+    { text: "GET /status — public status page data", status: "pending", smoke: false },
+    { text: "HTTP probe (url, method, expected status, timeout, ignore_ssl_errors)", status: "pending", smoke: false },
+    { text: "TCP probe (host, port)", status: "pending", smoke: false },
+    { text: "DB port probe (host, port — TCP reachability)", status: "pending", smoke: false },
+    { text: "asyncio Semaphore(50) for probe concurrency", status: "pending", smoke: false },
+    { text: "Service.consecutive_failures persisted to DB (resets on success, alert at 2)", status: "pending", smoke: false },
+    { text: "Incident created on 2nd consecutive failure", status: "pending", smoke: false },
+    { text: "APScheduler job per service (service_probe:{service_id})", status: "pending", smoke: false },
+    { text: "/services page (list, add/edit modal, status badges)", status: "pending", smoke: false },
+    { text: "Service detail (uptime timeline, response time chart, incident list)", status: "pending", smoke: false },
+    { text: "Public /status page (unauthenticated, is_public services only)", status: "pending", smoke: false },
+    { text: "Smoke test: add HTTP service, kill it, see alert fire after 2 failures, restore, see resolve", status: "pending", smoke: true },
+  ]},
+  { id: 5, title: "SSL & Domain Monitoring", subtitle: "Daily SSL/WHOIS checks, combined table UI", tasks: [
+    { text: "GET /api/organizations/:org_id/ssl-domains — combined list", status: "pending", smoke: false },
+    { text: "POST /api/ssl-certs + POST /api/domains (Admin)", status: "pending", smoke: false },
+    { text: "PATCH/DELETE for both (Admin)", status: "pending", smoke: false },
+    { text: "POST /api/ssl-certs/:id/check + POST /api/domains/:id/check (manual trigger)", status: "pending", smoke: false },
+    { text: "ssl_checker_daily APScheduler job (daily SSL cert checks)", status: "pending", smoke: false },
+    { text: "domain_checker_daily APScheduler job (staggered 30s between WHOIS lookups)", status: "pending", smoke: false },
+    { text: "SSLCert status: valid / expiring_soon / critical / expired / unreachable", status: "pending", smoke: false },
+    { text: "Domain status: valid / expiring_soon / critical / expired", status: "pending", smoke: false },
+    { text: "Alert threshold evaluation (warn_days, critical_days per record)", status: "pending", smoke: false },
+    { text: "/ssl-domains page (combined table, expiry progress bars, timeline chart)", status: "pending", smoke: false },
+    { text: "Smoke test: add cert, trigger manual check, see status update", status: "pending", smoke: true },
+  ]},
+  { id: 6, title: "Database Monitoring", subtitle: "Telegraf inputs.mysql, DB health charts, replication", tasks: [
+    { text: "GET /api/organizations/:org_id/db-credentials", status: "pending", smoke: false },
+    { text: "POST/PATCH/DELETE /api/servers/:id/db-credentials (Admin)", status: "pending", smoke: false },
+    { text: "GET /api/servers/:id/db-metrics/latest", status: "pending", smoke: false },
+    { text: "GET /api/servers/:id/db-metrics (time-series)", status: "pending", smoke: false },
+    { text: "Credential save triggers automatic Telegraf re-deploy via SSH", status: "pending", smoke: false },
+    { text: "inputs.mysql block injected into telegraf.conf (gather_slave_status per is_replica)", status: "pending", smoke: false },
+    { text: "innodb_deadlocks delta tracking (DBCredential.last_deadlock_count)", status: "pending", smoke: false },
+    { text: "Alert evaluation: db_connections, db_deadlock, db_replication_lag, db_replication_stopped", status: "pending", smoke: false },
+    { text: "/databases page (server tab strip, no-credentials state, health dashboard)", status: "pending", smoke: false },
+    { text: "All DB charts (connections gauge + line, QPS area, slow queries bar, buffer pool gauge, deadlocks bar, replication section, advanced metrics panel)", status: "pending", smoke: false },
+    { text: "Smoke test: enter credentials, watch Telegraf re-deploy, see DB metrics appear", status: "pending", smoke: true },
+  ]},
+  { id: 7, title: "Cron & Backup Monitoring", subtitle: "Heartbeat ping endpoint, calendar heatmap UI", tasks: [
+    { text: "GET /ping/:token — cron job ping (single + two-ping ?event=start/end)", status: "pending", smoke: false },
+    { text: "POST /ping/:token — backup job ping (form body: size_bytes, exit_code)", status: "pending", smoke: false },
+    { text: "GET /api/organizations/:org_id/cron-jobs", status: "pending", smoke: false },
+    { text: "POST/PATCH/DELETE /api/cron-jobs (Admin)", status: "pending", smoke: false },
+    { text: "GET /api/cron-jobs/:id/runs (cursor-paginated)", status: "pending", smoke: false },
+    { text: "POST /api/cron-jobs/:id/regenerate-token (Admin)", status: "pending", smoke: false },
+    { text: "Same endpoints for backup-jobs", status: "pending", smoke: false },
+    { text: "cron_backup_watchdog APScheduler job (60s tick, status transitions, missed run writes)", status: "pending", smoke: false },
+    { text: "Two-ping: start ping sets start_ping_at only (does NOT update last_ping_at)", status: "pending", smoke: false },
+    { text: "Backup: exit_code authoritative, previous_size_bytes baseline management", status: "pending", smoke: false },
+    { text: "/cron-backup page (two tabs, job list sorted Missing→Late→Healthy)", status: "pending", smoke: false },
+    { text: "Job detail slide-over (ping URL, calendar heatmap, duration/size trend, run history)", status: "pending", smoke: false },
+    { text: "Smoke test: register job, ping it, miss a window, see Missing status + alert", status: "pending", smoke: true },
+  ]},
+  { id: 8, title: "Alerting Engine", subtitle: "Metric evaluator, log evaluator, auto-resolve, email, ack/snooze, maintenance", tasks: [
+    { text: "metric_alert_evaluator APScheduler job (30s tick — rolling 5-min avg)", status: "pending", smoke: false },
+    { text: "log_alert_evaluator APScheduler job (60s tick — ILIKE pattern matching)", status: "pending", smoke: false },
+    { text: "consecutive_clear_count persisted on Alert row (auto-resolve at 2)", status: "pending", smoke: false },
+    { text: "maintenance_expiry APScheduler job (60s tick — auto-end expired windows)", status: "pending", smoke: false },
+    { text: "Maintenance enter: immediately suppress all firing/acked/snoozed alerts for server", status: "pending", smoke: false },
+    { text: "SMTP email delivery (text/plain; charset=utf-8, no HTML)", status: "pending", smoke: false },
+    { text: "base_url fallback: str(request.base_url) if Settings.base_url not set", status: "pending", smoke: false },
+    { text: "Alert auto-creation on onboarding (4 AlertRule + 5 LogAlertRule rows)", status: "pending", smoke: false },
+    { text: "Cooldown enforcement (last_fired_at on AlertRule/LogAlertRule, hardcoded 1h for others)", status: "pending", smoke: false },
+    { text: "Alert dedup per (type, relevant_fk) — one open alert at a time", status: "pending", smoke: false },
+    { text: "Acknowledge + Snooze actions (POST /api/alerts/:id/acknowledge, /snooze)", status: "pending", smoke: false },
+    { text: "WS push: alert_fired, alert_updated, alert_resolved events", status: "pending", smoke: false },
+    { text: "GET /api/organizations/:org_id/alerts — active (firing + acked + snoozed)", status: "pending", smoke: false },
+    { text: "GET /api/organizations/:org_id/alerts/history — resolved (cursor-paginated)", status: "pending", smoke: false },
+    { text: "GET /api/organizations/:org_id/alerts/frequency — daily counts for bar chart", status: "pending", smoke: false },
+    { text: "GET/POST/PATCH/DELETE /api/alert-rules (Admin)", status: "pending", smoke: false },
+    { text: "GET/POST/PATCH/DELETE /api/log-alert-rules (Admin)", status: "pending", smoke: false },
+    { text: "/alerts page (Active tab + History tab + frequency bar chart)", status: "pending", smoke: false },
+    { text: "/alerts/rules page (Metric Rules + Log Pattern Rules tables)", status: "pending", smoke: false },
+    { text: "Notification bell (badge count, dropdown panel, toast on alert_fired)", status: "pending", smoke: false },
+    { text: "Alert detail slide-over (timeline, rule info, ack/snooze actions)", status: "pending", smoke: false },
+    { text: "Smoke test: spike CPU, see alert fire + email, let it clear x2, see resolve email", status: "pending", smoke: true },
+  ]},
+  { id: 9, title: "Public Status Page", subtitle: "Unauthenticated /status route", tasks: [
+    { text: "GET /status — unauthenticated, is_public services only", status: "pending", smoke: false },
+    { text: "90-day uptime timeline per service", status: "pending", smoke: false },
+    { text: "Active incident banner", status: "pending", smoke: false },
+    { text: "Past incident list", status: "pending", smoke: false },
+    { text: "is_public toggle per service (Admin)", status: "pending", smoke: false },
+    { text: "Smoke test: toggle is_public, open /status in incognito, verify no auth required", status: "pending", smoke: true },
+  ]},
+  { id: 10, title: "Settings", subtitle: "SMTP, identity, retention, sessions, agent password rotation", tasks: [
+    { text: "GET/PATCH /api/settings", status: "pending", smoke: false },
+    { text: "POST /api/settings/smtp/test", status: "pending", smoke: false },
+    { text: "GET /api/team — members + pending invites", status: "pending", smoke: false },
+    { text: "POST /api/invites + resend + revoke", status: "pending", smoke: false },
+    { text: "POST /api/users/:id/org-assignments + DELETE", status: "pending", smoke: false },
+    { text: "DELETE /api/users/:id (sole-operator guard → 409)", status: "pending", smoke: false },
+    { text: "GET/PATCH /api/sessions/:jti/revoke + revoke-others", status: "pending", smoke: false },
+    { text: "POST /api/settings/rotate-writer-password (rotation_id → WS subscribe_rotation)", status: "pending", smoke: false },
+    { text: "/settings/general (instance name, base URL, SMTP)", status: "pending", smoke: false },
+    { text: "/settings/team (member list, pending invites, invite modal)", status: "pending", smoke: false },
+    { text: "/settings/retention (retention fields, TimescaleDB policy update)", status: "pending", smoke: false },
+    { text: "/settings/security (active sessions table, password change)", status: "pending", smoke: false },
+    { text: "/settings/infrastructure (writer password rotation + progress panel)", status: "pending", smoke: false },
+    { text: "Smoke test: save SMTP, send test email, rotate writer password, watch progress", status: "pending", smoke: true },
+  ]},
+  { id: 11, title: "Docker Packaging & Deployment", subtitle: "Final packaging, deployment runbook", tasks: [
+    { text: "Final docker-compose.yml (all 5 services wired up)", status: "pending", smoke: false },
+    { text: "Nginx configs (TLS termination, reverse proxy rules)", status: "pending", smoke: false },
+    { text: "Alembic migration validated (migrate service runs clean on fresh DB)", status: "pending", smoke: false },
+    { text: "Environment variable documentation (.env.example)", status: "pending", smoke: false },
+    { text: "Telegraf + Fluent Bit config templates finalized", status: "pending", smoke: false },
+    { text: "Deployment runbook (firewall setup, port 5432 restriction, first-run steps)", status: "pending", smoke: false },
+    { text: "Smoke test: fresh docker compose up, complete full onboarding + alert cycle end-to-end", status: "pending", smoke: true },
+  ]},
+];
+
+const grid = document.getElementById('grid');
+phases.forEach(p => {
+  const done = p.tasks.filter(t=>t.status==='done').length;
+  const inp  = p.tasks.filter(t=>t.status==='inprogress').length;
+  const tot  = p.tasks.length;
+  const pct  = Math.round(done/tot*100);
+  const isDone   = done===tot;
+  const isActive = inp>0||(done>0&&!isDone);
+  const barColor = isDone?'var(--green)':isActive?'var(--accent)':'var(--grey)';
+  const statusEl = isDone
+    ? '<span style="color:var(--green);font-size:11px;font-weight:600;">✓ COMPLETE</span>'
+    : isActive
+    ? '<span style="color:var(--accent2);font-size:11px;font-weight:600;">● ACTIVE</span>'
+    : '<span style="color:var(--grey);font-size:11px;">PENDING</span>';
+  const tasksHtml = p.tasks.map(t=>{
+    const cls = t.status==='done'?'done':t.status==='inprogress'?'inprogress':'';
+    const sc  = t.smoke?' smoke':'';
+    const dot = t.status==='done'?'✓':t.status==='inprogress'?'●':'○';
+    return `<li class="${cls}${sc}"><span class="dot">${dot}</span><span class="task-text">${t.text}</span></li>`;
+  }).join('');
+  const card = document.createElement('div');
+  card.className='card'+(isDone?' done':isActive?' active':'');
+  card.innerHTML=`
+    <div class="card-hd"><div class="card-title">Phase ${p.id} — ${p.title}</div>${statusEl}</div>
+    <div class="card-count"><b>${done}</b> / ${tot} tasks &middot; ${pct}%</div>
+    <div class="ph-bar-wrap"><div class="ph-bar" style="width:${pct}%;background:${barColor}"></div></div>
+    <div class="card-sub">${p.subtitle}</div>
+    <ul class="hidden" id="t${p.id}">${tasksHtml}</ul>
+    <button class="toggle" onclick="tog(${p.id},this)">▼ Show tasks</button>`;
+  grid.appendChild(card);
+});
+function tog(id,btn){const l=document.getElementById('t'+id);l.classList.toggle('hidden');btn.textContent=l.classList.contains('hidden')?'▼ Show tasks':'▲ Hide tasks';}
+</script>
+</body>
+</html>
