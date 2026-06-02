@@ -269,7 +269,7 @@ Last updated: 2026-06-02
 - ⬜ POST /api/settings/rotate-writer-password (rotation_id → WS subscribe_rotation)
 - ✅ /settings/general (instance name, base URL, SMTP)
 - ⬜ /settings/team (member list, pending invites, invite modal)
-- ⬜ /settings/retention (retention fields, TimescaleDB policy update)
+- ✅ /settings/retention (retention fields, TimescaleDB policy update)
 - ✅ /settings/security (active sessions table, password change)
 - ⬜ /settings/infrastructure (writer password rotation + progress panel)
 - ⬜ **Smoke test: save SMTP, send test email, rotate writer password, watch progress**
