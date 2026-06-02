@@ -142,7 +142,9 @@ const options = computed<ApexOptions>(() => {
   if (isAxisChart.value) {
     base.xaxis = {
       type: props.categories ? 'category' : 'datetime',
-      categories: props.categories,
+      // Default to [] — ApexCharts calls xaxis.categories.slice() unconditionally
+      // for axis charts, so an undefined value crashes parseDataAxisCharts.
+      categories: props.categories ?? [],
       labels: {
         style: { colors: THEME.muted, fontSize: '11px' },
         datetimeUTC: false,

@@ -7,6 +7,7 @@ import type {
   MetricRange,
   MetricsResponse,
   RecentAlert,
+  Server,
   StartMaintenancePayload,
 } from '@/types'
 
@@ -57,6 +58,11 @@ export async function getRecentAlerts(orgId: string): Promise<RecentAlert[]> {
 }
 
 // --- Server Detail metrics + maintenance (Phase 2) -------------------------
+
+export async function getServer(serverId: string): Promise<Server> {
+  const { data } = await api.get<Server>(`/api/servers/${serverId}`)
+  return data
+}
 
 export async function getMetrics(
   serverId: string,
