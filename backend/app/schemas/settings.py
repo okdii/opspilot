@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class SettingsResponse(BaseModel):
@@ -53,3 +53,14 @@ class InviteCreate(BaseModel):
 class OrgAssignmentCreate(BaseModel):
     org_id: str
     role: str  # operator | viewer
+
+
+class RotateWriterPassword(BaseModel):
+    new_password: str = Field(min_length=16)
+
+    @field_validator("new_password")
+    @classmethod
+    def no_spaces(cls, v: str) -> str:
+        if " " in v:
+            raise ValueError("Password must not contain spaces.")
+        return v

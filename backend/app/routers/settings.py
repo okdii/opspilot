@@ -6,9 +6,10 @@ from app.core import crypto
 from app.database import get_db
 from app.deps import AdminUser
 from app.models.other import Settings
-from app.schemas.settings import SettingsResponse, SettingsPatch
+from app.schemas.settings import SettingsResponse, SettingsPatch, RotateWriterPassword
 from app.services.email import send_email, parse_recipients, EmailNotConfigured
 from app.services.retention import apply_retention
+from app.services import rotation as rotation_service
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -100,3 +101,28 @@ async def smtp_test(_: AdminUser, db: AsyncSession = Depends(get_db)):
     except Exception as e:  # SMTP errors surfaced verbatim to the admin
         raise HTTPException(502, detail={"error": "smtp_error", "message": str(e)})
     return {"ok": True, "sent_to": recipients[0]}
+
+
+@router.post("/rotate-writer-password")
+async def rotate_writer_password(body: RotateWriterPassword, _: AdminUser):
+    rotation_id, total = await rotation_service.start(body.new_password)
+    return {"ok": True, "rotation_id": rotation_id, "total_servers": total}
+
+
+@router.get("/rotation/{rotation_id}")
+async def rotation_status(rotation_id: str, _: AdminUser):
+    r = rotation_service.get(rotation_id)
+    if not r:
+        raise HTTPException(404, detail={"error": "not_found", "message": "Rotation not found."})
+    return {
+        "done": r.done,
+        "servers": [
+            {"server_id": p.server_id, "server_name": p.server_name, "status": p.status, "message": p.message}
+            for p in r.servers.values()
+        ],
+    }
+
+
+@router.post("/rotation/{rotation_id}/retry/{server_id}", status_code=204)
+async def rotation_retry(rotation_id: str, server_id: str, _: AdminUser):
+    await rotation_service.retry(rotation_id, server_id)
