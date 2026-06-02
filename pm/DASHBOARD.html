@@ -70,17 +70,17 @@
 <div class="overall">
   <div>
     <div class="label">Overall Progress</div>
-    <div class="bar-wrap"><div class="bar" style="width:40%"></div></div>
-    <div class="sub">76 of 191 tasks completed</div>
+    <div class="bar-wrap"><div class="bar" style="width:42%"></div></div>
+    <div class="sub">81 of 191 tasks completed</div>
   </div>
   <div>
-    <div class="pct">40<span>%</span></div>
-    <div class="counts">76 done &middot; 2 in progress &middot; 113 pending</div>
+    <div class="pct">42<span>%</span></div>
+    <div class="counts">81 done &middot; 2 in progress &middot; 108 pending</div>
   </div>
 </div>
 <div class="stats">
   <div class="stat"><div class="label">Phases Done</div><div class="val g">1</div><div class="sub">of 11 phases</div></div>
-  <div class="stat"><div class="label">Tasks Complete</div><div class="val a">76</div><div class="sub">of 191 total</div></div>
+  <div class="stat"><div class="label">Tasks Complete</div><div class="val a">81</div><div class="sub">of 191 total</div></div>
   <div class="stat"><div class="label">Smoke Tests Passed</div><div class="val b">5</div><div class="sub">of 16 gates</div></div>
   <div class="stat"><div class="label">In Progress</div><div class="val am">2</div><div class="sub">tasks active</div></div>
 </div>
@@ -280,14 +280,14 @@ const phases = [
   { id: 10, title: "Settings", subtitle: "SMTP, identity, retention, sessions, agent password rotation", tasks: [
     { text: "GET/PATCH /api/settings", status: "done", smoke: false },
     { text: "POST /api/settings/smtp/test", status: "done", smoke: false },
-    { text: "GET /api/team — members + pending invites", status: "pending", smoke: false },
-    { text: "POST /api/invites + resend + revoke", status: "pending", smoke: false },
-    { text: "POST /api/users/:id/org-assignments + DELETE", status: "pending", smoke: false },
-    { text: "DELETE /api/users/:id (sole-operator guard → 409)", status: "pending", smoke: false },
+    { text: "GET /api/team — members + pending invites", status: "done", smoke: false },
+    { text: "POST /api/invites + resend + revoke", status: "done", smoke: false },
+    { text: "POST /api/users/:id/org-assignments + DELETE", status: "done", smoke: false },
+    { text: "DELETE /api/users/:id (sole-operator guard → 409)", status: "done", smoke: false },
     { text: "GET/PATCH /api/sessions/:jti/revoke + revoke-others", status: "done", smoke: false },
     { text: "POST /api/settings/rotate-writer-password (rotation_id → WS subscribe_rotation)", status: "pending", smoke: false },
     { text: "/settings/general (instance name, base URL, SMTP)", status: "done", smoke: false },
-    { text: "/settings/team (member list, pending invites, invite modal)", status: "pending", smoke: false },
+    { text: "/settings/team (member list, pending invites, invite modal)", status: "done", smoke: false },
     { text: "/settings/retention (retention fields, TimescaleDB policy update)", status: "done", smoke: false },
     { text: "/settings/security (active sessions table, password change)", status: "done", smoke: false },
     { text: "/settings/infrastructure (writer password rotation + progress panel)", status: "pending", smoke: false },
