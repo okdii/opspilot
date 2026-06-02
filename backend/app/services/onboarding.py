@@ -354,8 +354,14 @@ async def _step_enable_mariadb_slowlog(db, server, ssh: SSHSession, os_info: OSI
 async def _step_start_services(db, server, ssh: SSHSession):
     log, t0 = await _start_step(db, server.id, "start_services", 9)
     try:
+        # enable for boot, then restart to apply freshly-written config.
+        # `enable --now` is a no-op on an already-running service, so a redeploy
+        # would otherwise never pick up config changes. reset-failed clears any
+        # failed/start-limit state so restart isn't rejected.
         r = await ssh.run(
-            "systemctl enable --now telegraf fluent-bit",
+            "systemctl reset-failed telegraf fluent-bit 2>/dev/null; "
+            "systemctl enable telegraf fluent-bit && "
+            "systemctl restart telegraf fluent-bit",
             sudo=True, timeout=30,
         )
         if not r.ok:
