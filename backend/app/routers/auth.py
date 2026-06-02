@@ -2,7 +2,7 @@ import hmac
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -100,11 +100,18 @@ async def ws_ticket(user: CurrentUser):
 
 
 @router.patch("/password", status_code=204)
-async def change_password(body: ChangePasswordRequest, user: CurrentUser, db: AsyncSession = Depends(get_db)):
+async def change_password(body: ChangePasswordRequest, request: Request, user: CurrentUser, db: AsyncSession = Depends(get_db)):
     if not verify_password(body.current_password, user.password_hash):
         raise HTTPException(401, detail={"error": "wrong_password", "message": "Current password is incorrect."})
 
     user.password_hash = hash_password(body.new_password)
+    # Security best practice: revoke every other session after a password change.
+    current_jti = str(request.state.current_session.jti)
+    await db.execute(
+        update(Session)
+        .where(Session.user_id == user.id, Session.jti != current_jti)
+        .values(revoked=True)
+    )
     await db.commit()
     return None
 

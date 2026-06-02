@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -31,3 +33,12 @@ class SettingsPatch(BaseModel):
     logs_retention_days: int | None = Field(default=None, ge=7, le=365)
     service_checks_retention_days: int | None = Field(default=None, ge=30, le=365)
     alerts_retention_days: int | None = Field(default=None, ge=30, le=730)
+
+
+class SessionResponse(BaseModel):
+    jti: str
+    is_current: bool
+    ip_address: str | None
+    user_agent: str | None
+    issued_at: datetime
+    expires_at: datetime
