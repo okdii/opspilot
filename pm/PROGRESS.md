@@ -109,13 +109,13 @@ Last updated: 2026-06-02
 - ✅ GET /api/servers/:id/metrics/latest — live gauge initial state
 - 🔄 GET /api/servers/:id/processes — top_processes snapshot *(501 stub — deferred: needs agent procstat, Phase 1 Telegraf follow-up)*
 - ✅ 4 live gauge cards (CPU, RAM, Disk, Network) *(verified: live WS, CPU rose 1%→100% on VM spike, no reload)*
-- 🔄 Tab navigation (Overview, CPU, Memory, Disk, Network, System, Processes) *(nav + Overview shipped; CPU/Memory/Disk/Network/System = slices B–F; Processes deferred)*
+- ✅ Tab navigation (Overview, CPU, Memory, Disk, Network, System, Processes) *(all 6 metric tabs built; Processes tab disabled — deferred to Phase 1 agent procstat)*
 - ✅ Time range selector (1h/6h/24h/7d/30d) — correct data source per range *(raw 1h/6h, hourly 24h, daily 7d/30d)*
-- 🔄 All chart types (area, stacked area, line, dual-line, bar, radial gauge, donut, horizontal bar) *(shared MetricChart + Overview charts + radial gauges done; stacked/donut/grouped-bar land in slices B–F)*
+- ✅ All chart types (area, stacked area, line, dual-line, bar, radial gauge, donut, horizontal bar) *(all present across tabs via shared MetricChart)*
 - ✅ 24h live WS update: rightmost hourly bucket updated in place (no re-fetch) *(implemented in useMetricsStore; live WS verified)*
 - ✅ Maintenance mode badge + slide-over (enable, active state, end maintenance) *(verified: badge Maintenance↔Online)*
 - ✅ POST/DELETE/GET /api/servers/:id/maintenance *(nullable ends_at, suppresses active alerts, 60s expiry job)*
-- 🔄 **Smoke test: all 7 tabs render, charts update live, 24h bucket behavior** *(Overview verified live via Playwright on lima-ubuntu; remaining tabs pending slices B–F)*
+- ✅ **Smoke test: all 7 tabs render, charts update live, 24h bucket behavior** *(Playwright on lima-ubuntu: all 6 tabs render, 0 page errors, Processes disabled; CPU gauge rose 1%→100% live via WS, no reload)*
 
 ---
 
