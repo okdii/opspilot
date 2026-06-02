@@ -70,7 +70,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 
 <style scoped>
 .settings {
-  max-width: 1100px;
+  padding: 28px;
 }
 .tabs {
   display: flex;
