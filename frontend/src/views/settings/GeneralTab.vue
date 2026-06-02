@@ -1,5 +1,212 @@
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { useSettingsStore } from '@/stores/settings'
+import { useNotify } from '@/composables/useNotify'
+import { getApiError } from '@/services/api'
+
+const settings = useSettingsStore()
+const notify = useNotify()
+
+// Local editable copies (so we only persist on Save).
+const instanceName = ref('')
+const baseUrl = ref('')
+
+const smtpHost = ref('')
+const smtpPort = ref<number>(587)
+const smtpEncryption = ref<'none' | 'tls' | 'ssl'>('tls')
+const smtpUsername = ref('')
+const smtpFrom = ref('')
+const smtpRecipients = ref('')
+const smtpPassword = ref('') // blank = keep existing
+const hasPassword = ref(false)
+
+const savingIdentity = ref(false)
+const savingSmtp = ref(false)
+const testing = ref(false)
+const loading = ref(true)
+
+onMounted(load)
+async function load() {
+  loading.value = true
+  try {
+    await settings.fetchSettings()
+    instanceName.value = settings.general.instanceName
+    baseUrl.value = settings.general.baseUrl
+    smtpHost.value = settings.smtp.host
+    smtpPort.value = settings.smtp.port
+    smtpEncryption.value = settings.smtp.encryption
+    smtpUsername.value = settings.smtp.username
+    smtpFrom.value = settings.smtp.fromAddress
+    smtpRecipients.value = settings.smtp.recipients
+    hasPassword.value = settings.smtp.hasPassword
+  } catch (err) {
+    notify.error(getApiError(err) ?? 'Unable to load settings.')
+  } finally {
+    loading.value = false
+  }
+}
+
+const smtpConfigured = computed(() => !!smtpHost.value.trim())
+
+async function saveIdentity() {
+  savingIdentity.value = true
+  try {
+    await settings.saveGeneral({
+      instance_name: instanceName.value.trim() || 'OpsPilot',
+      base_url: baseUrl.value.trim().replace(/\/+$/, ''),
+    })
+    baseUrl.value = settings.general.baseUrl
+    notify.success('Settings saved.')
+  } catch (err) {
+    notify.error(getApiError(err) ?? 'Unable to save settings.')
+  } finally {
+    savingIdentity.value = false
+  }
+}
+
+async function saveSmtp() {
+  savingSmtp.value = true
+  try {
+    const payload: Record<string, unknown> = {
+      smtp_host: smtpHost.value.trim(),
+      smtp_port: smtpPort.value,
+      smtp_encryption: smtpEncryption.value,
+      smtp_username: smtpUsername.value.trim(),
+      smtp_from_address: smtpFrom.value.trim(),
+      smtp_recipients: smtpRecipients.value.trim(),
+    }
+    // Only send the password when the admin typed a new one.
+    if (smtpPassword.value) payload.smtp_password = smtpPassword.value
+    await settings.saveSmtp(payload)
+    smtpPassword.value = ''
+    hasPassword.value = settings.smtp.hasPassword
+    notify.success('Settings saved.')
+  } catch (err) {
+    notify.error(getApiError(err) ?? 'Unable to save SMTP settings.')
+  } finally {
+    savingSmtp.value = false
+  }
+}
+
+async function sendTest() {
+  testing.value = true
+  try {
+    const res = await settings.testSmtp()
+    notify.success(`Test email sent to ${res.sent_to}.`)
+  } catch (err) {
+    notify.error(getApiError(err) ?? 'Test email failed.')
+  } finally {
+    testing.value = false
+  }
+}
+</script>
+
 <template>
-  <div />
+  <div class="general">
+    <!-- Identity -->
+    <section class="card">
+      <h2>OpsPilot Identity</h2>
+      <div class="field">
+        <label>Instance Name</label>
+        <input v-model="instanceName" type="text" placeholder="OpsPilot" :disabled="loading" />
+        <p class="hint">Shown in email subjects and the public status page header.</p>
+      </div>
+      <div class="field">
+        <label>Base URL</label>
+        <input v-model="baseUrl" type="url" placeholder="https://monitor.yourdomain.com" :disabled="loading" />
+        <p class="hint">Used in alert email links and cron/backup ping URLs. No trailing slash.</p>
+      </div>
+      <div v-if="!loading && !baseUrl.trim()" class="banner amber">
+        Base URL is not configured — links will use the request Host header as fallback.
+      </div>
+      <button class="primary" :disabled="savingIdentity || loading" @click="saveIdentity">
+        <span v-if="savingIdentity" class="spin"></span><span v-else>Save</span>
+      </button>
+    </section>
+
+    <!-- SMTP -->
+    <section class="card">
+      <h2>Email (SMTP)</h2>
+      <div v-if="!loading && !smtpConfigured" class="banner amber">
+        Email notifications are disabled — configure SMTP to receive alerts.
+      </div>
+      <div class="row">
+        <div class="field grow">
+          <label>SMTP Host</label>
+          <input v-model="smtpHost" type="text" placeholder="smtp.gmail.com" :disabled="loading" />
+        </div>
+        <div class="field port">
+          <label>Port</label>
+          <input v-model.number="smtpPort" type="number" min="1" max="65535" :disabled="loading" />
+        </div>
+        <div class="field enc">
+          <label>Encryption</label>
+          <select v-model="smtpEncryption" :disabled="loading">
+            <option value="none">None</option>
+            <option value="tls">TLS (STARTTLS)</option>
+            <option value="ssl">SSL/TLS</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Username</label>
+        <input v-model="smtpUsername" type="text" autocomplete="off" :disabled="loading" />
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input
+          v-model="smtpPassword"
+          type="password"
+          autocomplete="new-password"
+          :placeholder="hasPassword ? '••••••••' : ''"
+          :disabled="loading"
+        />
+        <p v-if="hasPassword" class="hint">Leave blank to keep existing SMTP password.</p>
+      </div>
+      <div class="field">
+        <label>From Address</label>
+        <input v-model="smtpFrom" type="email" placeholder="alerts@yourdomain.com" :disabled="loading" />
+      </div>
+      <div class="field">
+        <label>Alert Recipients</label>
+        <input v-model="smtpRecipients" type="text" placeholder="admin@example.com, ops@example.com" :disabled="loading" />
+        <p class="hint">Comma-separated. At least one address required to send.</p>
+      </div>
+
+      <div class="actions">
+        <button class="primary" :disabled="savingSmtp || loading" @click="saveSmtp">
+          <span v-if="savingSmtp" class="spin"></span><span v-else>Save</span>
+        </button>
+        <button class="ghost" :disabled="testing || loading || !smtpConfigured" @click="sendTest">
+          <span v-if="testing" class="spin dark"></span><span v-else>Send Test Email</span>
+        </button>
+      </div>
+    </section>
+  </div>
 </template>
 
-<script setup lang="ts"></script>
+<style scoped>
+.general { display: flex; flex-direction: column; gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 22px; max-width: 640px; }
+.card h2 { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 18px; }
+.field { margin-bottom: 16px; }
+.row { display: flex; gap: 12px; }
+.grow { flex: 1; }
+.port { width: 90px; }
+.enc { width: 170px; }
+label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+input, select { width: 100%; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 14px; outline: none; }
+input:focus, select:focus { border-color: var(--accent); }
+input:disabled, select:disabled { opacity: 0.6; }
+.hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+.banner { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
+.banner.amber { background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.4); color: #fcd34d; }
+.actions { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+.primary { background: linear-gradient(90deg, var(--accent), var(--accent-2)); border: none; color: #fff; padding: 11px 28px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; min-height: 42px; min-width: 120px; }
+.primary:disabled { opacity: 0.6; cursor: wait; }
+.ghost { background: var(--surface-2); border: 1px solid var(--border); color: var(--text); padding: 11px 20px; border-radius: 8px; font-weight: 500; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; min-height: 42px; }
+.ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+.spin { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+.spin.dark { border-color: rgba(255,255,255,0.2); border-top-color: var(--text); }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>

@@ -93,16 +93,16 @@ Last updated: 2026-06-02
 - ✅ 500ms event batching before WS push *(verified: 211-row Telegraf flush coalesced into one WS message)*
 - ✅ WS channel authorization per subscribe message *(verified: non-member denied with `forbidden` frame)*
 - ✅ subscribe_org / subscribe (server) / unsubscribe + unsubscribe_org actions
-- ⬜ **Smoke test: open dashboard, verify live metric updates arrive** *(needs dashboard UI — next slice; live delivery itself verified via WS client)*
+- ✅ **Smoke test: open dashboard, verify live metric updates arrive** *(verified on lima-ubuntu via Playwright — CPU bar rose 0%→100% live with no reload when the VM was load-spiked)*
 
 ### Global Dashboard (spec 04)
-- ⬜ GET /api/organizations/:org_id/dashboard — summary + server latest metrics
-- ⬜ GET /api/organizations/:org_id/alerts/recent — last 10 alerts
-- ⬜ Summary stat cards (Servers, Services, Alerts, SSL/Domains)
-- ⬜ Server card grid with live metric bars (CPU/RAM/Disk progress bars)
-- ⬜ Recent Alerts panel with [Ack] button
-- ⬜ Live card updates via WS (applyMetricPush)
-- ⬜ **Smoke test: dashboard loads, cards update live, [Ack] works**
+- ✅ GET /api/organizations/:org_id/dashboard — summary + server latest metrics
+- ✅ GET /api/organizations/:org_id/alerts/recent — last 10 alerts *(returns [] until Phase 8 populates alerts)*
+- ✅ Summary stat cards (Servers, Services, Alerts, SSL/Domains) *(Servers live; Services/Alerts/SSL return 0 until their phases)*
+- ✅ Server card grid with live metric bars (CPU/RAM/Disk progress bars)
+- 🔄 Recent Alerts panel with [Ack] button *(panel + empty state shipped; [Ack] deferred to Phase 8 per design)*
+- ✅ Live card updates via WS (applyMetricPush)
+- 🔄 **Smoke test: dashboard loads, cards update live, [Ack] works** *(dashboard loads + live CPU/RAM/Disk bars verified on lima-ubuntu via Playwright; [Ack] deferred to Phase 8)*
 
 ### Server Detail — Metrics (spec 04)
 - ⬜ GET /api/servers/:id/metrics — chart data (range + metric filter)
@@ -259,15 +259,15 @@ Last updated: 2026-06-02
 *SMTP, identity, retention, sessions, agent password rotation*
 
 ### Settings (spec 11)
-- ⬜ GET/PATCH /api/settings
-- ⬜ POST /api/settings/smtp/test
+- ✅ GET/PATCH /api/settings
+- ✅ POST /api/settings/smtp/test
 - ⬜ GET /api/team — members + pending invites
 - ⬜ POST /api/invites + resend + revoke
 - ⬜ POST /api/users/:id/org-assignments + DELETE
 - ⬜ DELETE /api/users/:id (sole-operator guard → 409)
 - ✅ GET/PATCH /api/sessions/:jti/revoke + revoke-others
 - ⬜ POST /api/settings/rotate-writer-password (rotation_id → WS subscribe_rotation)
-- ⬜ /settings/general (instance name, base URL, SMTP)
+- ✅ /settings/general (instance name, base URL, SMTP)
 - ⬜ /settings/team (member list, pending invites, invite modal)
 - ⬜ /settings/retention (retention fields, TimescaleDB policy update)
 - ✅ /settings/security (active sessions table, password change)
@@ -295,7 +295,7 @@ Last updated: 2026-06-02
 | Phase | Status | Tasks Done |
 |---|---|---|
 | Phase 1 — Foundation | ✅ Complete | 60 / 60 |
-| Phase 2 — Live Dashboard | 🔄 In Progress | 4 / 20 |
+| Phase 2 — Live Dashboard | 🔄 In Progress | 10 / 20 |
 | Phase 3 — Log Viewer | ⬜ Pending | 0 / 6 |
 | Phase 4 — Service Monitoring | ⬜ Pending | 0 / 17 |
 | Phase 5 — SSL & Domain | ⬜ Pending | 0 / 13 |
@@ -305,4 +305,4 @@ Last updated: 2026-06-02
 | Phase 9 — Status Page | ⬜ Pending | 0 / 5 |
 | Phase 10 — Settings | ⬜ Pending | 0 / 16 |
 | Phase 11 — Deployment | ⬜ Pending | 0 / 6 |
-| **Total** | 🔄 In Progress | **64 / 191** |
+| **Total** | 🔄 In Progress | **70 / 191** |
