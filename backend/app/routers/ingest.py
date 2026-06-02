@@ -61,7 +61,7 @@ async def ingest_metrics(
     db: AsyncSession = Depends(get_db),
 ):
     body = (await _read_decoded_body(request)).decode("utf-8", errors="replace")
-    count = await write_metrics(server.id, body, db)
+    count = await write_metrics(server.id, server.org_id, body, db)
 
     # Update last_seen_at — this also flips server status from offline → online
     server.last_seen_at = datetime.now(timezone.utc)

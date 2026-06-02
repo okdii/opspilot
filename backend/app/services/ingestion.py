@@ -9,12 +9,15 @@ per numeric field — keeping the normalized (time, server_id, metric_name, valu
 labels) shape that the rest of the system queries.
 """
 
+import logging
 from datetime import datetime, timezone
 from typing import Iterator
 from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 
 # ── InfluxDB Line Protocol parser ─────────────────────────────────────────────
@@ -111,13 +114,16 @@ def parse_line_protocol(text_body: str) -> Iterator[dict]:
 
 # ── Writers ───────────────────────────────────────────────────────────────────
 
-async def write_metrics(server_id: UUID, line_protocol_body: str, db: AsyncSession) -> int:
+async def write_metrics(server_id: UUID, org_id, line_protocol_body: str, db: AsyncSession) -> int:
     """
     Parse Line Protocol and INSERT one row per numeric field to server_metrics.
+    After persisting, publish the same rows to the in-process live bus for WS
+    fan-out (additive — must never break ingestion).
 
     Returns the number of rows inserted.
     """
     rows: list[dict] = []
+    push_rows: list[dict] = []
     import json
     for rec in parse_line_protocol(line_protocol_body):
         labels_json = json.dumps(rec["tags"]) if rec["tags"] else None
@@ -128,12 +134,19 @@ async def write_metrics(server_id: UUID, line_protocol_body: str, db: AsyncSessi
                 num = float(fval)
             else:
                 continue  # skip strings
+            metric_name = f"{rec['measurement']}.{fname}"
             rows.append({
                 "time": rec["time"],
                 "server_id": server_id,
-                "metric_name": f"{rec['measurement']}.{fname}",
+                "metric_name": metric_name,
                 "value": num,
                 "labels": labels_json,
+            })
+            push_rows.append({
+                "metric_name": metric_name,
+                "value": num,
+                "labels": rec["tags"] or {},
+                "time": rec["time"].isoformat(),
             })
 
     if not rows:
@@ -147,6 +160,14 @@ async def write_metrics(server_id: UUID, line_protocol_body: str, db: AsyncSessi
         rows,
     )
     await db.commit()
+
+    # Live fan-out — additive; a failure here must not affect ingestion.
+    try:
+        from app.ws.live_bus import live_bus
+        await live_bus.publish(str(server_id), str(org_id), push_rows)
+    except Exception:
+        logger.exception("live_bus publish failed for server %s", server_id)
+
     return len(rows)
 
 
