@@ -266,12 +266,12 @@ Last updated: 2026-06-02
 - ✅ POST /api/users/:id/org-assignments + DELETE
 - ✅ DELETE /api/users/:id (sole-operator guard → 409)
 - ✅ GET/PATCH /api/sessions/:jti/revoke + revoke-others
-- ⬜ POST /api/settings/rotate-writer-password (rotation_id → WS subscribe_rotation)
+- ✅ POST /api/settings/rotate-writer-password (rotation_id → poll status; WS deferred to Phase 2)
 - ✅ /settings/general (instance name, base URL, SMTP)
 - ✅ /settings/team (member list, pending invites, invite modal)
 - ✅ /settings/retention (retention fields, TimescaleDB policy update)
 - ✅ /settings/security (active sessions table, password change)
-- ⬜ /settings/infrastructure (writer password rotation + progress panel)
+- ✅ /settings/infrastructure (writer password rotation + progress panel)
 - ⬜ **Smoke test: save SMTP, send test email, rotate writer password, watch progress**
 
 ---
