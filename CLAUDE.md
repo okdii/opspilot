@@ -47,6 +47,19 @@ Before designing or coding any screen, element, or layout, **find an existing co
 
 ---
 
+### 4. Commit & Push When a Task or Phase Is Complete
+The moment a task or phase is **done and verified working as expected** (smoke test passed, dashboard updated per Rule 0), **commit and push it** — never leave verified work uncommitted.
+
+- Order of operations on completion: smoke test (Rule 1) → update PROGRESS.md + DASHBOARD.html (Rule 0) → **commit + push (this rule)**
+- Commit the dashboard/progress update **in the same commit** as the work it tracks
+- One logical unit per commit: a finished task or a finished phase — do not batch unrelated work
+- Write a clear message describing what was completed and verified (reference the phase/task)
+- `git push origin main` after committing so the remote always reflects the latest verified state
+- **Never commit broken or unverified work** — if the smoke test did not pass, do not commit
+- Never commit secrets — `.gitignore` already excludes `.env`, `*.pem`, `*.key`; do not force-add them
+
+---
+
 ## Project Context
 
 - **PRD**: `/Users/pocketdata/Code/Work/opspilot/PRD.md` (v2.5, locked)
