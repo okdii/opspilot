@@ -1,3 +1,4 @@
+import asyncio
 import json
 from contextlib import asynccontextmanager
 
@@ -16,6 +17,8 @@ from app.routers.ingest import router as ingest_router
 from app.routers.organizations import router as org_router
 from app.routers.servers import router as server_router
 from app.routers.setup import router as setup_router
+from app.ws.live_bus import live_bus
+from app.ws.authz import can_access_org, resolve_server_org
 from app.ws.manager import ws_manager
 from app.ws.tickets import ticket_store
 
@@ -26,7 +29,9 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(session_cleanup, "cron", hour=3, minute=0, id="session_cleanup", replace_existing=True)
     scheduler.add_job(ticket_sweep, "interval", seconds=60, id="ticket_sweep", replace_existing=True)
     scheduler.start()
+    flush_task = asyncio.create_task(live_bus.flush_loop())
     yield
+    flush_task.cancel()
     scheduler.shutdown(wait=False)
 
 
@@ -121,13 +126,28 @@ async def websocket_endpoint(ws: WebSocket, ticket: str | None = None):
             if action == "subscribe_org":
                 org_id = msg.get("org_id")
                 if org_id:
-                    # Authorization checked inside manager; simplified here — full check in Phase 2
-                    conn.subscribed_orgs.add(org_id)
+                    async with AsyncSessionLocal() as db:
+                        allowed = await can_access_org(user_role, user_id, org_id, db)
+                    if allowed:
+                        conn.subscribed_orgs.add(org_id)
+                    else:
+                        await ws.send_text(json.dumps({"error": "forbidden", "channel": f"org:{org_id}"}))
+
+            elif action == "unsubscribe_org":
+                org_id = msg.get("org_id")
+                if org_id:
+                    conn.subscribed_orgs.discard(org_id)
 
             elif action == "subscribe":
                 server_id = msg.get("server_id")
                 if server_id:
-                    conn.subscribed_servers.add(server_id)
+                    async with AsyncSessionLocal() as db:
+                        org_id = await resolve_server_org(server_id, db)
+                        allowed = org_id is not None and await can_access_org(user_role, user_id, org_id, db)
+                    if allowed:
+                        conn.subscribed_servers.add(server_id)
+                    else:
+                        await ws.send_text(json.dumps({"error": "forbidden", "channel": f"server_metrics:{server_id}"}))
 
             elif action == "subscribe_onboarding":
                 server_id = msg.get("server_id")
