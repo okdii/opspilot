@@ -1,5 +1,5 @@
 import axios, { AxiosError } from 'axios'
-import type { ApiError } from '@/types'
+import type { ApiError, DashboardData, RecentAlert } from '@/types'
 
 export const api = axios.create({
   baseURL: '/',
@@ -35,4 +35,14 @@ export function getApiError(err: unknown): ApiError | null {
     if (detail && typeof detail === 'object') return detail
   }
   return null
+}
+
+export async function getDashboard(orgId: string): Promise<DashboardData> {
+  const { data } = await api.get<DashboardData>(`/api/organizations/${orgId}/dashboard`)
+  return data
+}
+
+export async function getRecentAlerts(orgId: string): Promise<RecentAlert[]> {
+  const { data } = await api.get<RecentAlert[]>(`/api/organizations/${orgId}/alerts/recent`)
+  return data
 }

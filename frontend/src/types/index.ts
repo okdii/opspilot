@@ -71,3 +71,40 @@ export interface ApiError {
   message: string
   [key: string]: unknown
 }
+
+export interface ServerMetrics {
+  cpu: number | null
+  ram: number | null
+  disk: number | null
+}
+
+export interface DashboardServer {
+  id: string
+  name: string
+  host: string
+  tags: string[]
+  status: 'pending' | 'online' | 'offline' | 'maintenance'
+  last_seen_at: string | null
+  metrics: ServerMetrics
+}
+
+export interface DashboardSummary {
+  servers: { total: number; online: number; offline: number; maintenance: number }
+  services: { up: number; down: number }
+  alerts: { firing: number; snoozed: number; acknowledged: number }
+  ssl_domains: { expiring: number; expired: number }
+}
+
+export interface DashboardData {
+  summary: DashboardSummary
+  servers: DashboardServer[]
+}
+
+export interface RecentAlert {
+  id: string
+  server_name: string
+  severity: string
+  message: string
+  state: string
+  sent_at: string | null
+}
