@@ -8,6 +8,7 @@ from app.deps import AdminUser
 from app.models.other import Settings
 from app.schemas.settings import SettingsResponse, SettingsPatch
 from app.services.email import send_email, parse_recipients, EmailNotConfigured
+from app.services.retention import apply_retention
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -70,7 +71,8 @@ async def patch_settings(body: SettingsPatch, _: AdminUser, db: AsyncSession = D
     await db.commit()
     await db.refresh(s)
 
-    # Task 8 wires changed_retention -> retention service here.
+    for key, value in changed_retention.items():
+        await apply_retention(db, key, value)
 
     return _to_response(s)
 
