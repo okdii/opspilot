@@ -1,5 +1,14 @@
 import axios, { AxiosError } from 'axios'
-import type { ApiError, DashboardData, RecentAlert } from '@/types'
+import type {
+  ApiError,
+  DashboardData,
+  LatestValues,
+  MaintenanceState,
+  MetricRange,
+  MetricsResponse,
+  RecentAlert,
+  StartMaintenancePayload,
+} from '@/types'
 
 export const api = axios.create({
   baseURL: '/',
@@ -45,4 +54,40 @@ export async function getDashboard(orgId: string): Promise<DashboardData> {
 export async function getRecentAlerts(orgId: string): Promise<RecentAlert[]> {
   const { data } = await api.get<RecentAlert[]>(`/api/organizations/${orgId}/alerts/recent`)
   return data
+}
+
+// --- Server Detail metrics + maintenance (Phase 2) -------------------------
+
+export async function getMetrics(
+  serverId: string,
+  range: MetricRange,
+  metrics: string[],
+  labelFilter?: string,
+): Promise<MetricsResponse> {
+  const params: Record<string, string> = { range, metrics: metrics.join(',') }
+  if (labelFilter) params.label_filter = labelFilter
+  const { data } = await api.get<MetricsResponse>(`/api/servers/${serverId}/metrics`, { params })
+  return data
+}
+
+export async function getLatest(serverId: string): Promise<LatestValues> {
+  const { data } = await api.get<LatestValues>(`/api/servers/${serverId}/metrics/latest`)
+  return data
+}
+
+export async function getMaintenance(serverId: string): Promise<MaintenanceState> {
+  const { data } = await api.get<MaintenanceState>(`/api/servers/${serverId}/maintenance`)
+  return data
+}
+
+export async function startMaintenance(
+  serverId: string,
+  payload: StartMaintenancePayload = {},
+): Promise<MaintenanceState> {
+  const { data } = await api.post<MaintenanceState>(`/api/servers/${serverId}/maintenance`, payload)
+  return data
+}
+
+export async function endMaintenance(serverId: string): Promise<void> {
+  await api.delete(`/api/servers/${serverId}/maintenance`)
 }

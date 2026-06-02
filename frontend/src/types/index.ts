@@ -149,3 +149,52 @@ export interface RotationServer {
   status: 'pending' | 'deploying' | 'ok' | 'error'
   message: string
 }
+
+// --- Server Detail metrics (Phase 2) ---------------------------------------
+
+export type MetricRange = '1h' | '6h' | '24h' | '7d' | '30d'
+
+export interface MetricSeriesPoint {
+  time: string
+  value: number | null
+}
+
+export interface MetricSeries {
+  metric_name: string
+  labels: Record<string, string>
+  data: MetricSeriesPoint[]
+}
+
+export interface MetricsResponse {
+  range: MetricRange
+  resolution: string
+  series: MetricSeries[]
+}
+
+/** A single-valued latest reading (gauge metrics with no per-label split). */
+export interface LatestScalar {
+  value: number | null
+  time: string
+}
+
+/** A per-label latest reading (disk per path, net per interface, etc.). */
+export interface LatestLabeled {
+  value: number | null
+  labels: Record<string, string>
+  time: string
+}
+
+/** GET /metrics/latest → map of metric_name → scalar or array of labeled. */
+export type LatestValues = Record<string, LatestScalar | LatestLabeled[]>
+
+export interface MaintenanceState {
+  active: boolean
+  reason?: string | null
+  starts_at?: string
+  ends_at?: string | null
+}
+
+export interface StartMaintenancePayload {
+  reason?: string | null
+  ends_at?: string | null
+}
