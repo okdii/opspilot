@@ -62,6 +62,25 @@ class WSManager:
         for conn in dead:
             await self.disconnect(conn)
 
+    async def broadcast_metrics(self, server_id: str, org_id: str, payload: dict) -> None:
+        """Fan a server's metric batch out to connections subscribed to that
+        server OR to its org (the global dashboard subscribes by org)."""
+        msg = json.dumps(payload)
+        dead = []
+        async with self._lock:
+            targets = [
+                c for c in self._connections
+                if server_id in c.subscribed_servers
+                or (org_id and org_id in c.subscribed_orgs)
+            ]
+        for conn in targets:
+            try:
+                await conn.websocket.send_text(msg)
+            except Exception:
+                dead.append(conn)
+        for conn in dead:
+            await self.disconnect(conn)
+
     async def broadcast_onboarding(self, server_id: str, payload: dict) -> None:
         msg = json.dumps({"channel": f"onboarding:{server_id}", **payload})
         dead = []
