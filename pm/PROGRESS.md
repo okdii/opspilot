@@ -89,11 +89,11 @@ Last updated: 2026-06-02
 *WebSocket live dashboard, historical metric charts*
 
 ### WebSocket Infrastructure (spec 01, spec 04)
-- ⬜ PostgreSQL LISTEN/NOTIFY → FastAPI WS fan-out
-- ⬜ 500ms event batching before WS push
-- ⬜ WS channel authorization per subscribe message
-- ⬜ subscribe_org / subscribe (server) / unsubscribe actions
-- ⬜ **Smoke test: open dashboard, verify live metric updates arrive**
+- ✅ FastAPI WS fan-out *(implemented as in-process live bus, not LISTEN/NOTIFY — see PRD §5.4.8; verified live on lima-ubuntu)*
+- ✅ 500ms event batching before WS push *(verified: 211-row Telegraf flush coalesced into one WS message)*
+- ✅ WS channel authorization per subscribe message *(verified: non-member denied with `forbidden` frame)*
+- ✅ subscribe_org / subscribe (server) / unsubscribe + unsubscribe_org actions
+- ⬜ **Smoke test: open dashboard, verify live metric updates arrive** *(needs dashboard UI — next slice; live delivery itself verified via WS client)*
 
 ### Global Dashboard (spec 04)
 - ⬜ GET /api/organizations/:org_id/dashboard — summary + server latest metrics
@@ -295,7 +295,7 @@ Last updated: 2026-06-02
 | Phase | Status | Tasks Done |
 |---|---|---|
 | Phase 1 — Foundation | ✅ Complete | 60 / 60 |
-| Phase 2 — Live Dashboard | ⬜ Pending | 0 / 20 |
+| Phase 2 — Live Dashboard | 🔄 In Progress | 4 / 20 |
 | Phase 3 — Log Viewer | ⬜ Pending | 0 / 6 |
 | Phase 4 — Service Monitoring | ⬜ Pending | 0 / 17 |
 | Phase 5 — SSL & Domain | ⬜ Pending | 0 / 13 |
@@ -305,4 +305,4 @@ Last updated: 2026-06-02
 | Phase 9 — Status Page | ⬜ Pending | 0 / 5 |
 | Phase 10 — Settings | ⬜ Pending | 0 / 16 |
 | Phase 11 — Deployment | ⬜ Pending | 0 / 6 |
-| **Total** | 🔄 In Progress | **60 / 191** |
+| **Total** | 🔄 In Progress | **64 / 191** |
