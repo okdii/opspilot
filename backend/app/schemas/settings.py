@@ -42,3 +42,14 @@ class SessionResponse(BaseModel):
     user_agent: str | None
     issued_at: datetime
     expires_at: datetime
+
+
+class InviteCreate(BaseModel):
+    email: str
+    org_id: str
+    role: str  # operator | viewer
+
+
+class OrgAssignmentCreate(BaseModel):
+    org_id: str
+    role: str  # operator | viewer

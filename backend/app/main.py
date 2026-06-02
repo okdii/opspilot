@@ -19,6 +19,7 @@ from app.routers.servers import router as server_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.settings import router as settings_router
 from app.routers.sessions import router as sessions_router
+from app.routers.team import router as team_router
 from app.routers.setup import router as setup_router
 from app.ws.live_bus import live_bus
 from app.ws.authz import can_access_org, resolve_server_org
@@ -85,6 +86,7 @@ app.include_router(dashboard_router)
 app.include_router(ingest_router)
 app.include_router(settings_router)
 app.include_router(sessions_router)
+app.include_router(team_router)
 
 
 @app.get("/api/health")
