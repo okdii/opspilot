@@ -272,7 +272,7 @@ Last updated: 2026-06-02
 - ✅ /settings/retention (retention fields, TimescaleDB policy update)
 - ✅ /settings/security (active sessions table, password change)
 - ✅ /settings/infrastructure (writer password rotation + progress panel)
-- ⬜ **Smoke test: save SMTP, send test email, rotate writer password, watch progress**
+- ✅ **Smoke test: save SMTP, send test email, rotate writer password, watch progress** *(verified live: SMTP save + test email received in mailpit; writer rotation across 2 active servers with per-server progress ok, metrics resumed)*
 
 ---
 
@@ -303,6 +303,6 @@ Last updated: 2026-06-02
 | Phase 7 — Cron & Backup | ⬜ Pending | 0 / 14 |
 | Phase 8 — Alerting Engine | ⬜ Pending | 0 / 21 |
 | Phase 9 — Status Page | ⬜ Pending | 0 / 5 |
-| Phase 10 — Settings | ⬜ Pending | 0 / 16 |
+| Phase 10 — Settings | ✅ Complete | 16 / 16 |
 | Phase 11 — Deployment | ⬜ Pending | 0 / 6 |
-| **Total** | 🔄 In Progress | **70 / 191** |
+| **Total** | 🔄 In Progress | **86 / 191** |

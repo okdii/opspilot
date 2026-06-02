@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { getApiError } from '@/services/api'
 
@@ -11,6 +11,16 @@ const loading = ref(false)
 const banner = ref('')
 const bannerType = ref<'success' | 'danger'>('success')
 const errors = ref<Record<string, string>>({})
+
+const roleLabel = computed(() => {
+  if (auth.user?.role === 'admin') return 'Admin — Global Access'
+  const orgs = auth.user?.orgs ?? []
+  if (!orgs.length) return 'Member — no organizations assigned'
+  const cap = (r: string) => r.charAt(0).toUpperCase() + r.slice(1)
+  return 'Member — ' + orgs.map((o) => `${cap(o.my_role)} in ${o.name}`).join(', ')
+})
+
+const memberSince = computed(() => auth.user?.created_at?.slice(0, 10) ?? '—')
 
 function validate(): boolean {
   errors.value = {}
@@ -27,15 +37,19 @@ async function submit() {
   loading.value = true
   try {
     await auth.changePassword(currentPassword.value, newPassword.value)
-    banner.value = 'Password updated successfully'
+    banner.value = 'Password changed. You have been signed out of all other devices.'
     bannerType.value = 'success'
     currentPassword.value = ''
     newPassword.value = ''
     confirmPassword.value = ''
   } catch (err) {
     const api = getApiError(err)
-    banner.value = api?.error === 'wrong_password' ? 'Current password is incorrect' : 'Unable to update password'
-    bannerType.value = 'danger'
+    if (api?.error === 'wrong_password') {
+      errors.value.current = 'Current password is incorrect'
+    } else {
+      banner.value = 'Unable to update password'
+      bannerType.value = 'danger'
+    }
   } finally {
     loading.value = false
   }
@@ -53,10 +67,8 @@ async function submit() {
       <section class="card">
         <h2>Account</h2>
         <div class="kv"><span>Username</span><strong>{{ auth.user?.username }}</strong></div>
-        <div class="kv">
-          <span>Role</span>
-          <span class="badge">{{ auth.user?.role }}</span>
-        </div>
+        <div class="kv"><span>Role</span><strong class="role">{{ roleLabel }}</strong></div>
+        <div class="kv"><span>Member since</span><strong>{{ memberSince }}</strong></div>
       </section>
 
       <section class="card">
@@ -88,15 +100,15 @@ async function submit() {
 .page { padding: 24px; max-width: 900px; margin: 0 auto; }
 .hdr h1 { font-size: 22px; color: #fff; margin-bottom: 4px; }
 .hdr p { color: var(--muted); font-size: 13px; margin-bottom: 28px; }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
 @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 22px; }
 .card h2 { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 16px; }
-.kv { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.kv { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
 .kv:last-child { border-bottom: none; }
-.kv span { color: var(--muted); font-size: 13px; }
-.kv strong { color: var(--text); font-size: 13px; }
-.badge { background: var(--surface-2); border: 1px solid var(--border); padding: 4px 10px; border-radius: 999px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-2) !important; }
+.kv span { color: var(--muted); font-size: 13px; flex-shrink: 0; }
+.kv strong { color: var(--text); font-size: 13px; text-align: right; }
+.kv strong.role { color: var(--accent-2); }
 label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; margin-top: 14px; }
 input { width: 100%; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 14px; outline: none; }
 input:focus { border-color: var(--accent); }

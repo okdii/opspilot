@@ -70,18 +70,18 @@
 <div class="overall">
   <div>
     <div class="label">Overall Progress</div>
-    <div class="bar-wrap"><div class="bar" style="width:43%"></div></div>
-    <div class="sub">83 of 191 tasks completed</div>
+    <div class="bar-wrap"><div class="bar" style="width:44%"></div></div>
+    <div class="sub">84 of 191 tasks completed</div>
   </div>
   <div>
-    <div class="pct">43<span>%</span></div>
-    <div class="counts">83 done &middot; 2 in progress &middot; 106 pending</div>
+    <div class="pct">44<span>%</span></div>
+    <div class="counts">84 done &middot; 2 in progress &middot; 105 pending</div>
   </div>
 </div>
 <div class="stats">
-  <div class="stat"><div class="label">Phases Done</div><div class="val g">1</div><div class="sub">of 11 phases</div></div>
-  <div class="stat"><div class="label">Tasks Complete</div><div class="val a">83</div><div class="sub">of 191 total</div></div>
-  <div class="stat"><div class="label">Smoke Tests Passed</div><div class="val b">5</div><div class="sub">of 16 gates</div></div>
+  <div class="stat"><div class="label">Phases Done</div><div class="val g">2</div><div class="sub">of 11 phases</div></div>
+  <div class="stat"><div class="label">Tasks Complete</div><div class="val a">84</div><div class="sub">of 191 total</div></div>
+  <div class="stat"><div class="label">Smoke Tests Passed</div><div class="val b">6</div><div class="sub">of 16 gates</div></div>
   <div class="stat"><div class="label">In Progress</div><div class="val am">2</div><div class="sub">tasks active</div></div>
 </div>
 <div class="sec-title">Phases</div>
@@ -291,7 +291,7 @@ const phases = [
     { text: "/settings/retention (retention fields, TimescaleDB policy update)", status: "done", smoke: false },
     { text: "/settings/security (active sessions table, password change)", status: "done", smoke: false },
     { text: "/settings/infrastructure (writer password rotation + progress panel)", status: "done", smoke: false },
-    { text: "Smoke test: save SMTP, send test email, rotate writer password, watch progress", status: "pending", smoke: true },
+    { text: "Smoke test: save SMTP, send test email, rotate writer password, watch progress *(verified live: SMTP save + test email received in mailpit; writer rotation across 2 active servers with per-server progress ok, metrics resumed)*", status: "done", smoke: true },
   ]},
   { id: 11, title: "Docker Packaging & Deployment", subtitle: "Final packaging, deployment runbook", tasks: [
     { text: "Final docker-compose.yml (all 5 services wired up)", status: "pending", smoke: false },

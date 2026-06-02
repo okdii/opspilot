@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 from uuid import UUID
 from pydantic import BaseModel, field_validator
 
@@ -60,6 +61,7 @@ class MeResponse(BaseModel):
     id: UUID
     username: str
     role: str
+    created_at: datetime
     orgs: list[OrgOut]
 
     model_config = {"from_attributes": True}

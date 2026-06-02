@@ -90,7 +90,7 @@ async def me(user: CurrentUser, db: AsyncSession = Depends(get_db)):
             for mem, org in memberships_q.all()
         ]
 
-    return MeResponse(id=str(user.id), username=user.username, role=user.role, orgs=org_list)
+    return MeResponse(id=str(user.id), username=user.username, role=user.role, created_at=user.created_at, orgs=org_list)
 
 
 @ws_router.get("/ws-ticket")
