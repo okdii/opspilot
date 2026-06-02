@@ -9,6 +9,8 @@
     Storage.path  /var/lib/fluent-bit/storage
     Storage.sync  normal
     Storage.checksum on
+    # Multiline parsers must live in a parsers file (not inline) as of Fluent Bit v5.
+    Parsers_File  parsers-opspilot.conf
 
 # ── System log ───────────────────────────────────────────────────────────────
 [INPUT]
@@ -75,7 +77,7 @@
     Tag               mariadb_slow
     DB                /var/lib/fluent-bit/mariadb_slow.db
     Skip_Long_Lines   On
-    Multiline.parser  multiline-regex-test
+    Multiline.parser  mariadb_slow
 
 # ── Tag server_id onto every record ──────────────────────────────────────────
 [FILTER]

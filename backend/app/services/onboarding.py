@@ -311,8 +311,12 @@ async def _step_configure_fluent_bit(db, server, ssh: SSHSession, os_info: OSInf
         ingestion_token=str(server.ingestion_token),
         **paths,
     )
+    # Multiline/parser definitions must live in a separate parsers file
+    # (Fluent Bit v5 rejects them inline in the main config).
+    parsers_conf = _template_env.get_template("fluent-bit-parsers.conf.j2").render()
     try:
         await ssh.run("mkdir -p /etc/fluent-bit /var/lib/fluent-bit", sudo=True, raise_on_error=True)
+        await ssh.upload(parsers_conf, "/etc/fluent-bit/parsers-opspilot.conf", mode=0o640, sudo=True)
         await ssh.upload(conf, "/etc/fluent-bit/fluent-bit.conf", mode=0o640, sudo=True)
         await _finish_step(db, log, t0, status="done", message="config written")
     except SSHError as e:
