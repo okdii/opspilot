@@ -1,9 +1,71 @@
 <script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useOrgStore } from '@/stores/org'
+import { useDashboardStore } from '@/stores/dashboard'
+import { getRecentAlerts } from '@/services/api'
+import { wsClient } from '@/utils/ws'
+import { StatCard, EmptyState } from '@/components/ui'
+import ServerCard from '@/components/servers/ServerCard.vue'
+import RecentAlertsPanel from '@/components/dashboard/RecentAlertsPanel.vue'
+import type { RecentAlert } from '@/types'
 
 const auth = useAuthStore()
 const orgStore = useOrgStore()
+const dashboard = useDashboardStore()
+
+const recentAlerts = ref<RecentAlert[]>([])
+let unbindWs: (() => void) | null = null
+let subscribedOrg: string | null = null
+
+const alertAccent = computed<'success' | 'warning' | 'danger'>(() => {
+  const f = dashboard.summary.alerts.firing
+  if (f >= 3) return 'danger'
+  if (f >= 1) return 'warning'
+  return 'success'
+})
+
+async function load(orgId: string) {
+  await dashboard.fetchDashboard(orgId)
+  try { recentAlerts.value = await getRecentAlerts(orgId) } catch { recentAlerts.value = [] }
+}
+
+function subscribe(orgId: string) {
+  if (subscribedOrg === orgId) return
+  if (subscribedOrg) wsClient.send({ action: 'unsubscribe_org', org_id: subscribedOrg })
+  wsClient.send({ action: 'subscribe_org', org_id: orgId })
+  subscribedOrg = orgId
+}
+
+function unsubscribe() {
+  if (subscribedOrg) wsClient.send({ action: 'unsubscribe_org', org_id: subscribedOrg })
+  subscribedOrg = null
+}
+
+onMounted(() => {
+  unbindWs = wsClient.on((msg: any) => {
+    const channel: string | undefined = msg?.channel
+    if (typeof channel === 'string' && channel.startsWith('server_metrics:')) {
+      dashboard.applyMetricPush(channel.slice('server_metrics:'.length), msg.rows ?? [])
+    }
+  })
+  const orgId = orgStore.activeOrgId
+  if (orgId) { void load(orgId); subscribe(orgId) }
+})
+
+watch(() => orgStore.activeOrgId, (orgId) => {
+  dashboard.reset()
+  recentAlerts.value = []
+  if (orgId) { void load(orgId); subscribe(orgId) }
+  else unsubscribe()
+})
+
+onUnmounted(() => {
+  unbindWs?.()
+  unbindWs = null
+  unsubscribe()
+  dashboard.reset()
+})
 </script>
 
 <template>
@@ -74,65 +136,37 @@ const orgStore = useOrgStore()
       </div>
     </div>
 
-    <!-- Has orgs — Phase 2 placeholder -->
-    <div v-else>
-      <div class="stat-row">
-        <div class="stat-tile">
-          <div class="stat-icon-wrap purple">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/>
-              <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/>
-              <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/>
-            </svg>
-          </div>
-          <div>
-            <div class="stat-val">{{ orgStore.orgs.length }}</div>
-            <div class="stat-lbl">Organizations</div>
-          </div>
-        </div>
-        <div class="stat-tile">
-          <div class="stat-icon-wrap blue">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/>
-              <line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>
-            </svg>
-          </div>
-          <div>
-            <div class="stat-val">—</div>
-            <div class="stat-lbl">Servers</div>
-          </div>
-        </div>
-        <div class="stat-tile">
-          <div class="stat-icon-wrap amber">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-            </svg>
-          </div>
-          <div>
-            <div class="stat-val">—</div>
-            <div class="stat-lbl">Active Alerts</div>
-          </div>
-        </div>
-      </div>
+    <!-- Has orgs — live dashboard -->
+    <div v-else class="dash">
+      <div v-if="!orgStore.activeOrgId" class="hint">Select an organization to view its dashboard.</div>
 
-      <div class="coming-card">
-        <div class="coming-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="3" width="20" height="14" rx="2"/>
-            <line x1="8" y1="21" x2="16" y2="21"/>
-            <line x1="12" y1="17" x2="12" y2="21"/>
-          </svg>
+      <template v-else>
+        <div class="stat-grid">
+          <StatCard label="Servers" :value="dashboard.summary.servers.total"
+            :delta="{ value: `${dashboard.summary.servers.online} online · ${dashboard.summary.servers.offline} offline`, direction: 'flat' }"
+            accent="info" />
+          <StatCard label="Services Up" :value="dashboard.summary.services.up"
+            :delta="{ value: `${dashboard.summary.services.down} down`, direction: 'flat' }" accent="success" />
+          <StatCard label="Firing Alerts" :value="dashboard.summary.alerts.firing"
+            :delta="{ value: `${dashboard.summary.alerts.snoozed} snoozed · ${dashboard.summary.alerts.acknowledged} ack`, direction: 'flat' }"
+            :accent="alertAccent" />
+          <StatCard label="SSL / Domains" :value="dashboard.summary.ssl_domains.expiring"
+            :delta="{ value: `${dashboard.summary.ssl_domains.expired} expired`, direction: 'flat' }" accent="warning" />
         </div>
-        <div class="coming-body">
-          <h3>Real-time dashboard — Phase 2</h3>
-          <p>Live metrics, CPU &amp; memory charts, and alert feeds will appear here. For now, manage your servers and organizations below.</p>
-          <div class="coming-actions">
-            <router-link to="/servers" class="btn-primary">View Servers</router-link>
-            <router-link v-if="auth.isAdmin" to="/organizations" class="btn-ghost">Organizations</router-link>
-          </div>
+
+        <div v-if="dashboard.loading && !dashboard.servers.length" class="dash-loading">Loading…</div>
+        <div v-else-if="dashboard.error" class="dash-error">{{ dashboard.error }}</div>
+
+        <EmptyState v-else-if="!dashboard.servers.length"
+          title="No servers yet"
+          :message="auth.isAdmin ? 'Add your first server to start seeing data.' : 'No servers in this organization yet.'" />
+
+        <div v-else class="server-grid">
+          <ServerCard v-for="s in dashboard.servers" :key="s.id" :server="s" />
         </div>
-      </div>
+
+        <RecentAlertsPanel :alerts="recentAlerts" />
+      </template>
     </div>
   </div>
 </template>
@@ -164,23 +198,12 @@ const orgStore = useOrgStore()
 .cta { display: inline-flex; align-items: center; gap: 7px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #fff; padding: 10px 22px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 13px; transition: opacity 0.15s; }
 .cta:hover { opacity: 0.88; }
 
-/* Stat row */
-.stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
-.stat-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; align-items: center; gap: 14px; }
-.stat-icon-wrap { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.stat-icon-wrap.purple { background: rgba(99,102,241,0.12); color: var(--accent-2); }
-.stat-icon-wrap.blue { background: rgba(59,130,246,0.12); color: var(--blue); }
-.stat-icon-wrap.amber { background: rgba(245,158,11,0.12); color: var(--amber); }
-.stat-val { font-size: 22px; font-weight: 700; color: #fff; letter-spacing: -0.5px; line-height: 1; }
-.stat-lbl { font-size: 11px; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.05em; }
-
-/* Coming card */
-.coming-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 22px; display: flex; align-items: flex-start; gap: 16px; }
-.coming-icon { width: 40px; height: 40px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--muted); }
-.coming-body h3 { font-size: 14px; color: var(--text); font-weight: 600; margin-bottom: 6px; }
-.coming-body p { font-size: 12px; color: var(--muted); line-height: 1.65; }
-.coming-actions { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
-.btn-primary { padding: 8px 16px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #fff; border: none; border-radius: 7px; font-size: 12px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; cursor: pointer; }
-.btn-ghost { padding: 8px 16px; background: transparent; border: 1px solid var(--border); color: var(--text); border-radius: 7px; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; }
-.btn-ghost:hover { border-color: var(--accent); color: var(--accent-2); }
+/* Live dashboard */
+.dash { }
+.hint { color: var(--muted); font-size: 13px; padding: 40px; text-align: center; }
+.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+.server-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.dash-loading, .dash-error { padding: 32px; text-align: center; color: var(--muted); font-size: 13px; }
+.dash-error { color: #ef4444; }
+@media (max-width: 900px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
 </style>
