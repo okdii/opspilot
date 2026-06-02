@@ -291,3 +291,9 @@ async def _get_accessible_server(server_id: str, user, db: AsyncSession) -> Serv
         if not membership:
             raise HTTPException(403, detail={"error": "forbidden", "message": "Access denied."})
     return server
+
+
+async def _assert_server_access(server_id: str, user, db: AsyncSession) -> Server:
+    """Shared guard for server-detail routes (metrics, maintenance).
+    Reuses the org-membership rule and returns the server row."""
+    return await _get_accessible_server(server_id, user, db)

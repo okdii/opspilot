@@ -11,12 +11,14 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import settings
 from app.core.rate_limit import limiter
-from app.jobs.scheduler import scheduler, session_cleanup, ticket_sweep
+from app.jobs.scheduler import maintenance_expiry, scheduler, session_cleanup, ticket_sweep
 from app.routers.auth import invite_router, router as auth_router, ws_router
 from app.routers.ingest import router as ingest_router
 from app.routers.organizations import router as org_router
 from app.routers.servers import router as server_router
 from app.routers.dashboard import router as dashboard_router
+from app.routers.metrics import router as metrics_router
+from app.routers.maintenance import router as maintenance_router
 from app.routers.settings import router as settings_router
 from app.routers.sessions import router as sessions_router
 from app.routers.team import router as team_router
@@ -32,6 +34,7 @@ async def lifespan(app: FastAPI):
     # Register background jobs
     scheduler.add_job(session_cleanup, "cron", hour=3, minute=0, id="session_cleanup", replace_existing=True)
     scheduler.add_job(ticket_sweep, "interval", seconds=60, id="ticket_sweep", replace_existing=True)
+    scheduler.add_job(maintenance_expiry, "interval", seconds=60, id="maintenance_expiry", replace_existing=True)
     scheduler.start()
     flush_task = asyncio.create_task(live_bus.flush_loop())
     yield
@@ -82,6 +85,8 @@ app.include_router(ws_router)
 app.include_router(invite_router)
 app.include_router(org_router)
 app.include_router(server_router)
+app.include_router(metrics_router)
+app.include_router(maintenance_router)
 app.include_router(dashboard_router)
 app.include_router(ingest_router)
 app.include_router(settings_router)
