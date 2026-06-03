@@ -5,10 +5,17 @@ import { useAuthStore } from '@/stores/auth'
 import type { Organization } from '@/types'
 
 const ACTIVE_ORG_KEY = 'opspilot.activeOrgId'
+const ALL_SENTINEL = '__all__'
+
+function readStoredOrgId(): string | null {
+  const v = localStorage.getItem(ACTIVE_ORG_KEY)
+  if (v === ALL_SENTINEL) return null  // "All Orgs" was explicitly chosen
+  return v                              // UUID string or null (never set)
+}
 
 export const useOrgStore = defineStore('org', () => {
   const orgs = ref<Organization[]>([])
-  const activeOrgId = ref<string | null>(localStorage.getItem(ACTIVE_ORG_KEY))
+  const activeOrgId = ref<string | null>(readStoredOrgId())
   const loading = ref(false)
 
   const activeOrg = computed<Organization | null>(() => {
@@ -36,7 +43,12 @@ export const useOrgStore = defineStore('org', () => {
       const { data } = await api.get<Organization[]>('/api/organizations')
       orgs.value = data
       // Set active org if not set or no longer accessible
-      if (!activeOrgId.value || !orgs.value.find((o) => o.id === activeOrgId.value)) {
+      const stored = localStorage.getItem(ACTIVE_ORG_KEY)
+      if (stored === null) {
+        // First ever login — default to first org
+        if (orgs.value.length > 0) setActiveOrg(orgs.value[0].id)
+      } else if (stored !== ALL_SENTINEL && !orgs.value.find((o) => o.id === stored)) {
+        // Previously selected org no longer accessible — reset to first
         if (orgs.value.length > 0) setActiveOrg(orgs.value[0].id)
       }
     } finally {
@@ -46,8 +58,7 @@ export const useOrgStore = defineStore('org', () => {
 
   function setActiveOrg(orgId: string | null): void {
     activeOrgId.value = orgId
-    if (orgId) localStorage.setItem(ACTIVE_ORG_KEY, orgId)
-    else localStorage.removeItem(ACTIVE_ORG_KEY)
+    localStorage.setItem(ACTIVE_ORG_KEY, orgId ?? ALL_SENTINEL)
   }
 
   async function createOrg(payload: { name: string; slug: string; description?: string }): Promise<Organization> {
