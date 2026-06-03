@@ -121,6 +121,7 @@ class AlertRule(Base):
     threshold: Mapped[float] = mapped_column(Float, nullable=False)
     rolling_window_min: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     cooldown_min: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     last_fired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     server: Mapped["Server"] = relationship(back_populates="alert_rules")
@@ -137,6 +138,7 @@ class LogAlertRule(Base):
     threshold: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     window_sec: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     cooldown_min: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     last_fired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     server: Mapped["Server"] = relationship(back_populates="log_alert_rules")

@@ -3,11 +3,14 @@
 A small, single-purpose service: send a text/plain email given the persisted
 SMTP settings. Shared — the Phase 8 alerting engine reuses send_email().
 """
+import logging
 import smtplib
 from email.message import EmailMessage
 
 from app.core import crypto
 from app.models.other import Settings
+
+logger = logging.getLogger(__name__)
 
 
 class EmailNotConfigured(Exception):
@@ -43,3 +46,22 @@ def send_email(s: Settings, subject: str, body: str, recipients: list[str]) -> N
         server.send_message(msg)
     finally:
         server.quit()
+
+
+def send_email_safe(s: Settings, subject: str, body: str, recipients: list[str]) -> bool:
+    """Best-effort send: swallow EmailNotConfigured and any SMTP/transport error,
+    logging a warning. Returns True if the message was handed to SMTP, False
+    otherwise. Used by the alerting engine so a missing/broken SMTP config can
+    never stop an alert from being recorded or pushed."""
+    if not recipients:
+        logger.warning("alert email skipped: no recipients configured")
+        return False
+    try:
+        send_email(s, subject, body, recipients)
+        return True
+    except EmailNotConfigured:
+        logger.warning("alert email skipped: SMTP not configured")
+        return False
+    except Exception:  # noqa: BLE001 — best-effort; never propagate to caller
+        logger.warning("alert email send failed", exc_info=True)
+        return False

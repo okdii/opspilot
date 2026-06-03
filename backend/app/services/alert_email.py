@@ -1,0 +1,191 @@
+"""Plain-text alert email formatting (spec 10 §12).
+
+This module only *formats* fire/resolve subjects and bodies and delegates the
+actual SMTP transport to ``app.services.email`` (reused, not reimplemented).
+Bodies are text/plain — no HTML. Sends are best-effort: a missing or broken
+SMTP config never stops an alert from being recorded or pushed.
+"""
+import logging
+from datetime import datetime, timezone
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.other import Alert, Settings
+from app.services.email import parse_recipients, send_email_safe
+
+logger = logging.getLogger(__name__)
+
+# spec 10 §15
+TYPE_DISPLAY: dict[str, str] = {
+    "cpu": "CPU Usage High",
+    "ram": "RAM Usage High",
+    "disk": "Disk Usage High",
+    "disk_inode": "Disk Inode Usage High",
+    "agent_offline": "Agent Offline",
+    "service_down": "Service Down",
+    "ssl_expiry": "SSL Certificate Expiring",
+    "domain_expiry": "Domain Registration Expiring",
+    "cron_missing": "Cron Job Missing",
+    "backup_missing": "Backup Job Missing",
+    "backup_failure": "Backup Job Failed",
+    "backup_size_drop": "Backup Size Anomaly",
+    "db_connections": "MariaDB Connections High",
+    "db_replication_lag": "MariaDB Replication Lag",
+    "db_replication_stopped": "MariaDB Replication Stopped",
+    "db_deadlock": "MariaDB Deadlock Detected",
+    "php_fatal": "PHP Fatal Error",
+    "nginx_5xx": "Nginx 5xx Spike",
+    "ssh_brute_force": "SSH Brute Force Attempt",
+    "mariadb_error": "MariaDB Error",
+    "slow_query_spike": "Slow Query Spike",
+    "maintenance": "Maintenance Mode",
+}
+
+_DIVIDER = "-" * 53
+
+
+def display_name(alert_type: str) -> str:
+    return TYPE_DISPLAY.get(alert_type, alert_type)
+
+
+def _aware(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+
+def _fmt_ts(dt: datetime | None) -> str:
+    dt = _aware(dt)
+    if dt is None:
+        return "—"
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def _fmt_duration(start: datetime | None, end: datetime | None) -> str:
+    start, end = _aware(start), _aware(end)
+    if start is None or end is None:
+        return "—"
+    total = int((end - start).total_seconds())
+    if total < 0:
+        total = 0
+    minutes, seconds = divmod(total, 60)
+    hours, minutes = divmod(minutes, 60)
+    parts: list[str] = []
+    if hours:
+        parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
+    parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
+    parts.append(f"{seconds} second{'s' if seconds != 1 else ''}")
+    return " ".join(parts)
+
+
+def fire_subject(alert: Alert, server_name: str | None) -> str:
+    subject_target = server_name or "OpsPilot"
+    return f"[OpsPilot] {alert.severity.upper()}: {subject_target} — {display_name(alert.type)}"
+
+
+def resolve_subject(alert: Alert, server_name: str | None) -> str:
+    subject_target = server_name or "OpsPilot"
+    return f"[OpsPilot] RESOLVED: {subject_target} — {display_name(alert.type)} returned to normal"
+
+
+def format_fire_body(
+    alert: Alert,
+    *,
+    server_name: str | None,
+    base_url: str,
+    email_meta: dict | None = None,
+) -> str:
+    base = base_url.rstrip("/")
+    meta = email_meta or {}
+    lines = [
+        _DIVIDER,
+        "OpsPilot Alert",
+        _DIVIDER,
+        "",
+        f"Severity:   {alert.severity.upper()}",
+        f"Server:     {server_name or '—'}",
+    ]
+    if meta.get("condition"):
+        lines.append(f"Condition:  {meta['condition']}")
+    if meta.get("value") is not None:
+        lines.append(f"Value:      {meta['value']}")
+    if meta.get("threshold") is not None:
+        lines.append(f"Threshold:  {meta['threshold']}")
+    lines.append(f"Fired at:   {_fmt_ts(alert.sent_at)}")
+    lines += [
+        "",
+        "Message:",
+        alert.message,
+        "",
+    ]
+    if alert.server_id:
+        lines.append(f"View dashboard: {base}/servers/{alert.server_id}")
+        lines.append("")
+    lines += [
+        _DIVIDER,
+        "To manage this alert:",
+        f"{base}/alerts",
+        "",
+        "To edit alert rules:",
+        f"{base}/alerts/rules",
+        "",
+        "This email was sent by OpsPilot.",
+        _DIVIDER,
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def format_resolve_body(alert: Alert, *, server_name: str | None) -> str:
+    lines = [
+        _DIVIDER,
+        "OpsPilot Alert — Resolved",
+        _DIVIDER,
+        "",
+        f"Severity:   {alert.severity.upper()} (resolved)",
+        f"Server:     {server_name or '—'}",
+        f"Resolved:   {_fmt_ts(alert.resolved_at)}",
+        f"Duration:   {_fmt_duration(alert.sent_at, alert.resolved_at)}",
+        "",
+        "Message:",
+        alert.message,
+        "",
+        _DIVIDER,
+        "This email was sent by OpsPilot.",
+        _DIVIDER,
+    ]
+    return "\n".join(lines) + "\n"
+
+
+async def send_alert_email(
+    db: AsyncSession,
+    alert: Alert,
+    *,
+    kind: str,
+    server_name: str | None = None,
+    email_meta: dict | None = None,
+) -> bool:
+    """Load Settings, build subject/body for ``kind`` ('fire'|'resolve') and send
+    best-effort. Never raises into the caller."""
+    try:
+        s = await db.scalar(select(Settings).where(Settings.id == 1))
+    except Exception:  # noqa: BLE001
+        logger.warning("alert email skipped: could not load settings", exc_info=True)
+        return False
+    if s is None:
+        logger.warning("alert email skipped: no settings row")
+        return False
+
+    recipients = parse_recipients(s.smtp_recipients)
+    base_url = s.base_url or "http://localhost"
+
+    if kind == "fire":
+        subject = fire_subject(alert, server_name)
+        body = format_fire_body(
+            alert, server_name=server_name, base_url=base_url, email_meta=email_meta
+        )
+    else:
+        subject = resolve_subject(alert, server_name)
+        body = format_resolve_body(alert, server_name=server_name)
+
+    return send_email_safe(s, subject, body, recipients)
