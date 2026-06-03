@@ -46,6 +46,25 @@ const subscribed = new Set<string>()
 
 const filteredServers = computed(() => serverStore.servers)
 
+interface OrgGroup {
+  orgId: string
+  orgName: string
+  servers: Server[]
+}
+
+const groupedServers = computed<OrgGroup[]>(() => {
+  if (orgStore.activeOrgId) return []
+  const map = new Map<string, OrgGroup>()
+  for (const s of serverStore.servers) {
+    if (!map.has(s.org_id)) {
+      const org = orgStore.orgs.find((o) => o.id === s.org_id)
+      map.set(s.org_id, { orgId: s.org_id, orgName: org?.name ?? s.org_id, servers: [] })
+    }
+    map.get(s.org_id)!.servers.push(s)
+  }
+  return Array.from(map.values()).sort((a, b) => a.orgName.localeCompare(b.orgName))
+})
+
 const statusCounts = computed(() => {
   const counts = { online: 0, offline: 0, maintenance: 0, pending: 0 }
   for (const s of serverStore.servers) counts[s.status]++
@@ -311,6 +330,68 @@ const summaryText = computed(() => {
       <button v-if="auth.isAdmin" class="primary" @click="openAdd">+ Add Server</button>
     </div>
 
+    <template v-else-if="!orgStore.activeOrgId && auth.isAdmin">
+      <div v-if="serverStore.servers.length === 0" class="empty">
+        <div class="icon">🖥</div>
+        <h2>No servers registered yet</h2>
+        <p>Add a server inside an organization to get started.</p>
+      </div>
+      <template v-else>
+        <div v-for="group in groupedServers" :key="group.orgId" class="org-section">
+          <div class="org-section-head">
+            <span class="org-section-name">{{ group.orgName }}</span>
+            <span class="org-section-count">{{ group.servers.length }} server{{ group.servers.length !== 1 ? 's' : '' }}</span>
+          </div>
+          <div class="grid">
+            <div v-for="s in group.servers" :key="s.id" class="card" :class="`status-${s.status}`">
+              <div class="card-hd">
+                <span v-if="s.status === 'pending' && cardOutcome(s.id) === 'failed'" class="hd-ico fail">✕</span>
+                <span v-else-if="s.status === 'pending'" class="spinner"></span>
+                <span v-else class="dot" :class="`dot-${s.status}`"></span>
+                <span class="name">{{ s.name }}</span>
+                <div v-if="auth.isAdmin" class="menu-wrap" @click.stop>
+                  <button class="kebab" aria-label="Server actions" @click="openMenuId = openMenuId === s.id ? null : s.id">⋮</button>
+                  <div v-if="openMenuId === s.id" class="kebab-menu">
+                    <button class="kmi" @click="openPanel(s.id)">View Onboarding Log</button>
+                    <button class="kmi" @click="redeployAgents(s.id)">Re-deploy Agents</button>
+                    <button class="kmi" @click="openEdit(s)">Edit Server</button>
+                    <div class="kmi-div"></div>
+                    <button class="kmi danger" @click="deleteServer(s.id)">Delete</button>
+                  </div>
+                </div>
+              </div>
+              <div class="host">{{ s.host }}</div>
+              <template v-if="s.status === 'pending'">
+                <div v-if="cardOutcome(s.id) === 'failed'" class="ob ob-fail">
+                  <div class="ob-row"><span class="ob-label">ONBOARDING FAILED</span></div>
+                  <button class="ob-link fail" @click="openPanel(s.id)">View Error →</button>
+                </div>
+                <div v-else class="ob">
+                  <div class="ob-row">
+                    <span class="ob-label">ONBOARDING</span>
+                    <span class="ob-step mono">Step {{ onboarding.currentStepNumber(s.id) }} of {{ TOTAL_STEPS }}</span>
+                  </div>
+                  <div class="ob-running">{{ onboarding.runningLabel(s.id) || 'Starting…' }}</div>
+                  <div class="bar"><div class="bar-fill" :style="{ width: onboarding.progressPct(s.id) + '%' }"></div></div>
+                  <button class="ob-link" @click="openPanel(s.id)">View Progress →</button>
+                </div>
+              </template>
+              <template v-else>
+                <div class="meta">{{ s.os_distro ?? '—' }}</div>
+                <div class="footer">
+                  <StatusBadge kind="server" :status="s.status" />
+                  <span class="time">{{ relativeTime(s.last_seen_at) }}</span>
+                </div>
+              </template>
+              <div v-if="s.tags && s.tags.length" class="tags">
+                <span v-for="t in s.tags" :key="t" class="tag">{{ t }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </template>
+
     <div v-else class="grid">
       <div v-for="s in filteredServers" :key="s.id" class="card" :class="`status-${s.status}`">
         <div class="card-hd">
@@ -536,4 +617,16 @@ input.invalid, textarea.invalid { border-color: var(--red); }
 .err { color: var(--red); font-size: 11px; margin-top: 6px; }
 .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--border); }
 .spin { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+
+.org-section { margin-bottom: 28px; }
+.org-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.org-section-name { font-size: 14px; font-weight: 600; color: #fff; }
+.org-section-count { font-size: 12px; color: var(--muted); }
 </style>
