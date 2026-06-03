@@ -7,12 +7,14 @@ from sqlalchemy import bindparam, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.deps import CurrentUser
+from app.deps import AdminUser, CurrentUser
+from app.models.organization import Organization
 from app.models.other import Alert
 from app.models.server import Server
 from app.routers.servers import _assert_org_access, _compute_status
 
 router = APIRouter(prefix="/api/organizations", tags=["dashboard"])
+global_router = APIRouter(tags=["dashboard"])
 
 CPU_METRIC = "cpu.usage_active"
 RAM_METRIC = "mem.used_percent"
@@ -119,3 +121,77 @@ async def get_recent_alerts(org_id: str, user: CurrentUser, db: AsyncSession = D
         }
         for a, name in rows
     ]
+
+
+@global_router.get("/api/dashboard/global")
+async def get_global_dashboard(_user: AdminUser, db: AsyncSession = Depends(get_db)):
+    """Cross-org summary stats for admin users. Returns one entry per org."""
+    # Fetch all orgs sorted by name
+    orgs = (
+        await db.execute(select(Organization).order_by(Organization.name))
+    ).scalars().all()
+
+    if not orgs:
+        return []
+
+    # Fetch all active servers grouped by org
+    servers_rows = (
+        await db.execute(
+            select(Server).where(Server.is_active == True)
+        )
+    ).scalars().all()
+
+    # Build per-org server buckets
+    servers_by_org: dict[str, list[Server]] = {str(o.id): [] for o in orgs}
+    for s in servers_rows:
+        oid = str(s.org_id)
+        if oid in servers_by_org:
+            servers_by_org[oid].append(s)
+
+    # Collect all server ids for alert query
+    all_server_ids = [str(s.id) for s in servers_rows]
+
+    # Fetch alert counts grouped by (server_id, state) — avoids loading all rows
+    firing_by_server: dict[str, int] = {}
+    total_by_server: dict[str, int] = {}
+    if all_server_ids:
+        alert_rows = (
+            await db.execute(
+                select(Alert.server_id, Alert.state, func.count())
+                .where(
+                    Alert.server_id.in_(all_server_ids),
+                    Alert.state.in_(["firing", "snoozed", "acknowledged"]),
+                )
+                .group_by(Alert.server_id, Alert.state)
+            )
+        ).all()
+        for server_id, state, count in alert_rows:
+            sid = str(server_id)
+            total_by_server[sid] = total_by_server.get(sid, 0) + count
+            if state == "firing":
+                firing_by_server[sid] = firing_by_server.get(sid, 0) + count
+
+    result = []
+    for org in orgs:
+        oid = str(org.id)
+        org_servers = servers_by_org.get(oid, [])
+        online = offline = 0
+        for s in org_servers:
+            status = _compute_status(s)
+            if status == "online":
+                online += 1
+            elif status == "offline":
+                offline += 1
+        # maintenance and pending are intentionally excluded from both counts
+
+        org_server_ids = {str(s.id) for s in org_servers}
+        total_alerts = sum(total_by_server.get(sid, 0) for sid in org_server_ids)
+        firing_alerts = sum(firing_by_server.get(sid, 0) for sid in org_server_ids)
+
+        result.append({
+            "org": {"id": oid, "name": org.name},
+            "servers": {"total": len(org_servers), "online": online, "offline": offline},
+            "alerts": {"total": total_alerts, "firing": firing_alerts},
+        })
+
+    return result

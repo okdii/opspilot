@@ -16,7 +16,7 @@ from app.routers.auth import invite_router, router as auth_router, ws_router
 from app.routers.ingest import router as ingest_router
 from app.routers.organizations import router as org_router
 from app.routers.servers import router as server_router
-from app.routers.dashboard import router as dashboard_router
+from app.routers.dashboard import router as dashboard_router, global_router as dashboard_global_router
 from app.routers.metrics import router as metrics_router
 from app.routers.maintenance import router as maintenance_router
 from app.routers.settings import router as settings_router
@@ -109,6 +109,7 @@ app.include_router(server_router)
 app.include_router(metrics_router)
 app.include_router(maintenance_router)
 app.include_router(dashboard_router)
+app.include_router(dashboard_global_router)
 app.include_router(ingest_router)
 app.include_router(logs_router)
 app.include_router(settings_router)
