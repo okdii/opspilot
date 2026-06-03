@@ -8,6 +8,7 @@ import { wsClient } from '@/utils/ws'
 import { StatCard, EmptyState } from '@/components/ui'
 import ServerCard from '@/components/servers/ServerCard.vue'
 import RecentAlertsPanel from '@/components/dashboard/RecentAlertsPanel.vue'
+import GlobalDashboard from '@/components/dashboard/GlobalDashboard.vue'
 import type { RecentAlert } from '@/types'
 
 const auth = useAuthStore()
@@ -138,7 +139,8 @@ onUnmounted(() => {
 
     <!-- Has orgs — live dashboard -->
     <div v-else class="dash">
-      <div v-if="!orgStore.activeOrgId" class="hint">Select an organization to view its dashboard.</div>
+      <GlobalDashboard v-if="!orgStore.activeOrgId && auth.isAdmin" />
+      <div v-else-if="!orgStore.activeOrgId" class="hint">Select an organization to view its dashboard.</div>
 
       <template v-else>
         <div class="stat-grid">
