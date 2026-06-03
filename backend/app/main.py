@@ -26,8 +26,16 @@ from app.routers.setup import router as setup_router
 from app.routers.logs import router as logs_router
 from app.routers.alerts import router as alerts_router, snooze_expiry_tick
 from app.routers.alert_rules import router as alert_rules_router
+from app.routers.services import router as services_router
+from app.routers.ssl_domains import router as ssl_domains_router
+from app.routers.databases import router as databases_router
+from app.routers.cron_backup import router as cron_backup_router
 from app.services.metric_evaluator import metric_alert_evaluator
 from app.services.log_evaluator import log_alert_evaluator
+from app.services.ssl_checker import ssl_checker_daily, domain_checker_daily
+from app.services.probe import schedule_all_active
+from app.routers.databases import db_deadlock_evaluator
+from app.services.cron_watchdog import cron_backup_watchdog
 from app.ws.live_bus import live_bus
 from app.ws.authz import can_access_org, resolve_server_org
 from app.ws.manager import ws_manager
@@ -43,7 +51,12 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(metric_alert_evaluator, "interval", seconds=30, id="metric_alert_evaluator", replace_existing=True)
     scheduler.add_job(log_alert_evaluator, "interval", seconds=60, id="log_alert_evaluator", replace_existing=True)
     scheduler.add_job(snooze_expiry_tick, "interval", seconds=60, id="snooze_expiry_tick", replace_existing=True)
+    scheduler.add_job(ssl_checker_daily, "cron", hour=2, minute=0, id="ssl_checker_daily", replace_existing=True)
+    scheduler.add_job(domain_checker_daily, "cron", hour=3, minute=0, id="domain_checker_daily", replace_existing=True)
+    scheduler.add_job(db_deadlock_evaluator, "interval", seconds=60, id="db_deadlock_evaluator", replace_existing=True)
+    scheduler.add_job(cron_backup_watchdog, "interval", seconds=60, id="cron_backup_watchdog", replace_existing=True)
     scheduler.start()
+    asyncio.create_task(schedule_all_active())
     flush_task = asyncio.create_task(live_bus.flush_loop())
     yield
     flush_task.cancel()
@@ -103,6 +116,10 @@ app.include_router(sessions_router)
 app.include_router(team_router)
 app.include_router(alerts_router)
 app.include_router(alert_rules_router)
+app.include_router(services_router)
+app.include_router(ssl_domains_router)
+app.include_router(databases_router)
+app.include_router(cron_backup_router)
 
 
 @app.get("/api/health")
