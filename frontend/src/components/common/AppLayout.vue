@@ -151,6 +151,10 @@ async function logout() {
         <div class="nav-spacer"></div>
       </nav>
 
+      <div class="bell-wrap">
+        <NotificationBell />
+      </div>
+
       <div class="user-card" :class="{ open: userMenuOpen }">
         <button class="user-btn" @click="userMenuOpen = !userMenuOpen">
           <div class="avatar">{{ auth.user?.username?.charAt(0).toUpperCase() }}</div>
@@ -175,9 +179,6 @@ async function logout() {
     </aside>
 
     <main class="content">
-      <div class="topbar">
-        <NotificationBell />
-      </div>
       <router-view />
     </main>
 
@@ -213,9 +214,6 @@ async function logout() {
 .menu-item:hover { background: rgba(99,102,241,0.1); color: var(--accent-2); }
 .menu-item.logout:hover { background: rgba(239,68,68,0.1); color: var(--red); }
 .menu-divider { height: 1px; background: var(--border); margin: 2px 0; }
-.content { flex: 1; overflow-y: auto; position: relative; }
-.topbar {
-  position: absolute; top: 18px; right: 28px; z-index: 40;
-  display: flex; align-items: center; gap: 12px;
-}
+.content { flex: 1; overflow-y: auto; }
+.bell-wrap { padding: 8px 12px; border-top: 1px solid var(--border); position: relative; }
 </style>

@@ -33,10 +33,11 @@ function goToAlerts() {
 <template>
   <div class="bell-wrap">
     <button class="bell-btn" :class="{ active: open }" aria-label="Notifications" @click="open = !open">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
         <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
       </svg>
+      <span class="bell-label">Alerts</span>
       <span v-if="badge" class="bell-badge" data-testid="bell-badge">{{ badge }}</span>
     </button>
 
@@ -67,18 +68,20 @@ function goToAlerts() {
 <style scoped>
 .bell-wrap { position: relative; }
 .bell-btn {
-  position: relative; width: 36px; height: 36px; border-radius: 8px;
+  position: relative; width: 100%; height: 36px; border-radius: 8px;
   background: var(--surface-2); border: 1px solid var(--border); color: var(--muted);
-  display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.15s;
+  display: flex; align-items: center; justify-content: flex-start; gap: 10px;
+  padding: 0 12px; cursor: pointer; transition: all 0.15s; font-size: 13px;
 }
 .bell-btn:hover, .bell-btn.active { border-color: var(--accent); color: var(--text); }
+.bell-label { flex: 1; text-align: left; }
 .bell-badge {
-  position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px; padding: 0 4px;
+  position: absolute; top: 4px; right: 8px; min-width: 17px; height: 17px; padding: 0 4px;
   background: var(--red); color: #fff; font-size: 10px; font-weight: 700; border-radius: 9px;
   display: flex; align-items: center; justify-content: center; border: 2px solid var(--surface);
 }
 .bell-pop {
-  position: absolute; top: calc(100% + 8px); right: 0; width: 320px; z-index: 1200;
+  position: absolute; bottom: 0; left: calc(100% + 12px); width: 320px; z-index: 1200;
   background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5); overflow: hidden;
 }
