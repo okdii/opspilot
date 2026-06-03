@@ -203,3 +203,55 @@ export interface StartMaintenancePayload {
 
 export interface ProcessRow { pid: number; user?: string; name: string; cpu_pct: number; mem_pct: number }
 export interface ProcessSnapshot { reachable: boolean; collected_at: string | null; processes: ProcessRow[]; top_cpu: ProcessRow[]; top_mem: ProcessRow[] }
+
+// --- Log Viewer (Phase 3, spec 05) -----------------------------------------
+
+export type LogSource =
+  | 'nginx_access' | 'nginx_error' | 'php_fpm' | 'php_app'
+  | 'mariadb_error' | 'mariadb_slow' | 'syslog' | 'auth' | 'kernel'
+
+export type LogSeverity = 'debug' | 'info' | 'warn' | 'error' | 'fatal'
+
+export type LogTimeRange = '15m' | '1h' | '6h' | '24h' | '7d' | 'custom'
+
+export interface LogEntry {
+  id: string
+  time: string
+  server_id: string
+  server_name: string
+  source: LogSource | string
+  severity: LogSeverity | null
+  message: string
+  fields: Record<string, unknown>
+}
+
+export interface LogsResponse {
+  entries: LogEntry[]
+  next_cursor: string | null
+  count: number
+  limit_reached: boolean
+}
+
+export interface VolumeBucket {
+  time: string
+  debug: number
+  info: number
+  warn: number
+  error: number
+  fatal: number
+}
+
+export interface VolumeResponse {
+  buckets: VolumeBucket[]
+  bucket_seconds: number
+}
+
+export interface LogFilters {
+  serverIds: string[]
+  sources: LogSource[]
+  severities: LogSeverity[]
+  search: string
+  range: LogTimeRange
+  from: string | null
+  to: string | null
+}

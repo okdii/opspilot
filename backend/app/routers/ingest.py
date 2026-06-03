@@ -82,5 +82,5 @@ async def ingest_logs(
         raise HTTPException(400, detail={"error": "bad_json", "message": "Body must be JSON."})
 
     records = payload if isinstance(payload, list) else [payload]
-    count = await write_logs(server.id, records, db)
+    count = await write_logs(server.id, records, db, org_id=server.org_id)
     return {"ok": True, "rows": count}

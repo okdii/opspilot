@@ -81,6 +81,27 @@ class WSManager:
         for conn in dead:
             await self.disconnect(conn)
 
+    async def broadcast_logs(self, server_id: str, org_id: str, payload: dict) -> None:
+        """Fan a single live log entry out to connections subscribed to that
+        server OR to its org (the Log Viewer subscribes by server when one or
+        more servers are picked, or by org for the all-servers view). Channel:
+        server_logs:{server_id} (spec 05 §12)."""
+        msg = json.dumps(payload)
+        dead = []
+        async with self._lock:
+            targets = [
+                c for c in self._connections
+                if server_id in c.subscribed_servers
+                or (org_id and org_id in c.subscribed_orgs)
+            ]
+        for conn in targets:
+            try:
+                await conn.websocket.send_text(msg)
+            except Exception:
+                dead.append(conn)
+        for conn in dead:
+            await self.disconnect(conn)
+
     async def broadcast_onboarding(self, server_id: str, payload: dict) -> None:
         msg = json.dumps({"channel": f"onboarding:{server_id}", **payload})
         dead = []

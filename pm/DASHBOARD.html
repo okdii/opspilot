@@ -64,24 +64,24 @@
 </head>
 <body>
 <div class="header">
-  <div><h1>OpsPilot &mdash; Dev Progress</h1><p>11 phases &middot; 191 tasks &middot; Python + FastAPI + Vue 3 + TimescaleDB</p></div>
-  <div class="badge">Generated: <span>2026-06-02</span></div>
+  <div><h1>OpsPilot &mdash; Dev Progress</h1><p>11 phases &middot; 195 tasks &middot; Python + FastAPI + Vue 3 + TimescaleDB</p></div>
+  <div class="badge">Generated: <span>2026-06-03</span></div>
 </div>
 <div class="overall">
   <div>
     <div class="label">Overall Progress</div>
-    <div class="bar-wrap"><div class="bar" style="width:44%"></div></div>
-    <div class="sub">84 of 191 tasks completed</div>
+    <div class="bar-wrap"><div class="bar" style="width:54%"></div></div>
+    <div class="sub">105 of 195 tasks completed</div>
   </div>
   <div>
-    <div class="pct">44<span>%</span></div>
-    <div class="counts">84 done &middot; 2 in progress &middot; 105 pending</div>
+    <div class="pct">54<span>%</span></div>
+    <div class="counts">105 done &middot; 2 in progress &middot; 88 pending</div>
   </div>
 </div>
 <div class="stats">
-  <div class="stat"><div class="label">Phases Done</div><div class="val g">2</div><div class="sub">of 11 phases</div></div>
-  <div class="stat"><div class="label">Tasks Complete</div><div class="val a">84</div><div class="sub">of 191 total</div></div>
-  <div class="stat"><div class="label">Smoke Tests Passed</div><div class="val b">6</div><div class="sub">of 16 gates</div></div>
+  <div class="stat"><div class="label">Phases Done</div><div class="val g">3</div><div class="sub">of 11 phases</div></div>
+  <div class="stat"><div class="label">Tasks Complete</div><div class="val a">105</div><div class="sub">of 195 total</div></div>
+  <div class="stat"><div class="label">Smoke Tests Passed</div><div class="val b">8</div><div class="sub">of 16 gates</div></div>
   <div class="stat"><div class="label">In Progress</div><div class="val am">2</div><div class="sub">tasks active</div></div>
 </div>
 <div class="sec-title">Phases</div>
@@ -164,28 +164,29 @@ const phases = [
     { text: "Recent Alerts panel with [Ack] button *(panel + empty state shipped; [Ack] deferred to Phase 8 per design)*", status: "inprogress", smoke: false },
     { text: "Live card updates via WS (applyMetricPush)", status: "done", smoke: false },
     { text: "Smoke test: dashboard loads, cards update live, [Ack] works *(dashboard loads + live CPU/RAM/Disk bars verified on lima-ubuntu via Playwright; [Ack] deferred to Phase 8)*", status: "inprogress", smoke: true },
-    { text: "GET /api/servers/:id/metrics — chart data (range + metric filter)", status: "done", smoke: false },
+    { text: "GET /api/servers/:id/metrics — chart data (range + metric filter) *(Telegraf name map, server-side counter→rate, disk fstype filter; verified live)*", status: "done", smoke: false },
     { text: "GET /api/servers/:id/metrics/latest — live gauge initial state", status: "done", smoke: false },
-    { text: "GET /api/servers/:id/processes — live SSH snapshot (full list + top-CPU/top-mem, 5s cache)", status: "done", smoke: false },
-    { text: "Processes tab — top tables + full list (filter/sort) + live badge + proctop trend chart", status: "done", smoke: false },
-    { text: "Agent Status footer — telegraf/fluent-bit health via systemd_units + warning toast", status: "done", smoke: true },
-    { text: "Per-core CPU (percpu single-field) + DB compression policy + growth-control intervals", status: "done", smoke: false },
-    { text: "4 live gauge cards (CPU, RAM, Disk, Network)", status: "done", smoke: false },
-    { text: "Tab navigation (Overview, CPU, Memory, Disk, Network, System; Processes deferred to Phase 1 procstat)", status: "done", smoke: false },
-    { text: "Time range selector (1h/6h/24h/7d/30d) — correct data source per range", status: "done", smoke: false },
-    { text: "All chart types (area, stacked area, line, dual-line, bar, radial gauge, donut, horizontal bar)", status: "done", smoke: false },
-    { text: "24h live WS update: rightmost hourly bucket updated in place (no re-fetch)", status: "done", smoke: false },
-    { text: "Maintenance mode badge + slide-over (enable, active state, end maintenance)", status: "done", smoke: false },
-    { text: "POST/DELETE/GET /api/servers/:id/maintenance", status: "done", smoke: false },
-    { text: "Smoke test: all 7 tabs render, charts update live, 24h bucket behavior", status: "done", smoke: true },
+    { text: "GET /api/servers/:id/processes — live SSH snapshot (full process list + top-CPU/top-mem; `top -bn2`, 5s cache, single-flight, graceful offline)", status: "done", smoke: false },
+    { text: "Processes tab — top-CPU/top-mem tables + full process list (filter/sort) + live badge + proctop top-N trend chart", status: "done", smoke: false },
+    { text: "Agent Status footer — telegraf/fluent-bit health via systemd_units + one-time warning toast on agent down *(verified: stop fluent-bit → footer shows stopped)*", status: "done", smoke: false },
+    { text: "Per-core CPU — `cpu.usage_active` per core (single-field percpu input); CpuTab per-core bars populate", status: "done", smoke: false },
+    { text: "DB growth control — proctop @30s, per-core single-field, systemd_units scoped to 2 units; TimescaleDB compression policy on server_metrics (>2d chunks)", status: "done", smoke: false },
+    { text: "4 live gauge cards (CPU, RAM, Disk, Network) *(verified: live WS, CPU rose 1%→100% on VM spike, no reload)*", status: "done", smoke: false },
+    { text: "Tab navigation (Overview, CPU, Memory, Disk, Network, System, Processes) *(all 6 metric tabs built; Processes tab disabled — deferred to Phase 1 agent procstat)*", status: "done", smoke: false },
+    { text: "Time range selector (1h/6h/24h/7d/30d) — correct data source per range *(raw 1h/6h, hourly 24h, daily 7d/30d)*", status: "done", smoke: false },
+    { text: "All chart types (area, stacked area, line, dual-line, bar, radial gauge, donut, horizontal bar) *(all present across tabs via shared MetricChart)*", status: "done", smoke: false },
+    { text: "24h live WS update: rightmost hourly bucket updated in place (no re-fetch) *(implemented in useMetricsStore; live WS verified)*", status: "done", smoke: false },
+    { text: "Maintenance mode badge + slide-over (enable, active state, end maintenance) *(verified: badge Maintenance↔Online)*", status: "done", smoke: false },
+    { text: "POST/DELETE/GET /api/servers/:id/maintenance *(nullable ends_at, suppresses active alerts, 60s expiry job)*", status: "done", smoke: false },
+    { text: "Smoke test: all 7 tabs render, charts update live, 24h bucket behavior *(Playwright on lima-ubuntu: all 6 tabs render, 0 page errors, Processes disabled; CPU gauge rose 1%→100% live via WS, no reload)*", status: "done", smoke: true },
   ]},
   { id: 3, title: "Log Viewer", subtitle: "Backend reads server_logs, Log Viewer UI", tasks: [
-    { text: "GET /api/servers/:id/logs — paginated (cursor, max 500 rows)", status: "pending", smoke: false },
-    { text: "Filters: server, source (9 sources), severity, time range, full-text search", status: "pending", smoke: false },
-    { text: "Live tail mode via WS (server_logs:{server_id} channel)", status: "pending", smoke: false },
-    { text: "Expandable rows (all JSONB fields)", status: "pending", smoke: false },
-    { text: "Log volume stacked bar chart (by hour, stacked by severity)", status: "pending", smoke: false },
-    { text: "Smoke test: filter logs, search, live tail shows new entries", status: "pending", smoke: true },
+    { text: "GET /api/logs — paginated (cursor, max 500 rows) *(server/org filter via query params)*", status: "done", smoke: false },
+    { text: "Filters: server, source (9 sources), severity, time range, full-text search *(tsvector; verified curl)*", status: "done", smoke: false },
+    { text: "Live tail mode via WS (server_logs:{server_id} channel) *(ingestion publishes to live bus)*", status: "done", smoke: false },
+    { text: "Expandable rows (all JSONB fields)", status: "done", smoke: false },
+    { text: "Log volume stacked bar chart (by hour, stacked by severity)", status: "done", smoke: false },
+    { text: "Smoke test: filter logs, search, live tail shows new entries *(Playwright: /logs renders 100 rows + volume chart, 0 errors; curl filters/search/pagination verified)*", status: "done", smoke: true },
   ]},
   { id: 4, title: "Service Monitoring", subtitle: "HTTP/TCP probes, ServiceCheck hypertable, Incident model, uptime timeline", tasks: [
     { text: "GET /api/organizations/:org_id/services — list all services", status: "pending", smoke: false },

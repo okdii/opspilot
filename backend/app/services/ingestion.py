@@ -171,18 +171,23 @@ async def write_metrics(server_id: UUID, org_id, line_protocol_body: str, db: As
     return len(rows)
 
 
-async def write_logs(server_id: UUID, records: list[dict], db: AsyncSession) -> int:
+async def write_logs(server_id: UUID, records: list[dict], db: AsyncSession, org_id=None) -> int:
     """
     Insert log records from Fluent Bit (JSON array, one record per line).
 
     Each record is expected to have at least `log` (message). Extra fields are
     stored in the `raw` JSONB column.
+
+    After persisting, publish each entry to the live bus on channel
+    server_logs:{server_id} for Log Viewer live-tail (spec 05 §8). The publish is
+    additive and best-effort — a failure here must never break ingestion.
     """
     if not records:
         return 0
 
     import json
     rows = []
+    push_rows = []
     for rec in records:
         ts_raw = rec.get("time") or rec.get("date") or rec.get("@timestamp")
         try:
@@ -199,13 +204,25 @@ async def write_logs(server_id: UUID, records: list[dict], db: AsyncSession) -> 
         severity = rec.get("severity") or rec.get("level") or "info"
         message = rec.get("log") or rec.get("message") or ""
 
+        source_s = str(source)[:80]
+        severity_s = str(severity)[:20]
+        message_s = str(message)
         rows.append({
             "time": ts,
             "server_id": server_id,
-            "source": str(source)[:80],
-            "severity": str(severity)[:20],
-            "message": str(message),
+            "source": source_s,
+            "severity": severity_s,
+            "message": message_s,
             "raw": json.dumps(rec),
+        })
+        push_rows.append({
+            "time": ts.isoformat(),
+            "server_id": str(server_id),
+            "server_name": None,
+            "source": source_s,
+            "severity": None if source_s == "nginx_access" else (severity_s or None),
+            "message": message_s,
+            "fields": rec,
         })
 
     await db.execute(
@@ -216,4 +233,17 @@ async def write_logs(server_id: UUID, records: list[dict], db: AsyncSession) -> 
         rows,
     )
     await db.commit()
+
+    # Live fan-out — additive; a failure here must not affect ingestion.
+    try:
+        from app.ws.manager import ws_manager
+        org = str(org_id) if org_id is not None else ""
+        for entry in push_rows:
+            await ws_manager.broadcast_logs(
+                str(server_id), org,
+                {"channel": f"server_logs:{server_id}", "event": "log_entry", "data": entry},
+            )
+    except Exception:
+        logger.exception("live log publish failed for server %s", server_id)
+
     return len(rows)

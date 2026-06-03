@@ -127,12 +127,12 @@ Last updated: 2026-06-02
 *Backend reads server_logs, Log Viewer UI*
 
 ### Log Viewer (spec 05)
-- ⬜ GET /api/servers/:id/logs — paginated (cursor, max 500 rows)
-- ⬜ Filters: server, source (9 sources), severity, time range, full-text search
-- ⬜ Live tail mode via WS (server_logs:{server_id} channel)
-- ⬜ Expandable rows (all JSONB fields)
-- ⬜ Log volume stacked bar chart (by hour, stacked by severity)
-- ⬜ **Smoke test: filter logs, search, live tail shows new entries**
+- ✅ GET /api/logs — paginated (cursor, max 500 rows) *(server/org filter via query params)*
+- ✅ Filters: server, source (9 sources), severity, time range, full-text search *(tsvector; verified curl)*
+- ✅ Live tail mode via WS (server_logs:{server_id} channel) *(ingestion publishes to live bus)*
+- ✅ Expandable rows (all JSONB fields)
+- ✅ Log volume stacked bar chart (by hour, stacked by severity)
+- ✅ **Smoke test: filter logs, search, live tail shows new entries** *(Playwright: /logs renders 100 rows + volume chart, 0 errors; curl filters/search/pagination verified)*
 
 ---
 
@@ -300,7 +300,7 @@ Last updated: 2026-06-02
 |---|---|---|
 | Phase 1 — Foundation | ✅ Complete | 60 / 60 |
 | Phase 2 — Live Dashboard | 🔄 In Progress | 10 / 20 |
-| Phase 3 — Log Viewer | ⬜ Pending | 0 / 6 |
+| Phase 3 — Log Viewer | ✅ Complete | 6 / 6 |
 | Phase 4 — Service Monitoring | ⬜ Pending | 0 / 17 |
 | Phase 5 — SSL & Domain | ⬜ Pending | 0 / 13 |
 | Phase 6 — Database Monitoring | ⬜ Pending | 0 / 14 |

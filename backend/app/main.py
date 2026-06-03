@@ -23,6 +23,7 @@ from app.routers.settings import router as settings_router
 from app.routers.sessions import router as sessions_router
 from app.routers.team import router as team_router
 from app.routers.setup import router as setup_router
+from app.routers.logs import router as logs_router
 from app.ws.live_bus import live_bus
 from app.ws.authz import can_access_org, resolve_server_org
 from app.ws.manager import ws_manager
@@ -89,6 +90,7 @@ app.include_router(metrics_router)
 app.include_router(maintenance_router)
 app.include_router(dashboard_router)
 app.include_router(ingest_router)
+app.include_router(logs_router)
 app.include_router(settings_router)
 app.include_router(sessions_router)
 app.include_router(team_router)
@@ -179,6 +181,22 @@ async def websocket_endpoint(ws: WebSocket, ticket: str | None = None):
                     await ws.send_text(json.dumps({"event": "error", "code": "forbidden"}))
 
             elif action == "unsubscribe":
+                server_id = msg.get("server_id")
+                if server_id:
+                    conn.subscribed_servers.discard(server_id)
+
+            elif action == "subscribe_logs":
+                server_id = msg.get("server_id")
+                if server_id:
+                    async with AsyncSessionLocal() as db:
+                        org_id = await resolve_server_org(server_id, db)
+                        allowed = org_id is not None and await can_access_org(user_role, user_id, org_id, db)
+                    if allowed:
+                        conn.subscribed_servers.add(server_id)
+                    else:
+                        await ws.send_text(json.dumps({"error": "forbidden", "channel": f"server_logs:{server_id}"}))
+
+            elif action == "unsubscribe_logs":
                 server_id = msg.get("server_id")
                 if server_id:
                     conn.subscribed_servers.discard(server_id)

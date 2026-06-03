@@ -30,6 +30,9 @@ const props = withDefaults(
     stacked?: boolean
     /** donut/radialBar slice/series labels */
     labels?: string[]
+    /** Optional explicit per-series colors (overrides the brand palette).
+     *  Used by callers with fixed semantic colors, e.g. log-severity stacks. */
+    colors?: string[]
   }>(),
   {
     height: 300,
@@ -115,7 +118,7 @@ const options = computed<ApexOptions>(() => {
       fontFamily: 'inherit',
     },
     theme: { mode: 'dark' },
-    colors: [...THEME.palette],
+    colors: props.colors?.length ? [...props.colors] : [...THEME.palette],
     dataLabels: { enabled: false },
     grid: {
       borderColor: THEME.border,

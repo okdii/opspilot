@@ -10,6 +10,8 @@ import type {
   RecentAlert,
   Server,
   StartMaintenancePayload,
+  LogsResponse,
+  VolumeResponse,
 } from '@/types'
 
 export const api = axios.create({
@@ -101,5 +103,17 @@ export async function endMaintenance(serverId: string): Promise<void> {
 
 export async function getProcesses(serverId: string): Promise<ProcessSnapshot> {
   const { data } = await api.get<ProcessSnapshot>(`/api/servers/${serverId}/processes`)
+  return data
+}
+
+// --- Log Viewer (Phase 3, spec 05) -----------------------------------------
+
+export async function getLogs(params: Record<string, string>): Promise<LogsResponse> {
+  const { data } = await api.get<LogsResponse>('/api/logs', { params })
+  return data
+}
+
+export async function getLogVolume(params: Record<string, string>): Promise<VolumeResponse> {
+  const { data } = await api.get<VolumeResponse>('/api/logs/volume', { params })
   return data
 }
