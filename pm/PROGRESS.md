@@ -193,7 +193,7 @@ Last updated: 2026-06-02
 - ✅ Alert evaluation: db_connections, db_deadlock, db_replication_lag, db_replication_stopped
 - ✅ /databases page (server tab strip, no-credentials state, health dashboard)
 - ✅ All DB charts (connections gauge + line, QPS area, slow queries bar, buffer pool gauge, deadlocks bar, replication section, advanced metrics panel)
-- ✅ **Smoke test: enter credentials, watch Telegraf re-deploy, see DB metrics appear** *(credential encrypt + redeploy→telegraf inputs.mysql injection verified; live metric flow not smoked — no DB installed on the test VM)*
+- ✅ **Smoke test: enter credentials, watch Telegraf re-deploy, see DB metrics appear** *(verified live: MariaDB on VM → credential add → redeploy → 1964 mysql.* metrics flowing; db-metrics/latest populated, last_check_ok=true)*
 
 ---
 
@@ -226,7 +226,7 @@ Last updated: 2026-06-02
 - ✅ consecutive_clear_count persisted on Alert row (auto-resolve at 2)
 - ✅ maintenance_expiry APScheduler job (60s tick — auto-end expired windows)
 - ✅ Maintenance enter: immediately suppress all firing/acked/snoozed alerts for server
-- ✅ SMTP email delivery (text/plain; charset=utf-8, no HTML) *(send wired via Phase 10 SMTP + body format per §12 verified; live mailpit delivery not re-smoked this session — needs SMTP + recipient configured)*
+- ✅ SMTP email delivery (text/plain; charset=utf-8, no HTML) *(verified live: alert email delivered to mailpit — subject '[OpsPilot] WARNING: lima-ubuntu — CPU Usage High' → configured recipient)*
 - ✅ base_url fallback: str(request.base_url) if Settings.base_url not set
 - ✅ Alert auto-creation on onboarding (4 AlertRule + 5 LogAlertRule rows)
 - ✅ Cooldown enforcement (last_fired_at on AlertRule/LogAlertRule, hardcoded 1h for others)
@@ -242,7 +242,7 @@ Last updated: 2026-06-02
 - ✅ /alerts/rules page (Metric Rules + Log Pattern Rules tables)
 - ✅ Notification bell (badge count, dropdown panel, toast on alert_fired)
 - ✅ Alert detail slide-over (timeline, rule info, ack/snooze actions)
-- ✅ **Smoke test: spike CPU, see alert fire + email, let it clear x2, see resolve email** *(verified live: scheduled metric evaluator fired a cpu alert → GET /alerts → ack→acknowledged; auto-resolve-at-2 verified in Slice B; email send best-effort wired (live delivery pending SMTP recipient config))*
+- ✅ **Smoke test: spike CPU, see alert fire + email, let it clear x2, see resolve email** *(verified live: scheduled metric evaluator fired a cpu alert → GET /alerts → ack→acknowledged; auto-resolve-at-2 verified in Slice B; alert email delivered to mailpit, verified subject+recipient)*
 
 ---
 
