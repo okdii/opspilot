@@ -40,10 +40,10 @@ function toGB(bytes: number | null): number {
 const breakdown = computed(() => {
   const latest = metrics.latestValues
   return {
-    used: scalarValue(latest, 'mem.used'),
-    cached: scalarValue(latest, 'mem.cached'),
+    used:     scalarValue(latest, 'mem.used'),
+    cached:   scalarValue(latest, 'mem.cached'),
     buffered: scalarValue(latest, 'mem.buffered'),
-    free: scalarValue(latest, 'mem.free'),
+    free:     scalarValue(latest, 'mem.free'),
   }
 })
 
@@ -52,30 +52,53 @@ const hasBreakdown = computed(() => {
   return b.used != null || b.cached != null || b.buffered != null || b.free != null
 })
 
-// Single-category horizontal stacked bar — one series per memory segment.
+// --- Swap ------------------------------------------------------------------
+const swapTotal = computed(() => scalarValue(metrics.latestValues, 'swap.total'))
+const hasSwap   = computed(() => (swapTotal.value ?? 0) > 0)
+
+const swapBreakdown = computed(() => {
+  const latest = metrics.latestValues
+  return {
+    used: scalarValue(latest, 'swap.used'),
+    free: scalarValue(latest, 'swap.free'),
+  }
+})
+
+// Horizontal stacked bar — one series per memory segment.
+// When swap is present a second row "Swap" is appended; Cached/Buffers are
+// 0 for that row so only Used and Free segments render.
+const breakdownCategories = computed(() => hasSwap.value ? ['RAM', 'Swap'] : ['Memory'])
+
 const breakdownSeries = computed(() => {
   const b = breakdown.value
+  const s = swapBreakdown.value
+  const withSwap = hasSwap.value
   return [
-    { name: 'Used', data: [toGB(b.used)] },
-    { name: 'Cached', data: [toGB(b.cached)] },
-    { name: 'Buffers', data: [toGB(b.buffered)] },
-    { name: 'Free', data: [toGB(b.free)] },
+    { name: 'Used',    data: withSwap ? [toGB(b.used),     toGB(s.used)] : [toGB(b.used)] },
+    { name: 'Cached',  data: withSwap ? [toGB(b.cached),   0]            : [toGB(b.cached)] },
+    { name: 'Buffers', data: withSwap ? [toGB(b.buffered), 0]            : [toGB(b.buffered)] },
+    { name: 'Free',    data: withSwap ? [toGB(b.free),     toGB(s.free)] : [toGB(b.free)] },
   ]
 })
 
 const breakdownLegend = computed(() => {
   const b = breakdown.value
-  return [
-    { label: 'Used', text: humanBytes(b.used) },
-    { label: 'Cached', text: humanBytes(b.cached) },
+  const s = swapBreakdown.value
+  const base = [
+    { label: 'Used',    text: humanBytes(b.used) },
+    { label: 'Cached',  text: humanBytes(b.cached) },
     { label: 'Buffers', text: humanBytes(b.buffered) },
-    { label: 'Free', text: humanBytes(b.free) },
+    { label: 'Free',    text: humanBytes(b.free) },
+  ]
+  if (!hasSwap.value) return base
+  return [
+    ...base,
+    { label: 'Swap used', text: humanBytes(s.used) },
+    { label: 'Swap free', text: humanBytes(s.free) },
   ]
 })
 
-// --- Swap ------------------------------------------------------------------
-const swapTotal = computed(() => scalarValue(metrics.latestValues, 'swap.total'))
-const hasSwap = computed(() => (swapTotal.value ?? 0) > 0)
+const breakdownHeight = computed(() => hasSwap.value ? 140 : 100)
 </script>
 
 <template>
@@ -94,8 +117,8 @@ const hasSwap = computed(() => (swapTotal.value ?? 0) > 0)
           horizontal
           unit="GB"
           :series="breakdownSeries"
-          :categories="['Memory']"
-          :height="100"
+          :categories="breakdownCategories"
+          :height="breakdownHeight"
         />
         <div class="legend">
           <span v-for="seg in breakdownLegend" :key="seg.label" class="legend-item">
