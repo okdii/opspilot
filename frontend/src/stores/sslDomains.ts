@@ -1,0 +1,294 @@
+import { defineStore } from 'pinia'
+import { computed, ref } from 'vue'
+import { api } from '@/services/api'
+
+// ── Types (co-located — spec 07 §12 / §13) ───────────────────────────────────
+
+export interface DomainRec {
+  id: string
+  domain: string
+  registrar: string | null
+  expiry_date: string | null
+  days_remaining: number | null
+  warn_days: number
+  critical_days: number
+  last_checked: string | null
+  status: string | null
+}
+
+export interface SslCert {
+  id: string
+  domain_id: string
+  domain: string | null
+  port: number
+  issuer: string | null
+  expiry_date: string | null
+  days_remaining: number | null
+  warn_days: number
+  critical_days: number
+  last_checked: string | null
+  status: string | null
+}
+
+interface SslDomainsResponse {
+  domains: DomainRec[]
+  ssl_certs: SslCert[]
+}
+
+export interface CreateDomainPayload {
+  org_id: string
+  domain: string
+  warn_days: number
+  critical_days: number
+}
+
+export interface CreateSslPayload {
+  domain_id: string
+  port: number
+  warn_days: number
+  critical_days: number
+}
+
+export type ThresholdPayload = { warn_days?: number; critical_days?: number; port?: number }
+
+/** A merged, table-ready row (spec 07 §12 CombinedRow). */
+export interface CombinedRow {
+  id: string
+  domainName: string
+  type: 'domain' | 'ssl'
+  port?: number
+  expiryDate: string | null
+  daysRemaining: number | null
+  status: string
+  lastChecked: string | null
+  registrar?: string | null
+  warnDays: number
+  criticalDays: number
+  issuer?: string | null
+  domainId?: string
+  // The threshold the bar/colour are measured against (warn_days).
+  warnThreshold: number
+}
+
+export interface TimelineDot {
+  id: string
+  type: 'domain' | 'ssl'
+  label: string
+  expiryDate: string
+  daysRemaining: number | null
+  status: string
+  issuer?: string | null
+  registrar?: string | null
+}
+
+// Status ranking so critical/expired float to top of the default sort.
+const STATUS_RANK: Record<string, number> = {
+  expired: 0,
+  critical: 1,
+  expiring_soon: 2,
+  unreachable: 3,
+  checking: 4,
+  valid: 5,
+}
+
+export const useSslDomainStore = defineStore('sslDomains', () => {
+  const domains = ref<DomainRec[]>([])
+  const sslCerts = ref<SslCert[]>([])
+  const isLoading = ref(false)
+  const error = ref<string | null>(null)
+
+  // ── Getters ─────────────────────────────────────────────────────────────
+  const domainNameById = computed<Record<string, string>>(() => {
+    const m: Record<string, string> = {}
+    for (const d of domains.value) m[d.id] = d.domain
+    return m
+  })
+
+  /** Domains + certs merged, grouped by domain, default-sorted by expiry. */
+  const combinedRows = computed<CombinedRow[]>(() => {
+    const rows: CombinedRow[] = []
+    for (const d of domains.value) {
+      rows.push({
+        id: d.id,
+        domainName: d.domain,
+        type: 'domain',
+        expiryDate: d.expiry_date,
+        daysRemaining: d.days_remaining,
+        status: d.status ?? 'checking',
+        lastChecked: d.last_checked,
+        registrar: d.registrar,
+        warnDays: d.warn_days,
+        criticalDays: d.critical_days,
+        warnThreshold: d.warn_days,
+      })
+    }
+    for (const c of sslCerts.value) {
+      const name = c.domain ?? domainNameById.value[c.domain_id] ?? '—'
+      rows.push({
+        id: c.id,
+        domainName: name,
+        type: 'ssl',
+        port: c.port,
+        expiryDate: c.expiry_date,
+        daysRemaining: c.days_remaining,
+        status: c.status ?? 'checking',
+        lastChecked: c.last_checked,
+        issuer: c.issuer,
+        domainId: c.domain_id,
+        warnDays: c.warn_days,
+        criticalDays: c.critical_days,
+        warnThreshold: c.warn_days,
+      })
+    }
+    return rows
+  })
+
+  const criticalCount = computed(
+    () => combinedRows.value.filter((r) => r.status === 'critical' || r.status === 'expired').length,
+  )
+  const expiringCount = computed(
+    () => combinedRows.value.filter((r) => r.status === 'expiring_soon').length,
+  )
+
+  /** Dots for the scatter timeline — only items with a known expiry date. */
+  const timelineDots = computed<TimelineDot[]>(() =>
+    combinedRows.value
+      .filter((r) => r.expiryDate)
+      .map((r) => ({
+        id: r.id,
+        type: r.type,
+        label: r.type === 'ssl' ? `${r.domainName}:${r.port}` : r.domainName,
+        expiryDate: r.expiryDate as string,
+        daysRemaining: r.daysRemaining,
+        status: r.status,
+        issuer: r.issuer,
+        registrar: r.registrar,
+      })),
+  )
+
+  /** Set of domain ids that already have an SSL cert (for "Add SSL" affordance). */
+  const domainIdsWithCert = computed<Set<string>>(() => {
+    const s = new Set<string>()
+    for (const c of sslCerts.value) s.add(c.domain_id)
+    return s
+  })
+
+  function statusRank(status: string): number {
+    return STATUS_RANK[status] ?? 6
+  }
+
+  // ── Actions ─────────────────────────────────────────────────────────────
+  async function fetchAll(orgId: string): Promise<void> {
+    isLoading.value = true
+    error.value = null
+    try {
+      const { data } = await api.get<SslDomainsResponse>(
+        `/api/organizations/${orgId}/ssl-domains`,
+      )
+      domains.value = data.domains
+      sslCerts.value = data.ssl_certs
+    } catch {
+      error.value = 'Could not load SSL & domain data.'
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  async function addDomain(payload: CreateDomainPayload): Promise<DomainRec> {
+    const { data } = await api.post<DomainRec>('/api/domains', payload)
+    domains.value.push(data)
+    return data
+  }
+
+  async function addCert(payload: CreateSslPayload): Promise<SslCert> {
+    const { data } = await api.post<SslCert>('/api/ssl-certs', payload)
+    sslCerts.value.push(data)
+    return data
+  }
+
+  async function updateDomain(id: string, payload: ThresholdPayload): Promise<DomainRec> {
+    const { data } = await api.patch<DomainRec>(`/api/domains/${id}`, payload)
+    const idx = domains.value.findIndex((d) => d.id === id)
+    if (idx >= 0) domains.value[idx] = data
+    return data
+  }
+
+  async function updateCert(id: string, payload: ThresholdPayload): Promise<SslCert> {
+    const { data } = await api.patch<SslCert>(`/api/ssl-certs/${id}`, payload)
+    const idx = sslCerts.value.findIndex((c) => c.id === id)
+    if (idx >= 0) sslCerts.value[idx] = data
+    return data
+  }
+
+  async function deleteDomain(id: string): Promise<void> {
+    await api.delete(`/api/domains/${id}`)
+    domains.value = domains.value.filter((d) => d.id !== id)
+  }
+
+  async function deleteCert(id: string): Promise<void> {
+    await api.delete(`/api/ssl-certs/${id}`)
+    sslCerts.value = sslCerts.value.filter((c) => c.id !== id)
+  }
+
+  /** Trigger an immediate background re-check. Throws on 429 (rate limited). */
+  async function checkDomain(id: string): Promise<void> {
+    await api.post(`/api/domains/${id}/check`)
+  }
+
+  async function checkCert(id: string): Promise<void> {
+    await api.post(`/api/ssl-certs/${id}/check`)
+  }
+
+  /**
+   * Poll the combined endpoint until the target record's last_checked is
+   * non-null (spec 07 §6.3 — 10s interval, max 5 polls). Resolves either way.
+   */
+  async function pollUntilChecked(
+    orgId: string,
+    type: 'domain' | 'ssl',
+    id: string,
+    maxPolls = 5,
+  ): Promise<boolean> {
+    for (let i = 0; i < maxPolls; i++) {
+      await new Promise((r) => setTimeout(r, 10_000))
+      await fetchAll(orgId)
+      const rec =
+        type === 'domain'
+          ? domains.value.find((d) => d.id === id)
+          : sslCerts.value.find((c) => c.id === id)
+      if (rec && rec.last_checked) return true
+    }
+    return false
+  }
+
+  function reset(): void {
+    domains.value = []
+    sslCerts.value = []
+    isLoading.value = false
+    error.value = null
+  }
+
+  return {
+    domains,
+    sslCerts,
+    isLoading,
+    error,
+    combinedRows,
+    criticalCount,
+    expiringCount,
+    timelineDots,
+    domainIdsWithCert,
+    statusRank,
+    fetchAll,
+    addDomain,
+    addCert,
+    updateDomain,
+    updateCert,
+    deleteDomain,
+    deleteCert,
+    checkDomain,
+    checkCert,
+    pollUntilChecked,
+    reset,
+  }
+})
