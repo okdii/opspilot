@@ -270,6 +270,8 @@ watch(() => props.range, (r) => void loadTrend(r))
 .ptable .t-num { text-align: right; font-variant-numeric: tabular-nums; }
 .ptable .t-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .t-bar-cell { padding-right: 16px; }
+.t-bar-cell :deep(.metric-bar) { grid-template-columns: minmax(80px, max-content) 1fr 52px; }
+.t-bar-cell :deep(.mb-label) { overflow: visible; text-overflow: clip; max-width: 240px; }
 .muted { color: var(--muted); }
 
 .sortable { cursor: pointer; user-select: none; }
