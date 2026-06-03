@@ -19,6 +19,16 @@ const bannerType = ref<'danger' | 'info'>('danger')
 const usernameRef = ref<HTMLInputElement | null>(null)
 const passwordRef = ref<HTMLInputElement | null>(null)
 
+// Dev-only demo credentials helper (never rendered in production builds).
+const isDev = import.meta.env.DEV
+const demoCreds = { username: 'admin', password: 'OpsPilot123!' }
+
+function fillDemo(submit = false) {
+  username.value = demoCreds.username
+  password.value = demoCreds.password
+  if (submit) void handleSubmit()
+}
+
 onMounted(() => {
   if (route.query.reason === 'expired') {
     banner.value = 'Your session has expired. Please sign in again.'
@@ -95,6 +105,22 @@ async function handleSubmit() {
           <span v-else>Sign In</span>
         </button>
       </form>
+
+      <div v-if="isDev" class="dev-creds">
+        <div class="dev-hd">
+          <span class="dev-tag">DEV</span> Demo credentials
+        </div>
+        <div class="dev-row">
+          <code>{{ demoCreds.username }}</code>
+          <span class="sep">/</span>
+          <code>{{ demoCreds.password }}</code>
+        </div>
+        <div class="dev-actions">
+          <button type="button" class="dev-btn" @click="fillDemo(false)">Fill</button>
+          <button type="button" class="dev-btn primary-ghost" @click="fillDemo(true)">Fill &amp; sign in</button>
+        </div>
+        <p class="dev-note">Visible in dev mode only — hidden in production builds.</p>
+      </div>
     </div>
   </div>
 </template>
@@ -122,4 +148,16 @@ input.invalid { border-color: var(--red); }
 .primary:disabled { opacity: 0.6; cursor: wait; }
 .spin { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.dev-creds { margin-top: 20px; padding: 14px; border: 1px dashed var(--border); border-radius: 10px; background: rgba(255,255,255,0.02); }
+.dev-hd { font-size: 11px; color: var(--muted); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; letter-spacing: 0.04em; }
+.dev-tag { background: rgba(245,158,11,0.15); color: #fcd34d; border: 1px solid rgba(245,158,11,0.4); border-radius: 5px; padding: 1px 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; }
+.dev-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.dev-row code { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font-size: 13px; color: var(--accent-2); user-select: all; }
+.dev-row .sep { color: var(--muted); }
+.dev-actions { display: flex; gap: 8px; }
+.dev-btn { flex: 1; background: var(--surface-2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 8px; font-size: 12px; cursor: pointer; transition: border-color 0.15s; }
+.dev-btn:hover { border-color: var(--accent); }
+.dev-btn.primary-ghost { color: var(--accent-2); border-color: rgba(99,102,241,0.4); }
+.dev-note { color: var(--muted); font-size: 11px; margin-top: 8px; font-style: italic; }
 </style>
