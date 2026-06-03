@@ -485,6 +485,49 @@ async def public_services(db: AsyncSession = Depends(get_db)):
     return out
 
 
+@router.get("/api/public/services/{service_id}/uptime")
+async def public_uptime(
+    service_id: str,
+    days: int = Query(90, ge=1, le=90),
+    db: AsyncSession = Depends(get_db),
+):
+    """90-day per-day uptime timeline for a public service (no auth, is_public only)."""
+    svc = await db.scalar(
+        select(Service).where(
+            Service.id == service_id,
+            Service.is_public == True,  # noqa: E712
+        )
+    )
+    if not svc:
+        raise HTTPException(404, detail={"error": "not_found", "message": "Service not found."})
+    rows = (
+        await db.execute(
+            text(
+                "SELECT time_bucket('1 day', time) AS day, "
+                "COUNT(*) AS total, "
+                "COUNT(*) FILTER (WHERE status = 'up') AS up "
+                "FROM service_checks "
+                f"WHERE service_id = :sid AND time >= now() - INTERVAL '{days} days' "
+                "GROUP BY day ORDER BY day ASC"
+            ),
+            {"sid": service_id},
+        )
+    ).all()
+    out = []
+    for r in rows:
+        total = r.total or 0
+        up = r.up or 0
+        uptime_pct = round(up / total * 100, 2) if total else 100.0
+        out.append(
+            {
+                "date": r.day.date().isoformat(),
+                "uptime_pct": uptime_pct,
+                "down_minutes": total - up,
+            }
+        )
+    return out
+
+
 @router.get("/api/public/incidents")
 async def public_incidents(db: AsyncSession = Depends(get_db)):
     rows = (

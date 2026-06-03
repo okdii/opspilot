@@ -21,6 +21,12 @@ const routes: RouteRecordRaw[] = [
     meta: { layout: 'auth', public: true, allowAuthenticated: true },
   },
   {
+    path: '/status',
+    name: 'status',
+    component: () => import('@/views/status/StatusView.vue'),
+    meta: { layout: 'auth', public: true, allowAuthenticated: true },
+  },
+  {
     path: '/',
     component: () => import('@/components/common/AppLayout.vue'),
     children: [
@@ -74,8 +80,12 @@ router.beforeEach(async (to) => {
 
   if (!auth.initialized) {
     await auth.checkSetupStatus()
-    if (!auth.setupRequired) await auth.fetchMe()
-    auth.initialized = true
+    // Public routes (e.g. /status) must render logged-out. Skip the /api/auth/me
+    // probe for them so the global 401 interceptor never redirects to /login.
+    if (auth.setupRequired || !to.meta.public) {
+      if (!auth.setupRequired) await auth.fetchMe()
+      auth.initialized = true // leave false for public-only nav so a later protected nav probes
+    }
   }
 
   // Setup required → force /setup

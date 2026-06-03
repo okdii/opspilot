@@ -250,12 +250,12 @@ Last updated: 2026-06-02
 *Unauthenticated /status route*
 
 ### Status Page (spec 06 §public)
-- ⬜ GET /status — unauthenticated, is_public services only
-- ⬜ 90-day uptime timeline per service
-- ⬜ Active incident banner
-- ⬜ Past incident list
-- ⬜ is_public toggle per service (Admin)
-- ⬜ **Smoke test: toggle is_public, open /status in incognito, verify no auth required**
+- ✅ GET /status — unauthenticated, is_public services only
+- ✅ 90-day uptime timeline per service
+- ✅ Active incident banner
+- ✅ Past incident list
+- ✅ is_public toggle per service (Admin)
+- ✅ **Smoke test: toggle is_public, open /status in incognito, verify no auth required**
 
 ---
 
@@ -306,7 +306,7 @@ Last updated: 2026-06-02
 | Phase 6 — Database Monitoring | ✅ Complete | 14 / 14 |
 | Phase 7 — Cron & Backup | ✅ Complete | 14 / 14 |
 | Phase 8 — Alerting Engine | ✅ Complete | 21 / 21 |
-| Phase 9 — Status Page | ⬜ Pending | 0 / 5 |
+| Phase 9 — Status Page | ✅ Complete | 5 / 5 |
 | Phase 10 — Settings | ✅ Complete | 16 / 16 |
 | Phase 11 — Deployment | ⬜ Pending | 0 / 6 |
 | **Total** | 🔄 In Progress | **86 / 191** |

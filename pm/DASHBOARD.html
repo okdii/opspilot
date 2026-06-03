@@ -70,18 +70,18 @@
 <div class="overall">
   <div>
     <div class="label">Overall Progress</div>
-    <div class="bar-wrap"><div class="bar" style="width:93%"></div></div>
-    <div class="sub">182 of 195 tasks completed</div>
+    <div class="bar-wrap"><div class="bar" style="width:96%"></div></div>
+    <div class="sub">188 of 195 tasks completed</div>
   </div>
   <div>
-    <div class="pct">93<span>%</span></div>
-    <div class="counts">182 done &middot; 0 in progress &middot; 13 pending</div>
+    <div class="pct">96<span>%</span></div>
+    <div class="counts">188 done &middot; 0 in progress &middot; 7 pending</div>
   </div>
 </div>
 <div class="stats">
-  <div class="stat"><div class="label">Phases Done</div><div class="val g">9</div><div class="sub">of 11 phases</div></div>
-  <div class="stat"><div class="label">Tasks Complete</div><div class="val a">182</div><div class="sub">of 195 total</div></div>
-  <div class="stat"><div class="label">Smoke Tests Passed</div><div class="val b">14</div><div class="sub">of 16 gates</div></div>
+  <div class="stat"><div class="label">Phases Done</div><div class="val g">10</div><div class="sub">of 11 phases</div></div>
+  <div class="stat"><div class="label">Tasks Complete</div><div class="val a">188</div><div class="sub">of 195 total</div></div>
+  <div class="stat"><div class="label">Smoke Tests Passed</div><div class="val b">15</div><div class="sub">of 16 gates</div></div>
   <div class="stat"><div class="label">In Progress</div><div class="val am">0</div><div class="sub">tasks active</div></div>
 </div>
 <div class="sec-title">Phases</div>
@@ -274,12 +274,12 @@ const phases = [
     { text: "Smoke test: spike CPU, see alert fire + email, let it clear x2, see resolve email *(verified live: scheduled metric evaluator fired a cpu alert → GET /alerts → ack→acknowledged; auto-resolve-at-2 verified in Slice B; email send best-effort wired (live delivery pending SMTP recipient config))*", status: "done", smoke: true },
   ]},
   { id: 9, title: "Public Status Page", subtitle: "Unauthenticated /status route", tasks: [
-    { text: "GET /status — unauthenticated, is_public services only", status: "pending", smoke: false },
-    { text: "90-day uptime timeline per service", status: "pending", smoke: false },
-    { text: "Active incident banner", status: "pending", smoke: false },
-    { text: "Past incident list", status: "pending", smoke: false },
-    { text: "is_public toggle per service (Admin)", status: "pending", smoke: false },
-    { text: "Smoke test: toggle is_public, open /status in incognito, verify no auth required", status: "pending", smoke: true },
+    { text: "GET /status — unauthenticated, is_public services only", status: "done", smoke: false },
+    { text: "90-day uptime timeline per service", status: "done", smoke: false },
+    { text: "Active incident banner", status: "done", smoke: false },
+    { text: "Past incident list", status: "done", smoke: false },
+    { text: "is_public toggle per service (Admin)", status: "done", smoke: false },
+    { text: "Smoke test: toggle is_public, open /status in incognito, verify no auth required", status: "done", smoke: true },
   ]},
   { id: 10, title: "Settings", subtitle: "SMTP, identity, retention, sessions, agent password rotation", tasks: [
     { text: "GET/PATCH /api/settings", status: "done", smoke: false },
