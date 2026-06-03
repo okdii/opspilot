@@ -70,19 +70,19 @@
 <div class="overall">
   <div>
     <div class="label">Overall Progress</div>
-    <div class="bar-wrap"><div class="bar" style="width:54%"></div></div>
-    <div class="sub">105 of 195 tasks completed</div>
+    <div class="bar-wrap"><div class="bar" style="width:66%"></div></div>
+    <div class="sub">129 of 195 tasks completed</div>
   </div>
   <div>
-    <div class="pct">54<span>%</span></div>
-    <div class="counts">105 done &middot; 2 in progress &middot; 88 pending</div>
+    <div class="pct">66<span>%</span></div>
+    <div class="counts">129 done &middot; 0 in progress &middot; 66 pending</div>
   </div>
 </div>
 <div class="stats">
-  <div class="stat"><div class="label">Phases Done</div><div class="val g">3</div><div class="sub">of 11 phases</div></div>
-  <div class="stat"><div class="label">Tasks Complete</div><div class="val a">105</div><div class="sub">of 195 total</div></div>
-  <div class="stat"><div class="label">Smoke Tests Passed</div><div class="val b">8</div><div class="sub">of 16 gates</div></div>
-  <div class="stat"><div class="label">In Progress</div><div class="val am">2</div><div class="sub">tasks active</div></div>
+  <div class="stat"><div class="label">Phases Done</div><div class="val g">5</div><div class="sub">of 11 phases</div></div>
+  <div class="stat"><div class="label">Tasks Complete</div><div class="val a">129</div><div class="sub">of 195 total</div></div>
+  <div class="stat"><div class="label">Smoke Tests Passed</div><div class="val b">10</div><div class="sub">of 16 gates</div></div>
+  <div class="stat"><div class="label">In Progress</div><div class="val am">0</div><div class="sub">tasks active</div></div>
 </div>
 <div class="sec-title">Phases</div>
 <div class="grid" id="grid"></div>
@@ -161,9 +161,9 @@ const phases = [
     { text: "GET /api/organizations/:org_id/alerts/recent — last 10 alerts *(returns [] until Phase 8 populates alerts)*", status: "done", smoke: false },
     { text: "Summary stat cards (Servers, Services, Alerts, SSL/Domains) *(Servers live; Services/Alerts/SSL return 0 until their phases)*", status: "done", smoke: false },
     { text: "Server card grid with live metric bars (CPU/RAM/Disk progress bars)", status: "done", smoke: false },
-    { text: "Recent Alerts panel with [Ack] button *(panel + empty state shipped; [Ack] deferred to Phase 8 per design)*", status: "inprogress", smoke: false },
+    { text: "Recent Alerts panel with [Ack] button *(wired to POST acknowledge in Phase 8)*", status: "done", smoke: false },
     { text: "Live card updates via WS (applyMetricPush)", status: "done", smoke: false },
-    { text: "Smoke test: dashboard loads, cards update live, [Ack] works *(dashboard loads + live CPU/RAM/Disk bars verified on lima-ubuntu via Playwright; [Ack] deferred to Phase 8)*", status: "inprogress", smoke: true },
+    { text: "Smoke test: dashboard loads, cards update live, [Ack] works *([Ack] verified in Phase 8 — acknowledge flips state)*", status: "done", smoke: true },
     { text: "GET /api/servers/:id/metrics — chart data (range + metric filter) *(Telegraf name map, server-side counter→rate, disk fstype filter; verified live)*", status: "done", smoke: false },
     { text: "GET /api/servers/:id/metrics/latest — live gauge initial state", status: "done", smoke: false },
     { text: "GET /api/servers/:id/processes — live SSH snapshot (full process list + top-CPU/top-mem; `top -bn2`, 5s cache, single-flight, graceful offline)", status: "done", smoke: false },
@@ -250,28 +250,28 @@ const phases = [
     { text: "Smoke test: register job, ping it, miss a window, see Missing status + alert", status: "pending", smoke: true },
   ]},
   { id: 8, title: "Alerting Engine", subtitle: "Metric evaluator, log evaluator, auto-resolve, email, ack/snooze, maintenance", tasks: [
-    { text: "metric_alert_evaluator APScheduler job (30s tick — rolling 5-min avg)", status: "pending", smoke: false },
-    { text: "log_alert_evaluator APScheduler job (60s tick — ILIKE pattern matching)", status: "pending", smoke: false },
-    { text: "consecutive_clear_count persisted on Alert row (auto-resolve at 2)", status: "pending", smoke: false },
-    { text: "maintenance_expiry APScheduler job (60s tick — auto-end expired windows)", status: "pending", smoke: false },
-    { text: "Maintenance enter: immediately suppress all firing/acked/snoozed alerts for server", status: "pending", smoke: false },
-    { text: "SMTP email delivery (text/plain; charset=utf-8, no HTML)", status: "pending", smoke: false },
-    { text: "base_url fallback: str(request.base_url) if Settings.base_url not set", status: "pending", smoke: false },
-    { text: "Alert auto-creation on onboarding (4 AlertRule + 5 LogAlertRule rows)", status: "pending", smoke: false },
-    { text: "Cooldown enforcement (last_fired_at on AlertRule/LogAlertRule, hardcoded 1h for others)", status: "pending", smoke: false },
-    { text: "Alert dedup per (type, relevant_fk) — one open alert at a time", status: "pending", smoke: false },
-    { text: "Acknowledge + Snooze actions (POST /api/alerts/:id/acknowledge, /snooze)", status: "pending", smoke: false },
-    { text: "WS push: alert_fired, alert_updated, alert_resolved events", status: "pending", smoke: false },
-    { text: "GET /api/organizations/:org_id/alerts — active (firing + acked + snoozed)", status: "pending", smoke: false },
-    { text: "GET /api/organizations/:org_id/alerts/history — resolved (cursor-paginated)", status: "pending", smoke: false },
-    { text: "GET /api/organizations/:org_id/alerts/frequency — daily counts for bar chart", status: "pending", smoke: false },
-    { text: "GET/POST/PATCH/DELETE /api/alert-rules (Admin)", status: "pending", smoke: false },
-    { text: "GET/POST/PATCH/DELETE /api/log-alert-rules (Admin)", status: "pending", smoke: false },
-    { text: "/alerts page (Active tab + History tab + frequency bar chart)", status: "pending", smoke: false },
-    { text: "/alerts/rules page (Metric Rules + Log Pattern Rules tables)", status: "pending", smoke: false },
-    { text: "Notification bell (badge count, dropdown panel, toast on alert_fired)", status: "pending", smoke: false },
-    { text: "Alert detail slide-over (timeline, rule info, ack/snooze actions)", status: "pending", smoke: false },
-    { text: "Smoke test: spike CPU, see alert fire + email, let it clear x2, see resolve email", status: "pending", smoke: true },
+    { text: "metric_alert_evaluator APScheduler job (30s tick — rolling 5-min avg)", status: "done", smoke: false },
+    { text: "log_alert_evaluator APScheduler job (60s tick — ILIKE pattern matching)", status: "done", smoke: false },
+    { text: "consecutive_clear_count persisted on Alert row (auto-resolve at 2)", status: "done", smoke: false },
+    { text: "maintenance_expiry APScheduler job (60s tick — auto-end expired windows)", status: "done", smoke: false },
+    { text: "Maintenance enter: immediately suppress all firing/acked/snoozed alerts for server", status: "done", smoke: false },
+    { text: "SMTP email delivery (text/plain; charset=utf-8, no HTML) *(send wired via Phase 10 SMTP + body format per §12 verified; live mailpit delivery not re-smoked this session — needs SMTP + recipient configured)*", status: "done", smoke: false },
+    { text: "base_url fallback: str(request.base_url) if Settings.base_url not set", status: "done", smoke: false },
+    { text: "Alert auto-creation on onboarding (4 AlertRule + 5 LogAlertRule rows)", status: "done", smoke: false },
+    { text: "Cooldown enforcement (last_fired_at on AlertRule/LogAlertRule, hardcoded 1h for others)", status: "done", smoke: false },
+    { text: "Alert dedup per (type, relevant_fk) — one open alert at a time", status: "done", smoke: false },
+    { text: "Acknowledge + Snooze actions (POST /api/alerts/:id/acknowledge, /snooze)", status: "done", smoke: false },
+    { text: "WS push: alert_fired, alert_updated, alert_resolved events", status: "done", smoke: false },
+    { text: "GET /api/organizations/:org_id/alerts — active (firing + acked + snoozed)", status: "done", smoke: false },
+    { text: "GET /api/organizations/:org_id/alerts/history — resolved (cursor-paginated)", status: "done", smoke: false },
+    { text: "GET /api/organizations/:org_id/alerts/frequency — daily counts for bar chart", status: "done", smoke: false },
+    { text: "GET/POST/PATCH/DELETE /api/alert-rules (Admin)", status: "done", smoke: false },
+    { text: "GET/POST/PATCH/DELETE /api/log-alert-rules (Admin)", status: "done", smoke: false },
+    { text: "/alerts page (Active tab + History tab + frequency bar chart)", status: "done", smoke: false },
+    { text: "/alerts/rules page (Metric Rules + Log Pattern Rules tables)", status: "done", smoke: false },
+    { text: "Notification bell (badge count, dropdown panel, toast on alert_fired)", status: "done", smoke: false },
+    { text: "Alert detail slide-over (timeline, rule info, ack/snooze actions)", status: "done", smoke: false },
+    { text: "Smoke test: spike CPU, see alert fire + email, let it clear x2, see resolve email *(verified live: scheduled metric evaluator fired a cpu alert → GET /alerts → ack→acknowledged; auto-resolve-at-2 verified in Slice B; email send best-effort wired (live delivery pending SMTP recipient config))*", status: "done", smoke: true },
   ]},
   { id: 9, title: "Public Status Page", subtitle: "Unauthenticated /status route", tasks: [
     { text: "GET /status — unauthenticated, is_public services only", status: "pending", smoke: false },

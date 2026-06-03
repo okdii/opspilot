@@ -255,3 +255,132 @@ export interface LogFilters {
   from: string | null
   to: string | null
 }
+
+// --- Alerting (Phase 8, spec 10) -------------------------------------------
+
+export type AlertSeverity = 'critical' | 'warning'
+export type AlertState = 'firing' | 'acknowledged' | 'snoozed' | 'resolved' | 'suppressed'
+
+export interface Alert {
+  id: string
+  type: string
+  severity: AlertSeverity | string
+  message: string
+  state: AlertState | string
+  server_id: string | null
+  service_id: string | null
+  domain_id: string | null
+  ssl_cert_id: string | null
+  cron_job_id: string | null
+  backup_job_id: string | null
+  server_name: string | null
+  service_name: string | null
+  domain_name: string | null
+  sent_at: string | null
+  acknowledged_at: string | null
+  snoozed_until: string | null
+  resolved_at: string | null
+  consecutive_clear_count?: number
+}
+
+export interface AlertHistoryPage {
+  items: Alert[]
+  next_cursor: string | null
+  has_more: boolean
+}
+
+export interface AlertHistoryFilters {
+  server_id?: string
+  type?: string
+  start?: string
+  end?: string
+  search?: string
+}
+
+export interface FrequencyBucket {
+  date: string
+  critical: number
+  warning: number
+}
+
+export interface SnoozePayload {
+  minutes?: number
+  until?: string
+}
+
+export interface MetricRule {
+  id: string
+  server_id: string
+  server_name: string | null
+  metric: string
+  threshold: number
+  rolling_window_min: number
+  cooldown_min: number
+  enabled: boolean
+  last_fired_at: string | null
+  is_auto: boolean
+}
+
+export interface LogRule {
+  id: string
+  server_id: string
+  server_name: string | null
+  source: string
+  pattern: string
+  severity: AlertSeverity | string
+  threshold: number
+  window_sec: number
+  cooldown_min: number
+  enabled: boolean
+  last_fired_at: string | null
+}
+
+export interface AlertRules {
+  metric_rules: MetricRule[]
+  log_rules: LogRule[]
+}
+
+export interface MetricRulePayload {
+  server_id?: string
+  metric?: string
+  threshold?: number
+  rolling_window_min?: number
+  cooldown_min?: number
+  enabled?: boolean
+}
+
+export interface LogRulePayload {
+  server_id?: string
+  source?: string
+  pattern?: string
+  severity?: string
+  threshold?: number
+  window_sec?: number
+  cooldown_min?: number
+  enabled?: boolean
+}
+
+// WS event payloads (flat {event, data} from broadcast_org)
+export interface AlertFiredData {
+  id: string
+  type: string
+  severity: string
+  message: string
+  server_id: string | null
+  server_name: string | null
+  sent_at: string | null
+  state: string
+}
+
+export interface AlertResolvedData {
+  id: string
+  state: string
+  resolved_at: string | null
+}
+
+export interface AlertUpdatedData {
+  id: string
+  state: string
+  acknowledged_at: string | null
+  snoozed_until: string | null
+}

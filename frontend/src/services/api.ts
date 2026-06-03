@@ -12,6 +12,16 @@ import type {
   StartMaintenancePayload,
   LogsResponse,
   VolumeResponse,
+  Alert,
+  AlertHistoryPage,
+  AlertHistoryFilters,
+  FrequencyBucket,
+  SnoozePayload,
+  AlertRules,
+  MetricRule,
+  LogRule,
+  MetricRulePayload,
+  LogRulePayload,
 } from '@/types'
 
 export const api = axios.create({
@@ -116,4 +126,76 @@ export async function getLogs(params: Record<string, string>): Promise<LogsRespo
 export async function getLogVolume(params: Record<string, string>): Promise<VolumeResponse> {
   const { data } = await api.get<VolumeResponse>('/api/logs/volume', { params })
   return data
+}
+
+// --- Alerting (Phase 8, spec 10) -------------------------------------------
+
+export async function getActiveAlerts(orgId: string): Promise<Alert[]> {
+  const { data } = await api.get<Alert[]>(`/api/organizations/${orgId}/alerts`)
+  return data
+}
+
+export async function getAlertHistory(
+  orgId: string,
+  filters: AlertHistoryFilters = {},
+  cursor?: string | null,
+  limit = 50,
+): Promise<AlertHistoryPage> {
+  const params: Record<string, string> = { limit: String(limit) }
+  if (cursor) params.cursor = cursor
+  if (filters.server_id) params.server_id = filters.server_id
+  if (filters.type) params.type = filters.type
+  if (filters.start) params.start = filters.start
+  if (filters.end) params.end = filters.end
+  if (filters.search) params.search = filters.search
+  const { data } = await api.get<AlertHistoryPage>(`/api/organizations/${orgId}/alerts/history`, { params })
+  return data
+}
+
+export async function getAlertFrequency(orgId: string): Promise<FrequencyBucket[]> {
+  const { data } = await api.get<FrequencyBucket[]>(`/api/organizations/${orgId}/alerts/frequency`)
+  return data
+}
+
+export async function acknowledgeAlert(alertId: string): Promise<Alert> {
+  const { data } = await api.post<Alert>(`/api/alerts/${alertId}/acknowledge`)
+  return data
+}
+
+export async function snoozeAlert(alertId: string, payload: SnoozePayload): Promise<Alert> {
+  const { data } = await api.post<Alert>(`/api/alerts/${alertId}/snooze`, payload)
+  return data
+}
+
+export async function getAlertRules(orgId: string): Promise<AlertRules> {
+  const { data } = await api.get<AlertRules>(`/api/organizations/${orgId}/alert-rules`)
+  return data
+}
+
+export async function createMetricRule(payload: MetricRulePayload): Promise<MetricRule> {
+  const { data } = await api.post<MetricRule>('/api/alert-rules', payload)
+  return data
+}
+
+export async function patchMetricRule(id: string, payload: MetricRulePayload): Promise<MetricRule> {
+  const { data } = await api.patch<MetricRule>(`/api/alert-rules/${id}`, payload)
+  return data
+}
+
+export async function deleteMetricRule(id: string): Promise<void> {
+  await api.delete(`/api/alert-rules/${id}`)
+}
+
+export async function createLogRule(payload: LogRulePayload): Promise<LogRule> {
+  const { data } = await api.post<LogRule>('/api/log-alert-rules', payload)
+  return data
+}
+
+export async function patchLogRule(id: string, payload: LogRulePayload): Promise<LogRule> {
+  const { data } = await api.patch<LogRule>(`/api/log-alert-rules/${id}`, payload)
+  return data
+}
+
+export async function deleteLogRule(id: string): Promise<void> {
+  await api.delete(`/api/log-alert-rules/${id}`)
 }

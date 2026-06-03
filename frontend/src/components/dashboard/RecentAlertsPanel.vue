@@ -1,8 +1,30 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { StatusBadge, EmptyState } from '@/components/ui'
+import { useOrgStore } from '@/stores/org'
+import { useAlertStore } from '@/stores/alerts'
+import { useNotify } from '@/composables/useNotify'
 import type { RecentAlert } from '@/types'
 
 defineProps<{ alerts: RecentAlert[] }>()
+
+const orgStore = useOrgStore()
+const alertStore = useAlertStore()
+const notify = useNotify()
+const acking = ref<string | null>(null)
+
+async function ack(a: RecentAlert) {
+  acking.value = a.id
+  try {
+    await alertStore.acknowledge(a.id)
+    a.state = 'acknowledged'
+    notify.success('Alert acknowledged')
+  } catch {
+    notify.error('Could not acknowledge alert')
+  } finally {
+    acking.value = null
+  }
+}
 
 function rel(ts: string | null): string {
   if (!ts) return ''
@@ -64,6 +86,13 @@ const BELL_SLASH_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="40" heigh
         </span>
 
         <StatusBadge :status="a.state" kind="alert" />
+
+        <button
+          v-if="orgStore.canActOnAlerts && a.state === 'firing'"
+          class="ap-ack"
+          :disabled="acking === a.id"
+          @click="ack(a)"
+        >Ack</button>
 
         <time
           class="ap-time"
@@ -224,4 +253,19 @@ const BELL_SLASH_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="40" heigh
   white-space: nowrap;
   flex-shrink: 0;
 }
+
+.ap-ack {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.ap-ack:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-2); }
+.ap-ack:disabled { opacity: 0.5; cursor: default; }
 </style>

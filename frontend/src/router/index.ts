@@ -29,6 +29,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'servers', name: 'servers', component: () => import('@/views/servers/ServersView.vue') },
       { path: 'servers/:id', name: 'server-detail', component: () => import('@/views/servers/ServerDetail.vue') },
       { path: 'logs', name: 'logs', component: () => import('@/views/logs/LogsView.vue') },
+      { path: 'alerts', name: 'alerts', component: () => import('@/views/alerts/AlertsView.vue') },
+      { path: 'alerts/rules', name: 'alert-rules', component: () => import('@/views/alerts/AlertRulesView.vue'), meta: { adminOnly: true } },
       { path: 'profile', name: 'profile', component: () => import('@/views/auth/ProfileView.vue') },
       {
         path: 'settings',

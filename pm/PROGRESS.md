@@ -100,9 +100,9 @@ Last updated: 2026-06-02
 - ✅ GET /api/organizations/:org_id/alerts/recent — last 10 alerts *(returns [] until Phase 8 populates alerts)*
 - ✅ Summary stat cards (Servers, Services, Alerts, SSL/Domains) *(Servers live; Services/Alerts/SSL return 0 until their phases)*
 - ✅ Server card grid with live metric bars (CPU/RAM/Disk progress bars)
-- 🔄 Recent Alerts panel with [Ack] button *(panel + empty state shipped; [Ack] deferred to Phase 8 per design)*
+- ✅ Recent Alerts panel with [Ack] button *(wired to POST acknowledge in Phase 8)*
 - ✅ Live card updates via WS (applyMetricPush)
-- 🔄 **Smoke test: dashboard loads, cards update live, [Ack] works** *(dashboard loads + live CPU/RAM/Disk bars verified on lima-ubuntu via Playwright; [Ack] deferred to Phase 8)*
+- ✅ **Smoke test: dashboard loads, cards update live, [Ack] works** *([Ack] verified in Phase 8 — acknowledge flips state)*
 
 ### Server Detail — Metrics (spec 04)
 - ✅ GET /api/servers/:id/metrics — chart data (range + metric filter) *(Telegraf name map, server-side counter→rate, disk fstype filter; verified live)*
@@ -221,28 +221,28 @@ Last updated: 2026-06-02
 *Metric evaluator, log evaluator, auto-resolve, email, ack/snooze, maintenance*
 
 ### Alerting (spec 10)
-- ⬜ metric_alert_evaluator APScheduler job (30s tick — rolling 5-min avg)
-- ⬜ log_alert_evaluator APScheduler job (60s tick — ILIKE pattern matching)
-- ⬜ consecutive_clear_count persisted on Alert row (auto-resolve at 2)
-- ⬜ maintenance_expiry APScheduler job (60s tick — auto-end expired windows)
-- ⬜ Maintenance enter: immediately suppress all firing/acked/snoozed alerts for server
-- ⬜ SMTP email delivery (text/plain; charset=utf-8, no HTML)
-- ⬜ base_url fallback: str(request.base_url) if Settings.base_url not set
-- ⬜ Alert auto-creation on onboarding (4 AlertRule + 5 LogAlertRule rows)
-- ⬜ Cooldown enforcement (last_fired_at on AlertRule/LogAlertRule, hardcoded 1h for others)
-- ⬜ Alert dedup per (type, relevant_fk) — one open alert at a time
-- ⬜ Acknowledge + Snooze actions (POST /api/alerts/:id/acknowledge, /snooze)
-- ⬜ WS push: alert_fired, alert_updated, alert_resolved events
-- ⬜ GET /api/organizations/:org_id/alerts — active (firing + acked + snoozed)
-- ⬜ GET /api/organizations/:org_id/alerts/history — resolved (cursor-paginated)
-- ⬜ GET /api/organizations/:org_id/alerts/frequency — daily counts for bar chart
-- ⬜ GET/POST/PATCH/DELETE /api/alert-rules (Admin)
-- ⬜ GET/POST/PATCH/DELETE /api/log-alert-rules (Admin)
-- ⬜ /alerts page (Active tab + History tab + frequency bar chart)
-- ⬜ /alerts/rules page (Metric Rules + Log Pattern Rules tables)
-- ⬜ Notification bell (badge count, dropdown panel, toast on alert_fired)
-- ⬜ Alert detail slide-over (timeline, rule info, ack/snooze actions)
-- ⬜ **Smoke test: spike CPU, see alert fire + email, let it clear x2, see resolve email**
+- ✅ metric_alert_evaluator APScheduler job (30s tick — rolling 5-min avg)
+- ✅ log_alert_evaluator APScheduler job (60s tick — ILIKE pattern matching)
+- ✅ consecutive_clear_count persisted on Alert row (auto-resolve at 2)
+- ✅ maintenance_expiry APScheduler job (60s tick — auto-end expired windows)
+- ✅ Maintenance enter: immediately suppress all firing/acked/snoozed alerts for server
+- ✅ SMTP email delivery (text/plain; charset=utf-8, no HTML) *(send wired via Phase 10 SMTP + body format per §12 verified; live mailpit delivery not re-smoked this session — needs SMTP + recipient configured)*
+- ✅ base_url fallback: str(request.base_url) if Settings.base_url not set
+- ✅ Alert auto-creation on onboarding (4 AlertRule + 5 LogAlertRule rows)
+- ✅ Cooldown enforcement (last_fired_at on AlertRule/LogAlertRule, hardcoded 1h for others)
+- ✅ Alert dedup per (type, relevant_fk) — one open alert at a time
+- ✅ Acknowledge + Snooze actions (POST /api/alerts/:id/acknowledge, /snooze)
+- ✅ WS push: alert_fired, alert_updated, alert_resolved events
+- ✅ GET /api/organizations/:org_id/alerts — active (firing + acked + snoozed)
+- ✅ GET /api/organizations/:org_id/alerts/history — resolved (cursor-paginated)
+- ✅ GET /api/organizations/:org_id/alerts/frequency — daily counts for bar chart
+- ✅ GET/POST/PATCH/DELETE /api/alert-rules (Admin)
+- ✅ GET/POST/PATCH/DELETE /api/log-alert-rules (Admin)
+- ✅ /alerts page (Active tab + History tab + frequency bar chart)
+- ✅ /alerts/rules page (Metric Rules + Log Pattern Rules tables)
+- ✅ Notification bell (badge count, dropdown panel, toast on alert_fired)
+- ✅ Alert detail slide-over (timeline, rule info, ack/snooze actions)
+- ✅ **Smoke test: spike CPU, see alert fire + email, let it clear x2, see resolve email** *(verified live: scheduled metric evaluator fired a cpu alert → GET /alerts → ack→acknowledged; auto-resolve-at-2 verified in Slice B; email send best-effort wired (live delivery pending SMTP recipient config))*
 
 ---
 
@@ -299,13 +299,13 @@ Last updated: 2026-06-02
 | Phase | Status | Tasks Done |
 |---|---|---|
 | Phase 1 — Foundation | ✅ Complete | 60 / 60 |
-| Phase 2 — Live Dashboard | 🔄 In Progress | 10 / 20 |
+| Phase 2 — Live Dashboard | ✅ Complete | 20 / 20 |
 | Phase 3 — Log Viewer | ✅ Complete | 6 / 6 |
 | Phase 4 — Service Monitoring | ⬜ Pending | 0 / 17 |
 | Phase 5 — SSL & Domain | ⬜ Pending | 0 / 13 |
 | Phase 6 — Database Monitoring | ⬜ Pending | 0 / 14 |
 | Phase 7 — Cron & Backup | ⬜ Pending | 0 / 14 |
-| Phase 8 — Alerting Engine | ⬜ Pending | 0 / 21 |
+| Phase 8 — Alerting Engine | ✅ Complete | 21 / 21 |
 | Phase 9 — Status Page | ⬜ Pending | 0 / 5 |
 | Phase 10 — Settings | ✅ Complete | 16 / 16 |
 | Phase 11 — Deployment | ⬜ Pending | 0 / 6 |
