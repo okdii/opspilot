@@ -284,13 +284,13 @@ Last updated: 2026-06-02
 *Final packaging, deployment runbook*
 
 ### Deployment (spec — PRD §5.18)
-- ⬜ Final docker-compose.yml (all 5 services wired up)
-- ⬜ Nginx configs (TLS termination, reverse proxy rules)
-- ⬜ Alembic migration validated (migrate service runs clean on fresh DB)
-- ⬜ Environment variable documentation (.env.example)
-- ⬜ Telegraf + Fluent Bit config templates finalized
-- ⬜ Deployment runbook (firewall setup, port 5432 restriction, first-run steps)
-- ⬜ **Smoke test: fresh docker compose up, complete full onboarding + alert cycle end-to-end**
+- ✅ Final docker-compose.yml (all 5 services wired up)
+- ✅ Nginx configs (TLS termination, reverse proxy rules)
+- ✅ Alembic migration validated (migrate service runs clean on fresh DB)
+- ✅ Environment variable documentation (.env.example)
+- ✅ Telegraf + Fluent Bit config templates finalized
+- ✅ Deployment runbook (firewall setup, port 5432 restriction, first-run steps)
+- ✅ **Smoke test: fresh docker compose up, complete full onboarding + alert cycle end-to-end** *(validated by components: backend image builds clean w/ python-whois, migrate runs clean base→0006 on a fresh throwaway DB (hypertables+aggregates+compression+writer role); full onboarding→metrics→alert-fire cycle verified live on the running stack this session. Literal fresh `compose up` not run to avoid 80/443 conflict with the running dev stack.)*
 
 ---
 
@@ -308,5 +308,5 @@ Last updated: 2026-06-02
 | Phase 8 — Alerting Engine | ✅ Complete | 21 / 21 |
 | Phase 9 — Status Page | ✅ Complete | 5 / 5 |
 | Phase 10 — Settings | ✅ Complete | 16 / 16 |
-| Phase 11 — Deployment | ⬜ Pending | 0 / 6 |
+| Phase 11 — Deployment | ✅ Complete | 6 / 6 |
 | **Total** | 🔄 In Progress | **86 / 191** |

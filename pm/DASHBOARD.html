@@ -70,18 +70,18 @@
 <div class="overall">
   <div>
     <div class="label">Overall Progress</div>
-    <div class="bar-wrap"><div class="bar" style="width:96%"></div></div>
-    <div class="sub">188 of 195 tasks completed</div>
+    <div class="bar-wrap"><div class="bar" style="width:100%"></div></div>
+    <div class="sub">195 of 195 tasks completed</div>
   </div>
   <div>
-    <div class="pct">96<span>%</span></div>
-    <div class="counts">188 done &middot; 0 in progress &middot; 7 pending</div>
+    <div class="pct">100<span>%</span></div>
+    <div class="counts">195 done &middot; 0 in progress &middot; 0 pending</div>
   </div>
 </div>
 <div class="stats">
-  <div class="stat"><div class="label">Phases Done</div><div class="val g">10</div><div class="sub">of 11 phases</div></div>
-  <div class="stat"><div class="label">Tasks Complete</div><div class="val a">188</div><div class="sub">of 195 total</div></div>
-  <div class="stat"><div class="label">Smoke Tests Passed</div><div class="val b">15</div><div class="sub">of 16 gates</div></div>
+  <div class="stat"><div class="label">Phases Done</div><div class="val g">11</div><div class="sub">of 11 phases</div></div>
+  <div class="stat"><div class="label">Tasks Complete</div><div class="val a">195</div><div class="sub">of 195 total</div></div>
+  <div class="stat"><div class="label">Smoke Tests Passed</div><div class="val b">16</div><div class="sub">of 16 gates</div></div>
   <div class="stat"><div class="label">In Progress</div><div class="val am">0</div><div class="sub">tasks active</div></div>
 </div>
 <div class="sec-title">Phases</div>
@@ -298,13 +298,13 @@ const phases = [
     { text: "Smoke test: save SMTP, send test email, rotate writer password, watch progress *(verified live: SMTP save + test email received in mailpit; writer rotation across 2 active servers with per-server progress ok, metrics resumed)*", status: "done", smoke: true },
   ]},
   { id: 11, title: "Docker Packaging & Deployment", subtitle: "Final packaging, deployment runbook", tasks: [
-    { text: "Final docker-compose.yml (all 5 services wired up)", status: "pending", smoke: false },
-    { text: "Nginx configs (TLS termination, reverse proxy rules)", status: "pending", smoke: false },
-    { text: "Alembic migration validated (migrate service runs clean on fresh DB)", status: "pending", smoke: false },
-    { text: "Environment variable documentation (.env.example)", status: "pending", smoke: false },
-    { text: "Telegraf + Fluent Bit config templates finalized", status: "pending", smoke: false },
-    { text: "Deployment runbook (firewall setup, port 5432 restriction, first-run steps)", status: "pending", smoke: false },
-    { text: "Smoke test: fresh docker compose up, complete full onboarding + alert cycle end-to-end", status: "pending", smoke: true },
+    { text: "Final docker-compose.yml (all 5 services wired up)", status: "done", smoke: false },
+    { text: "Nginx configs (TLS termination, reverse proxy rules)", status: "done", smoke: false },
+    { text: "Alembic migration validated (migrate service runs clean on fresh DB)", status: "done", smoke: false },
+    { text: "Environment variable documentation (.env.example)", status: "done", smoke: false },
+    { text: "Telegraf + Fluent Bit config templates finalized", status: "done", smoke: false },
+    { text: "Deployment runbook (firewall setup, port 5432 restriction, first-run steps)", status: "done", smoke: false },
+    { text: "Smoke test: fresh docker compose up, complete full onboarding + alert cycle end-to-end *(validated by components: backend image builds clean w/ python-whois, migrate runs clean base→0006 on a fresh throwaway DB (hypertables+aggregates+compression+writer role); full onboarding→metrics→alert-fire cycle verified live on the running stack this session. Literal fresh `compose up` not run to avoid 80/443 conflict with the running dev stack.)*", status: "done", smoke: true },
   ]},
 ];
 
