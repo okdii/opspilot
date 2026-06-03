@@ -289,7 +289,8 @@ const deviceLabel = computed(() => (ioDevices.value.length ? selectedDevice.valu
 }
 .partition-free  { color: #22c55e; font-weight: 500; }
 .partition-total { color: var(--muted); }
-/* Hide label + value columns inside MetricBar — header row handles them */
+/* Full-width bar — hide label/value columns and collapse their grid tracks */
+.partition-bar :deep(.metric-bar) { grid-template-columns: 1fr; }
 .partition-bar :deep(.mb-label), .partition-bar :deep(.mb-value) { display: none; }
 .empty { color: var(--muted); font-size: 13px; }
 @media (max-width: 720px) {
