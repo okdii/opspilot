@@ -31,6 +31,11 @@ const routes: RouteRecordRaw[] = [
       { path: 'logs', name: 'logs', component: () => import('@/views/logs/LogsView.vue') },
       { path: 'alerts', name: 'alerts', component: () => import('@/views/alerts/AlertsView.vue') },
       { path: 'alerts/rules', name: 'alert-rules', component: () => import('@/views/alerts/AlertRulesView.vue'), meta: { adminOnly: true } },
+      { path: 'services', name: 'services', component: () => import('@/views/services/ServicesView.vue') },
+      { path: 'services/:id', name: 'service-detail', component: () => import('@/views/services/ServiceDetail.vue') },
+      { path: 'ssl-domains', name: 'ssl-domains', component: () => import('@/views/ssl-domains/SslDomainsView.vue') },
+      { path: 'databases', name: 'databases', component: () => import('@/views/databases/DatabasesView.vue') },
+      { path: 'cron-backup', name: 'cron-backup', component: () => import('@/views/cron-backup/CronBackupView.vue') },
       { path: 'profile', name: 'profile', component: () => import('@/views/auth/ProfileView.vue') },
       {
         path: 'settings',
