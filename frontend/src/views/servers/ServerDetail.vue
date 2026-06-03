@@ -10,6 +10,7 @@ import MemoryTab from '@/components/servers/tabs/MemoryTab.vue'
 import DiskTab from '@/components/servers/tabs/DiskTab.vue'
 import NetworkTab from '@/components/servers/tabs/NetworkTab.vue'
 import SystemTab from '@/components/servers/tabs/SystemTab.vue'
+import ProcessesTab from '@/components/servers/tabs/ProcessesTab.vue'
 import { getServer } from '@/services/api'
 import { useMetricsStore } from '@/stores/metrics'
 import { useOrgStore } from '@/stores/org'
@@ -33,11 +34,11 @@ const maintenanceOpen = ref(false)
 const menuOpen = ref(false)
 
 // --- Tabs ------------------------------------------------------------------
-const TABS = ['Overview', 'CPU', 'Memory', 'Disk', 'Network', 'System'] as const
+const TABS = ['Overview', 'CPU', 'Memory', 'Disk', 'Network', 'System', 'Processes'] as const
 type Tab = (typeof TABS)[number]
 const TAB_COMPONENTS = {
   Overview: OverviewTab, CPU: CpuTab, Memory: MemoryTab,
-  Disk: DiskTab, Network: NetworkTab, System: SystemTab,
+  Disk: DiskTab, Network: NetworkTab, System: SystemTab, Processes: ProcessesTab,
 }
 const activeTab = ref<Tab>('Overview')
 const RANGES: MetricRange[] = ['1h', '6h', '24h', '7d', '30d']
@@ -221,7 +222,6 @@ watch(() => orgStore.activeOrgId, (newId) => {
           class="tab" :class="{ active: activeTab === t }"
           @click="activeTab = t"
         >{{ t }}</button>
-        <button class="tab disabled" disabled title="Requires agent procstat — deferred">Processes</button>
       </div>
       <div class="ranges">
         <button

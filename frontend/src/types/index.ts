@@ -198,3 +198,8 @@ export interface StartMaintenancePayload {
   reason?: string | null
   ends_at?: string | null
 }
+
+// --- Processes (live snapshot, no history) ---------------------------------
+
+export interface ProcessRow { pid: number; user?: string; name: string; cpu_pct: number; mem_pct: number }
+export interface ProcessSnapshot { reachable: boolean; collected_at: string | null; processes: ProcessRow[]; top_cpu: ProcessRow[]; top_mem: ProcessRow[] }

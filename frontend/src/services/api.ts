@@ -6,6 +6,7 @@ import type {
   MaintenanceState,
   MetricRange,
   MetricsResponse,
+  ProcessSnapshot,
   RecentAlert,
   Server,
   StartMaintenancePayload,
@@ -96,4 +97,9 @@ export async function startMaintenance(
 
 export async function endMaintenance(serverId: string): Promise<void> {
   await api.delete(`/api/servers/${serverId}/maintenance`)
+}
+
+export async function getProcesses(serverId: string): Promise<ProcessSnapshot> {
+  const { data } = await api.get<ProcessSnapshot>(`/api/servers/${serverId}/processes`)
+  return data
 }
