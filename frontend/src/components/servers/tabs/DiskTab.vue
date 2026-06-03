@@ -181,10 +181,10 @@ const deviceLabel = computed(() => (ioDevices.value.length ? selectedDevice.valu
 
 <template>
   <div class="disk">
-    <!-- 1. Disk Space — Current (donut overview) -->
+    <!-- 1. Disk Space — Current + Partitions -->
     <section class="card">
       <h3>Disk Space — Current</h3>
-      <div v-if="donutMounts.length" class="donut-wrap">
+      <div v-if="allMounts.length" class="disk-current">
         <MetricChart
           type="donut"
           unit="%"
@@ -192,26 +192,20 @@ const deviceLabel = computed(() => (ioDevices.value.length ? selectedDevice.valu
           :labels="donutLabels"
           :height="260"
         />
-      </div>
-      <p v-else class="empty">No disk data.</p>
-    </section>
-
-    <!-- 2. Disk Partitions — full list -->
-    <section class="card">
-      <h3>Disk Partitions</h3>
-      <div v-if="allMounts.length" class="partition-list">
-        <div v-for="m in allMounts" :key="m.path" class="partition-row">
-          <div class="partition-head">
-            <span class="partition-path">{{ m.path }}</span>
-            <span class="partition-pct" :class="m.pct >= 85 ? 'pct-red' : m.pct >= 70 ? 'pct-amber' : 'pct-green'">
-              {{ Math.round(m.pct) }}%
-            </span>
-          </div>
-          <MetricBar label="" :value="m.pct" class="partition-bar" />
-          <div class="partition-sub">
-            <span>{{ humanBytes(m.used) }} used</span>
-            <span class="partition-free">{{ humanBytes(m.free) }} free</span>
-            <span class="partition-total">of {{ humanBytes(m.total) }}</span>
+        <div class="partition-list">
+          <div v-for="m in allMounts" :key="m.path" class="partition-row">
+            <div class="partition-head">
+              <span class="partition-path">{{ m.path }}</span>
+              <span class="partition-pct" :class="m.pct >= 85 ? 'pct-red' : m.pct >= 70 ? 'pct-amber' : 'pct-green'">
+                {{ Math.round(m.pct) }}%
+              </span>
+            </div>
+            <MetricBar label="" :value="m.pct" class="partition-bar" />
+            <div class="partition-sub">
+              <span>{{ humanBytes(m.used) }} used</span>
+              <span class="partition-free">{{ humanBytes(m.free) }} free</span>
+              <span class="partition-total">of {{ humanBytes(m.total) }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -276,9 +270,9 @@ const deviceLabel = computed(() => (ioDevices.value.length ? selectedDevice.valu
   padding: 4px 10px;
   font-size: 12px;
 }
-.donut-wrap { display: flex; justify-content: center; }
+.disk-current { display: grid; grid-template-columns: 280px 1fr; gap: 24px; align-items: start; }
 /* ── Disk Partitions list ─────────────────────────────────────────── */
-.partition-list { display: flex; flex-direction: column; gap: 14px; }
+.partition-list { display: flex; flex-direction: column; gap: 14px; justify-content: center; }
 .partition-row { display: flex; flex-direction: column; gap: 5px; }
 .partition-head { display: flex; justify-content: space-between; align-items: baseline; }
 .partition-path { font-size: 13px; font-weight: 600; color: var(--text); font-family: monospace; }
@@ -298,4 +292,7 @@ const deviceLabel = computed(() => (ioDevices.value.length ? selectedDevice.valu
 /* Hide label + value columns inside MetricBar — header row handles them */
 .partition-bar :deep(.mb-label), .partition-bar :deep(.mb-value) { display: none; }
 .empty { color: var(--muted); font-size: 13px; }
+@media (max-width: 720px) {
+  .disk-current { grid-template-columns: 1fr; }
+}
 </style>
