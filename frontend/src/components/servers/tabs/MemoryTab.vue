@@ -91,9 +91,11 @@ const hasSwap = computed(() => (swapTotal.value ?? 0) > 0)
         <MetricChart
           type="bar"
           stacked
+          horizontal
+          unit="GB"
           :series="breakdownSeries"
           :categories="['Memory']"
-          :height="120"
+          :height="80"
         />
         <div class="legend">
           <span v-for="seg in breakdownLegend" :key="seg.label" class="legend-item">

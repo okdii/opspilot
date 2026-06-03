@@ -11,7 +11,7 @@ import type { ApexOptions, ApexAxisChartSeries, ApexNonAxisChartSeries } from 'a
  */
 
 export type MetricChartType = 'area' | 'line' | 'bar' | 'donut' | 'radialBar'
-export type MetricUnit = '%' | 'bytes/s' | 'count' | 'ms'
+export type MetricUnit = '%' | 'bytes/s' | 'count' | 'ms' | 'GB'
 
 export interface MetricThreshold {
   value: number
@@ -33,10 +33,13 @@ const props = withDefaults(
     /** Optional explicit per-series colors (overrides the brand palette).
      *  Used by callers with fixed semantic colors, e.g. log-severity stacks. */
     colors?: string[]
+    /** Render bar chart with horizontal bars (categories on y-axis, values on x-axis). */
+    horizontal?: boolean
   }>(),
   {
     height: 300,
     stacked: false,
+    horizontal: false,
   },
 )
 
@@ -78,6 +81,8 @@ function formatValue(v: number): string {
       return formatBytesPerSec(v)
     case 'ms':
       return `${v >= 10 ? Math.round(v) : v.toFixed(1)} ms`
+    case 'GB':
+      return v < 0.1 ? `${(v * 1024).toFixed(0)} MB` : `${v.toFixed(1)} GB`
     case 'count':
     default:
       return Number.isInteger(v) ? String(v) : v.toFixed(2)
@@ -170,7 +175,12 @@ const options = computed<ApexOptions>(() => {
       }
     }
     if (props.type === 'bar') {
-      base.plotOptions = { bar: { borderRadius: 3, columnWidth: '60%' } }
+      base.plotOptions = { bar: { borderRadius: 3, columnWidth: '60%', horizontal: props.horizontal } }
+      if (props.horizontal) {
+        // Swap: categories go on y-axis (left), values go on x-axis (bottom)
+        base.xaxis = { ...base.xaxis, labels: { ...base.xaxis?.labels, formatter: (v: string) => formatValue(Number(v)) } }
+        base.yaxis = { labels: { style: { colors: THEME.muted, fontSize: '11px' } } }
+      }
     }
   }
 
