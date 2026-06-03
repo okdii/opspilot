@@ -60,7 +60,7 @@ const warn = computed(() => (props.value ?? 0) > 80)
 <style scoped>
 .metric-bar {
   display: grid;
-  grid-template-columns: 40px 1fr 52px;
+  grid-template-columns: 64px 1fr 52px;
   align-items: center;
   gap: 10px;
 }
