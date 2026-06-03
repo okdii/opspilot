@@ -343,7 +343,7 @@ const summaryText = computed(() => {
             <span class="org-section-count">{{ group.servers.length }} server{{ group.servers.length !== 1 ? 's' : '' }}</span>
           </div>
           <div class="grid">
-            <div v-for="s in group.servers" :key="s.id" class="card" :class="`status-${s.status}`">
+            <div v-for="s in group.servers" :key="s.id" class="card" :class="`status-${s.status}`" @click="router.push({ name: 'server-detail', params: { id: s.id } })">
               <div class="card-hd">
                 <span v-if="s.status === 'pending' && cardOutcome(s.id) === 'failed'" class="hd-ico fail">✕</span>
                 <span v-else-if="s.status === 'pending'" class="spinner"></span>
@@ -364,7 +364,7 @@ const summaryText = computed(() => {
               <template v-if="s.status === 'pending'">
                 <div v-if="cardOutcome(s.id) === 'failed'" class="ob ob-fail">
                   <div class="ob-row"><span class="ob-label">ONBOARDING FAILED</span></div>
-                  <button class="ob-link fail" @click="openPanel(s.id)">View Error →</button>
+                  <button class="ob-link fail" @click.stop="openPanel(s.id)">View Error →</button>
                 </div>
                 <div v-else class="ob">
                   <div class="ob-row">
@@ -373,7 +373,7 @@ const summaryText = computed(() => {
                   </div>
                   <div class="ob-running">{{ onboarding.runningLabel(s.id) || 'Starting…' }}</div>
                   <div class="bar"><div class="bar-fill" :style="{ width: onboarding.progressPct(s.id) + '%' }"></div></div>
-                  <button class="ob-link" @click="openPanel(s.id)">View Progress →</button>
+                  <button class="ob-link" @click.stop="openPanel(s.id)">View Progress →</button>
                 </div>
               </template>
               <template v-else>
@@ -393,7 +393,7 @@ const summaryText = computed(() => {
     </template>
 
     <div v-else class="grid">
-      <div v-for="s in filteredServers" :key="s.id" class="card" :class="`status-${s.status}`">
+      <div v-for="s in filteredServers" :key="s.id" class="card" :class="`status-${s.status}`" @click="router.push({ name: 'server-detail', params: { id: s.id } })">
         <div class="card-hd">
           <span v-if="s.status === 'pending' && cardOutcome(s.id) === 'failed'" class="hd-ico fail">✕</span>
           <span v-else-if="s.status === 'pending'" class="spinner"></span>
@@ -416,7 +416,7 @@ const summaryText = computed(() => {
         <template v-if="s.status === 'pending'">
           <div v-if="cardOutcome(s.id) === 'failed'" class="ob ob-fail">
             <div class="ob-row"><span class="ob-label">ONBOARDING FAILED</span></div>
-            <button class="ob-link fail" @click="openPanel(s.id)">View Error →</button>
+            <button class="ob-link fail" @click.stop="openPanel(s.id)">View Error →</button>
           </div>
           <div v-else class="ob">
             <div class="ob-row">
@@ -425,7 +425,7 @@ const summaryText = computed(() => {
             </div>
             <div class="ob-running">{{ onboarding.runningLabel(s.id) || 'Starting…' }}</div>
             <div class="bar"><div class="bar-fill" :style="{ width: onboarding.progressPct(s.id) + '%' }"></div></div>
-            <button class="ob-link" @click="openPanel(s.id)">View Progress →</button>
+            <button class="ob-link" @click.stop="openPanel(s.id)">View Progress →</button>
           </div>
         </template>
 
@@ -539,7 +539,7 @@ const summaryText = computed(() => {
 .empty h2 { font-size: 18px; color: #fff; margin-bottom: 6px; }
 .empty p { color: var(--muted); margin-bottom: 20px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; transition: border-color 0.15s; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; transition: border-color 0.15s; cursor: pointer; }
 .card:hover { border-color: var(--accent); }
 .card.status-online { border-color: rgba(34,197,94,0.3); }
 .card.status-offline { border-color: rgba(239,68,68,0.3); }
