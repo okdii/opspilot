@@ -36,36 +36,46 @@ SMTP (for alert emails) is configured **after first run** in Settings → Genera
 
 ---
 
-## 3. TLS certificates
+## 3. TLS — Caddy (recommended) or standalone nginx
 
-nginx expects:
+**Recommended: Caddy as the outer reverse proxy**
+
+nginx runs HTTP-only on `127.0.0.1:8080` inside the compose stack. Caddy handles TLS
+termination and auto-renewal, then forwards to nginx.
+
+Install Caddy on the host and add to your Caddyfile:
+
+```
+ops.yourdomain.com {
+    reverse_proxy localhost:8080
+}
+```
+
+Caddy handles the HTTP→HTTPS redirect, HSTS, and Let's Encrypt certificate renewal
+automatically. No cert files to manage.
+
+**Alternative: standalone nginx with manual certs**
+
+If you prefer to let nginx terminate TLS instead, you'll need to re-add the HTTPS server
+block and cert volume mount to `nginx.conf` and `docker-compose.yml` (see git history),
+and supply:
 
 ```
 nginx/certs/fullchain.pem
 nginx/certs/privkey.pem
 ```
 
-```bash
-mkdir -p nginx/certs
-# Let's Encrypt example:
-cp /etc/letsencrypt/live/ops.example.com/fullchain.pem nginx/certs/fullchain.pem
-cp /etc/letsencrypt/live/ops.example.com/privkey.pem  nginx/certs/privkey.pem
-```
-
-nginx redirects all `:80` → `:443`, terminates TLS (TLSv1.2/1.3), and reverse-proxies
-`/api`, `/ws` (WebSocket), `/ping/` (rate-limited dead-man switch), `/status` (public
-status SPA), and `/` (frontend).
-
 ---
 
 ## 4. Firewall (important)
 
-Expose **only 80 and 443** publicly. In particular:
+Expose **only 80 and 443** publicly (Caddy owns those). All compose ports are
+loopback-only:
 
-- **Do NOT expose PostgreSQL (5432).** The compose file binds Postgres to
-  `127.0.0.1:5433` on the host (loopback only) — keep it that way; never publish it.
-- The backend (`127.0.0.1:8765`) and frontend (`127.0.0.1:8766`) host ports are
-  loopback-only too; public traffic goes through nginx.
+- `127.0.0.1:8080` — nginx (Caddy proxies here)
+- `127.0.0.1:8765` — backend (internal only)
+- `127.0.0.1:8766` — frontend (internal only)
+- `127.0.0.1:5433` — PostgreSQL — **never expose publicly**
 
 ```bash
 # ufw example
