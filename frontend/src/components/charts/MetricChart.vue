@@ -175,10 +175,22 @@ const options = computed<ApexOptions>(() => {
       }
     }
     if (props.type === 'bar') {
-      base.plotOptions = { bar: { borderRadius: 3, columnWidth: '60%', horizontal: props.horizontal } }
+      base.plotOptions = {
+        bar: {
+          borderRadius: 3,
+          horizontal: props.horizontal,
+          ...(props.horizontal ? { barHeight: '60%' } : { columnWidth: '60%' }),
+        },
+      }
       if (props.horizontal) {
-        // Swap: categories go on y-axis (left), values go on x-axis (bottom)
-        base.xaxis = { ...base.xaxis, labels: { ...base.xaxis?.labels, formatter: (v: string) => formatValue(Number(v)) } }
+        // Swap: categories on y-axis (left), values on x-axis (bottom)
+        base.xaxis = {
+          ...base.xaxis,
+          labels: {
+            style: { colors: THEME.muted, fontSize: '11px' },
+            formatter: (v: string) => formatValue(Number(v)),
+          },
+        }
         base.yaxis = { labels: { style: { colors: THEME.muted, fontSize: '11px' } } }
       }
     }

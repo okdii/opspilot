@@ -95,7 +95,7 @@ const hasSwap = computed(() => (swapTotal.value ?? 0) > 0)
           unit="GB"
           :series="breakdownSeries"
           :categories="['Memory']"
-          :height="80"
+          :height="100"
         />
         <div class="legend">
           <span v-for="seg in breakdownLegend" :key="seg.label" class="legend-item">
