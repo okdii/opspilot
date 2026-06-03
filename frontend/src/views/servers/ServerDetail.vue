@@ -11,6 +11,7 @@ import DiskTab from '@/components/servers/tabs/DiskTab.vue'
 import NetworkTab from '@/components/servers/tabs/NetworkTab.vue'
 import SystemTab from '@/components/servers/tabs/SystemTab.vue'
 import ProcessesTab from '@/components/servers/tabs/ProcessesTab.vue'
+import AgentStatusFooter from '@/components/servers/AgentStatusFooter.vue'
 import { getServer } from '@/services/api'
 import { useMetricsStore } from '@/stores/metrics'
 import { useOrgStore } from '@/stores/org'
@@ -234,6 +235,8 @@ watch(() => orgStore.activeOrgId, (newId) => {
 
     <component :is="TAB_COMPONENTS[activeTab]" :range="currentRange" />
 
+    <AgentStatusFooter />
+
     <MaintenanceSlideOver v-model="maintenanceOpen" :server-name="server.name" />
   </div>
 </template>
@@ -267,7 +270,6 @@ watch(() => orgStore.activeOrgId, (newId) => {
 .tab { background: none; border: none; color: var(--muted); font-size: 13px; padding: 10px 14px; cursor: pointer; border-bottom: 2px solid transparent; }
 .tab:hover { color: var(--text); }
 .tab.active { color: var(--accent-2); border-bottom-color: var(--accent-2); }
-.tab.disabled { color: var(--border); cursor: not-allowed; }
 .ranges { display: flex; gap: 4px; }
 .range { background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); font-size: 12px; padding: 5px 10px; border-radius: 6px; cursor: pointer; }
 .range.active { background: rgba(99,102,241,0.15); color: var(--accent-2); border-color: var(--accent); }
