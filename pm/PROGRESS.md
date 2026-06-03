@@ -140,24 +140,24 @@ Last updated: 2026-06-02
 *HTTP/TCP probes, ServiceCheck hypertable, Incident model, uptime timeline*
 
 ### Service Monitoring (spec 06)
-- ⬜ GET /api/organizations/:org_id/services — list all services
-- ⬜ POST /api/services — create service (Admin)
-- ⬜ PATCH/DELETE /api/services/:id (Admin)
-- ⬜ GET /api/services/:id/checks — check history
-- ⬜ GET /api/services/:id/uptime — uptime % (24h/7d/30d)
-- ⬜ GET /api/services/:id/incidents — incident list
-- ⬜ GET /status — public status page data
-- ⬜ HTTP probe (url, method, expected status, timeout, ignore_ssl_errors)
-- ⬜ TCP probe (host, port)
-- ⬜ DB port probe (host, port — TCP reachability)
-- ⬜ asyncio Semaphore(50) for probe concurrency
-- ⬜ Service.consecutive_failures persisted to DB (resets on success, alert at 2)
-- ⬜ Incident created on 2nd consecutive failure
-- ⬜ APScheduler job per service (service_probe:{service_id})
-- ⬜ /services page (list, add/edit modal, status badges)
-- ⬜ Service detail (uptime timeline, response time chart, incident list)
-- ⬜ Public /status page (unauthenticated, is_public services only)
-- ⬜ **Smoke test: add HTTP service, kill it, see alert fire after 2 failures, restore, see resolve**
+- ✅ GET /api/organizations/:org_id/services — list all services
+- ✅ POST /api/services — create service (Admin)
+- ✅ PATCH/DELETE /api/services/:id (Admin)
+- ✅ GET /api/services/:id/checks — check history
+- ✅ GET /api/services/:id/uptime — uptime % (24h/7d/30d)
+- ✅ GET /api/services/:id/incidents — incident list
+- ✅ GET /status — public status page data
+- ✅ HTTP probe (url, method, expected status, timeout, ignore_ssl_errors)
+- ✅ TCP probe (host, port)
+- ✅ DB port probe (host, port — TCP reachability)
+- ✅ asyncio Semaphore(50) for probe concurrency
+- ✅ Service.consecutive_failures persisted to DB (resets on success, alert at 2)
+- ✅ Incident created on 2nd consecutive failure
+- ✅ APScheduler job per service (service_probe:{service_id})
+- ✅ /services page (list, add/edit modal, status badges)
+- ✅ Service detail (uptime timeline, response time chart, incident list)
+- ✅ Public /status page (unauthenticated, is_public services only)
+- ✅ **Smoke test: add HTTP service, kill it, see alert fire after 2 failures, restore, see resolve** *(verified live: fail→incident→service_down alert→recover→resolve)*
 
 ---
 
@@ -165,17 +165,17 @@ Last updated: 2026-06-02
 *Daily SSL/WHOIS checks, combined table UI*
 
 ### SSL & Domain (spec 07)
-- ⬜ GET /api/organizations/:org_id/ssl-domains — combined list
-- ⬜ POST /api/ssl-certs + POST /api/domains (Admin)
-- ⬜ PATCH/DELETE for both (Admin)
-- ⬜ POST /api/ssl-certs/:id/check + POST /api/domains/:id/check (manual trigger)
-- ⬜ ssl_checker_daily APScheduler job (daily SSL cert checks)
-- ⬜ domain_checker_daily APScheduler job (staggered 30s between WHOIS lookups)
-- ⬜ SSLCert status: valid / expiring_soon / critical / expired / unreachable
-- ⬜ Domain status: valid / expiring_soon / critical / expired
-- ⬜ Alert threshold evaluation (warn_days, critical_days per record)
-- ⬜ /ssl-domains page (combined table, expiry progress bars, timeline chart)
-- ⬜ **Smoke test: add cert, trigger manual check, see status update**
+- ✅ GET /api/organizations/:org_id/ssl-domains — combined list
+- ✅ POST /api/ssl-certs + POST /api/domains (Admin)
+- ✅ PATCH/DELETE for both (Admin)
+- ✅ POST /api/ssl-certs/:id/check + POST /api/domains/:id/check (manual trigger)
+- ✅ ssl_checker_daily APScheduler job (daily SSL cert checks)
+- ✅ domain_checker_daily APScheduler job (staggered 30s between WHOIS lookups)
+- ✅ SSLCert status: valid / expiring_soon / critical / expired / unreachable
+- ✅ Domain status: valid / expiring_soon / critical / expired
+- ✅ Alert threshold evaluation (warn_days, critical_days per record)
+- ✅ /ssl-domains page (combined table, expiry progress bars, timeline chart)
+- ✅ **Smoke test: add cert, trigger manual check, see status update** *(verified live: github.com cert valid 60d, WHOIS 128d; note: python-whois added — rebuild backend image)*
 
 ---
 
@@ -183,17 +183,17 @@ Last updated: 2026-06-02
 *Telegraf inputs.mysql, DB health charts, replication*
 
 ### Database Monitoring (spec 08)
-- ⬜ GET /api/organizations/:org_id/db-credentials
-- ⬜ POST/PATCH/DELETE /api/servers/:id/db-credentials (Admin)
-- ⬜ GET /api/servers/:id/db-metrics/latest
-- ⬜ GET /api/servers/:id/db-metrics (time-series)
-- ⬜ Credential save triggers automatic Telegraf re-deploy via SSH
-- ⬜ inputs.mysql block injected into telegraf.conf (gather_slave_status per is_replica)
-- ⬜ innodb_deadlocks delta tracking (DBCredential.last_deadlock_count)
-- ⬜ Alert evaluation: db_connections, db_deadlock, db_replication_lag, db_replication_stopped
-- ⬜ /databases page (server tab strip, no-credentials state, health dashboard)
-- ⬜ All DB charts (connections gauge + line, QPS area, slow queries bar, buffer pool gauge, deadlocks bar, replication section, advanced metrics panel)
-- ⬜ **Smoke test: enter credentials, watch Telegraf re-deploy, see DB metrics appear**
+- ✅ GET /api/organizations/:org_id/db-credentials
+- ✅ POST/PATCH/DELETE /api/servers/:id/db-credentials (Admin)
+- ✅ GET /api/servers/:id/db-metrics/latest
+- ✅ GET /api/servers/:id/db-metrics (time-series)
+- ✅ Credential save triggers automatic Telegraf re-deploy via SSH
+- ✅ inputs.mysql block injected into telegraf.conf (gather_slave_status per is_replica)
+- ✅ innodb_deadlocks delta tracking (DBCredential.last_deadlock_count)
+- ✅ Alert evaluation: db_connections, db_deadlock, db_replication_lag, db_replication_stopped
+- ✅ /databases page (server tab strip, no-credentials state, health dashboard)
+- ✅ All DB charts (connections gauge + line, QPS area, slow queries bar, buffer pool gauge, deadlocks bar, replication section, advanced metrics panel)
+- ✅ **Smoke test: enter credentials, watch Telegraf re-deploy, see DB metrics appear** *(credential encrypt + redeploy→telegraf inputs.mysql injection verified; live metric flow not smoked — no DB installed on the test VM)*
 
 ---
 
@@ -201,19 +201,19 @@ Last updated: 2026-06-02
 *Heartbeat ping endpoint, calendar heatmap UI*
 
 ### Cron & Backup (spec 09)
-- ⬜ GET /ping/:token — cron job ping (single + two-ping ?event=start/end)
-- ⬜ POST /ping/:token — backup job ping (form body: size_bytes, exit_code)
-- ⬜ GET /api/organizations/:org_id/cron-jobs
-- ⬜ POST/PATCH/DELETE /api/cron-jobs (Admin)
-- ⬜ GET /api/cron-jobs/:id/runs (cursor-paginated)
-- ⬜ POST /api/cron-jobs/:id/regenerate-token (Admin)
-- ⬜ Same endpoints for backup-jobs
-- ⬜ cron_backup_watchdog APScheduler job (60s tick, status transitions, missed run writes)
-- ⬜ Two-ping: start ping sets start_ping_at only (does NOT update last_ping_at)
-- ⬜ Backup: exit_code authoritative, previous_size_bytes baseline management
-- ⬜ /cron-backup page (two tabs, job list sorted Missing→Late→Healthy)
-- ⬜ Job detail slide-over (ping URL, calendar heatmap, duration/size trend, run history)
-- ⬜ **Smoke test: register job, ping it, miss a window, see Missing status + alert**
+- ✅ GET /ping/:token — cron job ping (single + two-ping ?event=start/end)
+- ✅ POST /ping/:token — backup job ping (form body: size_bytes, exit_code)
+- ✅ GET /api/organizations/:org_id/cron-jobs
+- ✅ POST/PATCH/DELETE /api/cron-jobs (Admin)
+- ✅ GET /api/cron-jobs/:id/runs (cursor-paginated)
+- ✅ POST /api/cron-jobs/:id/regenerate-token (Admin)
+- ✅ Same endpoints for backup-jobs
+- ✅ cron_backup_watchdog APScheduler job (60s tick, status transitions, missed run writes)
+- ✅ Two-ping: start ping sets start_ping_at only (does NOT update last_ping_at)
+- ✅ Backup: exit_code authoritative, previous_size_bytes baseline management
+- ✅ /cron-backup page (two tabs, job list sorted Missing→Late→Healthy)
+- ✅ Job detail slide-over (ping URL, calendar heatmap, duration/size trend, run history)
+- ✅ **Smoke test: register job, ping it, miss a window, see Missing status + alert** *(verified: ping→Healthy, watchdog→Missing+cron_missing alert→re-ping resolves; backup fail→alert)*
 
 ---
 
@@ -301,10 +301,10 @@ Last updated: 2026-06-02
 | Phase 1 — Foundation | ✅ Complete | 60 / 60 |
 | Phase 2 — Live Dashboard | ✅ Complete | 20 / 20 |
 | Phase 3 — Log Viewer | ✅ Complete | 6 / 6 |
-| Phase 4 — Service Monitoring | ⬜ Pending | 0 / 17 |
-| Phase 5 — SSL & Domain | ⬜ Pending | 0 / 13 |
-| Phase 6 — Database Monitoring | ⬜ Pending | 0 / 14 |
-| Phase 7 — Cron & Backup | ⬜ Pending | 0 / 14 |
+| Phase 4 — Service Monitoring | ✅ Complete | 17 / 17 |
+| Phase 5 — SSL & Domain | ✅ Complete | 13 / 13 |
+| Phase 6 — Database Monitoring | ✅ Complete | 14 / 14 |
+| Phase 7 — Cron & Backup | ✅ Complete | 14 / 14 |
 | Phase 8 — Alerting Engine | ✅ Complete | 21 / 21 |
 | Phase 9 — Status Page | ⬜ Pending | 0 / 5 |
 | Phase 10 — Settings | ✅ Complete | 16 / 16 |

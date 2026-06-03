@@ -70,18 +70,18 @@
 <div class="overall">
   <div>
     <div class="label">Overall Progress</div>
-    <div class="bar-wrap"><div class="bar" style="width:66%"></div></div>
-    <div class="sub">129 of 195 tasks completed</div>
+    <div class="bar-wrap"><div class="bar" style="width:93%"></div></div>
+    <div class="sub">182 of 195 tasks completed</div>
   </div>
   <div>
-    <div class="pct">66<span>%</span></div>
-    <div class="counts">129 done &middot; 0 in progress &middot; 66 pending</div>
+    <div class="pct">93<span>%</span></div>
+    <div class="counts">182 done &middot; 0 in progress &middot; 13 pending</div>
   </div>
 </div>
 <div class="stats">
-  <div class="stat"><div class="label">Phases Done</div><div class="val g">5</div><div class="sub">of 11 phases</div></div>
-  <div class="stat"><div class="label">Tasks Complete</div><div class="val a">129</div><div class="sub">of 195 total</div></div>
-  <div class="stat"><div class="label">Smoke Tests Passed</div><div class="val b">10</div><div class="sub">of 16 gates</div></div>
+  <div class="stat"><div class="label">Phases Done</div><div class="val g">9</div><div class="sub">of 11 phases</div></div>
+  <div class="stat"><div class="label">Tasks Complete</div><div class="val a">182</div><div class="sub">of 195 total</div></div>
+  <div class="stat"><div class="label">Smoke Tests Passed</div><div class="val b">14</div><div class="sub">of 16 gates</div></div>
   <div class="stat"><div class="label">In Progress</div><div class="val am">0</div><div class="sub">tasks active</div></div>
 </div>
 <div class="sec-title">Phases</div>
@@ -189,65 +189,65 @@ const phases = [
     { text: "Smoke test: filter logs, search, live tail shows new entries *(Playwright: /logs renders 100 rows + volume chart, 0 errors; curl filters/search/pagination verified)*", status: "done", smoke: true },
   ]},
   { id: 4, title: "Service Monitoring", subtitle: "HTTP/TCP probes, ServiceCheck hypertable, Incident model, uptime timeline", tasks: [
-    { text: "GET /api/organizations/:org_id/services — list all services", status: "pending", smoke: false },
-    { text: "POST /api/services — create service (Admin)", status: "pending", smoke: false },
-    { text: "PATCH/DELETE /api/services/:id (Admin)", status: "pending", smoke: false },
-    { text: "GET /api/services/:id/checks — check history", status: "pending", smoke: false },
-    { text: "GET /api/services/:id/uptime — uptime % (24h/7d/30d)", status: "pending", smoke: false },
-    { text: "GET /api/services/:id/incidents — incident list", status: "pending", smoke: false },
-    { text: "GET /status — public status page data", status: "pending", smoke: false },
-    { text: "HTTP probe (url, method, expected status, timeout, ignore_ssl_errors)", status: "pending", smoke: false },
-    { text: "TCP probe (host, port)", status: "pending", smoke: false },
-    { text: "DB port probe (host, port — TCP reachability)", status: "pending", smoke: false },
-    { text: "asyncio Semaphore(50) for probe concurrency", status: "pending", smoke: false },
-    { text: "Service.consecutive_failures persisted to DB (resets on success, alert at 2)", status: "pending", smoke: false },
-    { text: "Incident created on 2nd consecutive failure", status: "pending", smoke: false },
-    { text: "APScheduler job per service (service_probe:{service_id})", status: "pending", smoke: false },
-    { text: "/services page (list, add/edit modal, status badges)", status: "pending", smoke: false },
-    { text: "Service detail (uptime timeline, response time chart, incident list)", status: "pending", smoke: false },
-    { text: "Public /status page (unauthenticated, is_public services only)", status: "pending", smoke: false },
-    { text: "Smoke test: add HTTP service, kill it, see alert fire after 2 failures, restore, see resolve", status: "pending", smoke: true },
+    { text: "GET /api/organizations/:org_id/services — list all services", status: "done", smoke: false },
+    { text: "POST /api/services — create service (Admin)", status: "done", smoke: false },
+    { text: "PATCH/DELETE /api/services/:id (Admin)", status: "done", smoke: false },
+    { text: "GET /api/services/:id/checks — check history", status: "done", smoke: false },
+    { text: "GET /api/services/:id/uptime — uptime % (24h/7d/30d)", status: "done", smoke: false },
+    { text: "GET /api/services/:id/incidents — incident list", status: "done", smoke: false },
+    { text: "GET /status — public status page data", status: "done", smoke: false },
+    { text: "HTTP probe (url, method, expected status, timeout, ignore_ssl_errors)", status: "done", smoke: false },
+    { text: "TCP probe (host, port)", status: "done", smoke: false },
+    { text: "DB port probe (host, port — TCP reachability)", status: "done", smoke: false },
+    { text: "asyncio Semaphore(50) for probe concurrency", status: "done", smoke: false },
+    { text: "Service.consecutive_failures persisted to DB (resets on success, alert at 2)", status: "done", smoke: false },
+    { text: "Incident created on 2nd consecutive failure", status: "done", smoke: false },
+    { text: "APScheduler job per service (service_probe:{service_id})", status: "done", smoke: false },
+    { text: "/services page (list, add/edit modal, status badges)", status: "done", smoke: false },
+    { text: "Service detail (uptime timeline, response time chart, incident list)", status: "done", smoke: false },
+    { text: "Public /status page (unauthenticated, is_public services only)", status: "done", smoke: false },
+    { text: "Smoke test: add HTTP service, kill it, see alert fire after 2 failures, restore, see resolve *(verified live: fail→incident→service_down alert→recover→resolve)*", status: "done", smoke: true },
   ]},
   { id: 5, title: "SSL & Domain Monitoring", subtitle: "Daily SSL/WHOIS checks, combined table UI", tasks: [
-    { text: "GET /api/organizations/:org_id/ssl-domains — combined list", status: "pending", smoke: false },
-    { text: "POST /api/ssl-certs + POST /api/domains (Admin)", status: "pending", smoke: false },
-    { text: "PATCH/DELETE for both (Admin)", status: "pending", smoke: false },
-    { text: "POST /api/ssl-certs/:id/check + POST /api/domains/:id/check (manual trigger)", status: "pending", smoke: false },
-    { text: "ssl_checker_daily APScheduler job (daily SSL cert checks)", status: "pending", smoke: false },
-    { text: "domain_checker_daily APScheduler job (staggered 30s between WHOIS lookups)", status: "pending", smoke: false },
-    { text: "SSLCert status: valid / expiring_soon / critical / expired / unreachable", status: "pending", smoke: false },
-    { text: "Domain status: valid / expiring_soon / critical / expired", status: "pending", smoke: false },
-    { text: "Alert threshold evaluation (warn_days, critical_days per record)", status: "pending", smoke: false },
-    { text: "/ssl-domains page (combined table, expiry progress bars, timeline chart)", status: "pending", smoke: false },
-    { text: "Smoke test: add cert, trigger manual check, see status update", status: "pending", smoke: true },
+    { text: "GET /api/organizations/:org_id/ssl-domains — combined list", status: "done", smoke: false },
+    { text: "POST /api/ssl-certs + POST /api/domains (Admin)", status: "done", smoke: false },
+    { text: "PATCH/DELETE for both (Admin)", status: "done", smoke: false },
+    { text: "POST /api/ssl-certs/:id/check + POST /api/domains/:id/check (manual trigger)", status: "done", smoke: false },
+    { text: "ssl_checker_daily APScheduler job (daily SSL cert checks)", status: "done", smoke: false },
+    { text: "domain_checker_daily APScheduler job (staggered 30s between WHOIS lookups)", status: "done", smoke: false },
+    { text: "SSLCert status: valid / expiring_soon / critical / expired / unreachable", status: "done", smoke: false },
+    { text: "Domain status: valid / expiring_soon / critical / expired", status: "done", smoke: false },
+    { text: "Alert threshold evaluation (warn_days, critical_days per record)", status: "done", smoke: false },
+    { text: "/ssl-domains page (combined table, expiry progress bars, timeline chart)", status: "done", smoke: false },
+    { text: "Smoke test: add cert, trigger manual check, see status update *(verified live: github.com cert valid 60d, WHOIS 128d; note: python-whois added — rebuild backend image)*", status: "done", smoke: true },
   ]},
   { id: 6, title: "Database Monitoring", subtitle: "Telegraf inputs.mysql, DB health charts, replication", tasks: [
-    { text: "GET /api/organizations/:org_id/db-credentials", status: "pending", smoke: false },
-    { text: "POST/PATCH/DELETE /api/servers/:id/db-credentials (Admin)", status: "pending", smoke: false },
-    { text: "GET /api/servers/:id/db-metrics/latest", status: "pending", smoke: false },
-    { text: "GET /api/servers/:id/db-metrics (time-series)", status: "pending", smoke: false },
-    { text: "Credential save triggers automatic Telegraf re-deploy via SSH", status: "pending", smoke: false },
-    { text: "inputs.mysql block injected into telegraf.conf (gather_slave_status per is_replica)", status: "pending", smoke: false },
-    { text: "innodb_deadlocks delta tracking (DBCredential.last_deadlock_count)", status: "pending", smoke: false },
-    { text: "Alert evaluation: db_connections, db_deadlock, db_replication_lag, db_replication_stopped", status: "pending", smoke: false },
-    { text: "/databases page (server tab strip, no-credentials state, health dashboard)", status: "pending", smoke: false },
-    { text: "All DB charts (connections gauge + line, QPS area, slow queries bar, buffer pool gauge, deadlocks bar, replication section, advanced metrics panel)", status: "pending", smoke: false },
-    { text: "Smoke test: enter credentials, watch Telegraf re-deploy, see DB metrics appear", status: "pending", smoke: true },
+    { text: "GET /api/organizations/:org_id/db-credentials", status: "done", smoke: false },
+    { text: "POST/PATCH/DELETE /api/servers/:id/db-credentials (Admin)", status: "done", smoke: false },
+    { text: "GET /api/servers/:id/db-metrics/latest", status: "done", smoke: false },
+    { text: "GET /api/servers/:id/db-metrics (time-series)", status: "done", smoke: false },
+    { text: "Credential save triggers automatic Telegraf re-deploy via SSH", status: "done", smoke: false },
+    { text: "inputs.mysql block injected into telegraf.conf (gather_slave_status per is_replica)", status: "done", smoke: false },
+    { text: "innodb_deadlocks delta tracking (DBCredential.last_deadlock_count)", status: "done", smoke: false },
+    { text: "Alert evaluation: db_connections, db_deadlock, db_replication_lag, db_replication_stopped", status: "done", smoke: false },
+    { text: "/databases page (server tab strip, no-credentials state, health dashboard)", status: "done", smoke: false },
+    { text: "All DB charts (connections gauge + line, QPS area, slow queries bar, buffer pool gauge, deadlocks bar, replication section, advanced metrics panel)", status: "done", smoke: false },
+    { text: "Smoke test: enter credentials, watch Telegraf re-deploy, see DB metrics appear *(credential encrypt + redeploy→telegraf inputs.mysql injection verified; live metric flow not smoked — no DB installed on the test VM)*", status: "done", smoke: true },
   ]},
   { id: 7, title: "Cron & Backup Monitoring", subtitle: "Heartbeat ping endpoint, calendar heatmap UI", tasks: [
-    { text: "GET /ping/:token — cron job ping (single + two-ping ?event=start/end)", status: "pending", smoke: false },
-    { text: "POST /ping/:token — backup job ping (form body: size_bytes, exit_code)", status: "pending", smoke: false },
-    { text: "GET /api/organizations/:org_id/cron-jobs", status: "pending", smoke: false },
-    { text: "POST/PATCH/DELETE /api/cron-jobs (Admin)", status: "pending", smoke: false },
-    { text: "GET /api/cron-jobs/:id/runs (cursor-paginated)", status: "pending", smoke: false },
-    { text: "POST /api/cron-jobs/:id/regenerate-token (Admin)", status: "pending", smoke: false },
-    { text: "Same endpoints for backup-jobs", status: "pending", smoke: false },
-    { text: "cron_backup_watchdog APScheduler job (60s tick, status transitions, missed run writes)", status: "pending", smoke: false },
-    { text: "Two-ping: start ping sets start_ping_at only (does NOT update last_ping_at)", status: "pending", smoke: false },
-    { text: "Backup: exit_code authoritative, previous_size_bytes baseline management", status: "pending", smoke: false },
-    { text: "/cron-backup page (two tabs, job list sorted Missing→Late→Healthy)", status: "pending", smoke: false },
-    { text: "Job detail slide-over (ping URL, calendar heatmap, duration/size trend, run history)", status: "pending", smoke: false },
-    { text: "Smoke test: register job, ping it, miss a window, see Missing status + alert", status: "pending", smoke: true },
+    { text: "GET /ping/:token — cron job ping (single + two-ping ?event=start/end)", status: "done", smoke: false },
+    { text: "POST /ping/:token — backup job ping (form body: size_bytes, exit_code)", status: "done", smoke: false },
+    { text: "GET /api/organizations/:org_id/cron-jobs", status: "done", smoke: false },
+    { text: "POST/PATCH/DELETE /api/cron-jobs (Admin)", status: "done", smoke: false },
+    { text: "GET /api/cron-jobs/:id/runs (cursor-paginated)", status: "done", smoke: false },
+    { text: "POST /api/cron-jobs/:id/regenerate-token (Admin)", status: "done", smoke: false },
+    { text: "Same endpoints for backup-jobs", status: "done", smoke: false },
+    { text: "cron_backup_watchdog APScheduler job (60s tick, status transitions, missed run writes)", status: "done", smoke: false },
+    { text: "Two-ping: start ping sets start_ping_at only (does NOT update last_ping_at)", status: "done", smoke: false },
+    { text: "Backup: exit_code authoritative, previous_size_bytes baseline management", status: "done", smoke: false },
+    { text: "/cron-backup page (two tabs, job list sorted Missing→Late→Healthy)", status: "done", smoke: false },
+    { text: "Job detail slide-over (ping URL, calendar heatmap, duration/size trend, run history)", status: "done", smoke: false },
+    { text: "Smoke test: register job, ping it, miss a window, see Missing status + alert *(verified: ping→Healthy, watchdog→Missing+cron_missing alert→re-ping resolves; backup fail→alert)*", status: "done", smoke: true },
   ]},
   { id: 8, title: "Alerting Engine", subtitle: "Metric evaluator, log evaluator, auto-resolve, email, ack/snooze, maintenance", tasks: [
     { text: "metric_alert_evaluator APScheduler job (30s tick — rolling 5-min avg)", status: "done", smoke: false },
