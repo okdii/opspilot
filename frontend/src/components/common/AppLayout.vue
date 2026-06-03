@@ -145,8 +145,8 @@ async function logout() {
           :key="item.route"
           :to="item.route"
           class="nav-link"
-          active-class="active"
-          :class="{ active: route.path === item.route }"
+          active-class=""
+          :class="{ active: item.route === '/' ? route.path === '/' : route.path.startsWith(item.route) }"
         >
           <span class="nav-icon" v-html="navIcons[item.route]"></span>
           <span>{{ item.name }}</span>
