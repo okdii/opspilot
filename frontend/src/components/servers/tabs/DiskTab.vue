@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import MetricChart from '@/components/charts/MetricChart.vue'
+import MetricBar from '@/components/ui/MetricBar.vue'
 import { useMetricsStore } from '@/stores/metrics'
 import { humanBytes, labeledList, realMounts, toApexSeries } from '@/utils/metrics'
 import type { LatestLabeled, MetricRange } from '@/types'
@@ -73,6 +74,27 @@ const donutMounts = computed<DonutMount[]>(() => {
 
 const donutSeries = computed<number[]>(() => donutMounts.value.map((m) => m.pct))
 const donutLabels = computed<string[]>(() => donutMounts.value.map((m) => m.path))
+
+// ── All Disk Partitions — full list (no grouping) ────────────────────────────
+interface MountDetail {
+  path: string
+  pct: number
+  used: number | null
+  free: number | null
+  total: number | null
+}
+
+const allMounts = computed<MountDetail[]>(() =>
+  mounts.value
+    .map((m) => ({
+      path: m.labels.path ?? m.labels.device ?? 'disk',
+      pct: m.value ?? 0,
+      used:  bytesFor(m.labels.path ?? '', 'disk.used'),
+      free:  bytesFor(m.labels.path ?? '', 'disk.free'),
+      total: bytesFor(m.labels.path ?? '', 'disk.total'),
+    }))
+    .sort((a, b) => b.pct - a.pct),
+)
 
 // ── 2. Disk Space History (one line per mount) ───────────────────────────────
 const spaceSeries = computed(() =>
@@ -159,10 +181,10 @@ const deviceLabel = computed(() => (ioDevices.value.length ? selectedDevice.valu
 
 <template>
   <div class="disk">
-    <!-- 1. Disk Space — Current -->
+    <!-- 1. Disk Space — Current (donut overview) -->
     <section class="card">
       <h3>Disk Space — Current</h3>
-      <div v-if="donutMounts.length" class="space-current">
+      <div v-if="donutMounts.length" class="donut-wrap">
         <MetricChart
           type="donut"
           unit="%"
@@ -170,20 +192,33 @@ const deviceLabel = computed(() => (ioDevices.value.length ? selectedDevice.valu
           :labels="donutLabels"
           :height="260"
         />
-        <ul class="mount-list">
-          <li v-for="m in donutMounts" :key="m.path">
-            <span class="mount-path">{{ m.path }}</span>
-            <span class="mount-pct">{{ Math.round(m.pct) }}%</span>
-            <span v-if="m.used != null && m.total != null" class="mount-bytes">
-              {{ humanBytes(m.used) }} / {{ humanBytes(m.total) }}
-            </span>
-          </li>
-        </ul>
       </div>
       <p v-else class="empty">No disk data.</p>
     </section>
 
-    <!-- 2. Disk Space History -->
+    <!-- 2. Disk Partitions — full list -->
+    <section class="card">
+      <h3>Disk Partitions</h3>
+      <div v-if="allMounts.length" class="partition-list">
+        <div v-for="m in allMounts" :key="m.path" class="partition-row">
+          <div class="partition-head">
+            <span class="partition-path">{{ m.path }}</span>
+            <span class="partition-pct" :class="m.pct >= 85 ? 'pct-red' : m.pct >= 70 ? 'pct-amber' : 'pct-green'">
+              {{ Math.round(m.pct) }}%
+            </span>
+          </div>
+          <MetricBar label="" :value="m.pct" class="partition-bar" />
+          <div class="partition-sub">
+            <span>{{ humanBytes(m.used) }} used</span>
+            <span class="partition-free">{{ humanBytes(m.free) }} free</span>
+            <span class="partition-total">of {{ humanBytes(m.total) }}</span>
+          </div>
+        </div>
+      </div>
+      <p v-else class="empty">No disk data.</p>
+    </section>
+
+    <!-- 3. Disk Space History -->
     <section class="card">
       <h3>Disk Space History</h3>
       <MetricChart type="area" unit="%" :series="spaceSeries" :height="240" />
@@ -241,14 +276,26 @@ const deviceLabel = computed(() => (ioDevices.value.length ? selectedDevice.valu
   padding: 4px 10px;
   font-size: 12px;
 }
-.space-current { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: center; }
-.mount-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.mount-list li { display: flex; align-items: baseline; gap: 10px; font-size: 13px; }
-.mount-path { color: var(--text); font-weight: 600; min-width: 64px; }
-.mount-pct { color: var(--text); }
-.mount-bytes { color: var(--muted); font-size: 12px; }
-.empty { color: var(--muted); font-size: 13px; }
-@media (max-width: 720px) {
-  .space-current { grid-template-columns: 1fr; }
+.donut-wrap { display: flex; justify-content: center; }
+/* ── Disk Partitions list ─────────────────────────────────────────── */
+.partition-list { display: flex; flex-direction: column; gap: 14px; }
+.partition-row { display: flex; flex-direction: column; gap: 5px; }
+.partition-head { display: flex; justify-content: space-between; align-items: baseline; }
+.partition-path { font-size: 13px; font-weight: 600; color: var(--text); font-family: monospace; }
+.partition-pct  { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pct-green { color: #22c55e; }
+.pct-amber { color: #f59e0b; }
+.pct-red   { color: #ef4444; }
+.partition-sub {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
+.partition-free  { color: #22c55e; font-weight: 500; }
+.partition-total { color: var(--muted); }
+/* Hide label + value columns inside MetricBar — header row handles them */
+.partition-bar :deep(.mb-label), .partition-bar :deep(.mb-value) { display: none; }
+.empty { color: var(--muted); font-size: 13px; }
 </style>
