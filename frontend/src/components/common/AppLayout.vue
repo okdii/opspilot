@@ -135,6 +135,10 @@ async function logout() {
 
       <OrgSwitcher />
 
+      <div class="bell-wrap">
+        <NotificationBell />
+      </div>
+
       <nav class="nav">
         <router-link
           v-for="item in visibleNav"
@@ -150,10 +154,6 @@ async function logout() {
 
         <div class="nav-spacer"></div>
       </nav>
-
-      <div class="bell-wrap">
-        <NotificationBell />
-      </div>
 
       <div class="user-card" :class="{ open: userMenuOpen }">
         <button class="user-btn" @click="userMenuOpen = !userMenuOpen">
@@ -215,5 +215,5 @@ async function logout() {
 .menu-item.logout:hover { background: rgba(239,68,68,0.1); color: var(--red); }
 .menu-divider { height: 1px; background: var(--border); margin: 2px 0; }
 .content { flex: 1; overflow-y: auto; }
-.bell-wrap { padding: 8px 12px; border-top: 1px solid var(--border); position: relative; }
+.bell-wrap { padding: 8px 12px; border-bottom: 1px solid var(--border); position: relative; }
 </style>
