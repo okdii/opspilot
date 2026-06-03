@@ -225,7 +225,14 @@ const options = computed<ApexOptions>(() => {
           labels: {
             show: true,
             value: { color: THEME.text, formatter: (v: string) => formatValue(Number(v)) },
-            total: { show: true, color: THEME.muted },
+            total: {
+              show: true,
+              color: THEME.muted,
+              formatter: (w: { globals: { seriesTotals: number[] } }) => {
+                const sum = w.globals.seriesTotals.reduce((a: number, b: number) => a + b, 0)
+                return `${Math.round(sum)}%`
+              },
+            },
           },
         },
       },
