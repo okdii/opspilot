@@ -107,7 +107,11 @@ Last updated: 2026-06-02
 ### Server Detail — Metrics (spec 04)
 - ✅ GET /api/servers/:id/metrics — chart data (range + metric filter) *(Telegraf name map, server-side counter→rate, disk fstype filter; verified live)*
 - ✅ GET /api/servers/:id/metrics/latest — live gauge initial state
-- 🔄 GET /api/servers/:id/processes — top_processes snapshot *(501 stub — deferred: needs agent procstat, Phase 1 Telegraf follow-up)*
+- ✅ GET /api/servers/:id/processes — live SSH snapshot (full process list + top-CPU/top-mem; `top -bn2`, 5s cache, single-flight, graceful offline)
+- ✅ Processes tab — top-CPU/top-mem tables + full process list (filter/sort) + live badge + proctop top-N trend chart
+- ✅ Agent Status footer — telegraf/fluent-bit health via systemd_units + one-time warning toast on agent down *(verified: stop fluent-bit → footer shows stopped)*
+- ✅ Per-core CPU — `cpu.usage_active` per core (single-field percpu input); CpuTab per-core bars populate
+- ✅ DB growth control — proctop @30s, per-core single-field, systemd_units scoped to 2 units; TimescaleDB compression policy on server_metrics (>2d chunks)
 - ✅ 4 live gauge cards (CPU, RAM, Disk, Network) *(verified: live WS, CPU rose 1%→100% on VM spike, no reload)*
 - ✅ Tab navigation (Overview, CPU, Memory, Disk, Network, System, Processes) *(all 6 metric tabs built; Processes tab disabled — deferred to Phase 1 agent procstat)*
 - ✅ Time range selector (1h/6h/24h/7d/30d) — correct data source per range *(raw 1h/6h, hourly 24h, daily 7d/30d)*
