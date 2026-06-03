@@ -124,6 +124,11 @@ async def add_server(org_id: str, body: ServerCreate, user: AdminUser, db: Async
     await db.commit()
     await db.refresh(server)
 
+    # Auto-create default alert rules (4 metric + 5 log) — spec 10 §9
+    from app.routers.alert_rules import create_default_rules
+    await create_default_rules(db, server)
+    await db.commit()
+
     # Schedule onboarding (spec 03 §4.1) — runs in the FastAPI event loop, doesn't block
     onboarding_service.schedule(str(server.id))
 

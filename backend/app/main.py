@@ -24,6 +24,10 @@ from app.routers.sessions import router as sessions_router
 from app.routers.team import router as team_router
 from app.routers.setup import router as setup_router
 from app.routers.logs import router as logs_router
+from app.routers.alerts import router as alerts_router, snooze_expiry_tick
+from app.routers.alert_rules import router as alert_rules_router
+from app.services.metric_evaluator import metric_alert_evaluator
+from app.services.log_evaluator import log_alert_evaluator
 from app.ws.live_bus import live_bus
 from app.ws.authz import can_access_org, resolve_server_org
 from app.ws.manager import ws_manager
@@ -36,6 +40,9 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(session_cleanup, "cron", hour=3, minute=0, id="session_cleanup", replace_existing=True)
     scheduler.add_job(ticket_sweep, "interval", seconds=60, id="ticket_sweep", replace_existing=True)
     scheduler.add_job(maintenance_expiry, "interval", seconds=60, id="maintenance_expiry", replace_existing=True)
+    scheduler.add_job(metric_alert_evaluator, "interval", seconds=30, id="metric_alert_evaluator", replace_existing=True)
+    scheduler.add_job(log_alert_evaluator, "interval", seconds=60, id="log_alert_evaluator", replace_existing=True)
+    scheduler.add_job(snooze_expiry_tick, "interval", seconds=60, id="snooze_expiry_tick", replace_existing=True)
     scheduler.start()
     flush_task = asyncio.create_task(live_bus.flush_loop())
     yield
@@ -94,6 +101,8 @@ app.include_router(logs_router)
 app.include_router(settings_router)
 app.include_router(sessions_router)
 app.include_router(team_router)
+app.include_router(alerts_router)
+app.include_router(alert_rules_router)
 
 
 @app.get("/api/health")
