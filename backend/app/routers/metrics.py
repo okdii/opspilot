@@ -1,11 +1,13 @@
 """Server-detail historical metric reads (spec 04 §5)."""
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import bindparam, text
+from sqlalchemy import bindparam, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.deps import CurrentUser
+from app.models.server import Server
 from app.routers.servers import _assert_server_access
+from app.services import process_snapshot
 from app.services.metric_catalog import (
     HAS_LABELS, RANGE_INTERVAL, RANGE_SOURCE, REAL_FS_DENYLIST, is_counter, to_rate,
 )
@@ -116,10 +118,10 @@ async def get_latest(server_id: str, user: CurrentUser, db: AsyncSession = Depen
     return out
 
 
-@router.get("/{server_id}/processes", status_code=501)
+@router.get("/{server_id}/processes")
 async def get_processes(server_id: str, user: CurrentUser, db: AsyncSession = Depends(get_db)):
     await _assert_server_access(server_id, user, db)
-    raise HTTPException(
-        status_code=501,
-        detail={"blocked": "agent-config", "detail": "top_processes not collected by Telegraf"},
-    )
+    server = await db.scalar(select(Server).where(Server.id == server_id))
+    if not server:
+        raise HTTPException(404, detail={"error": "not_found", "message": "Server not found."})
+    return await process_snapshot.get_snapshot(server)
