@@ -306,6 +306,16 @@ const phases = [
     { text: "Deployment runbook (firewall setup, port 5432 restriction, first-run steps)", status: "done", smoke: false },
     { text: "Smoke test: fresh docker compose up, complete full onboarding + alert cycle end-to-end *(validated by components: backend image builds clean w/ python-whois, migrate runs clean base→0006 on a fresh throwaway DB (hypertables+aggregates+compression+writer role); full onboarding→metrics→alert-fire cycle verified live on the running stack this session. Literal fresh `compose up` not run to avoid 80/443 conflict with the running dev stack.)*", status: "done", smoke: true },
   ]},
+  { id: 13, title: "SSL Certificate Tracking in HTTP Probes", subtitle: "Auto-extract SSL cert on HTTPS service probes, alert on expiry", tasks: [
+    { text: "Alembic migration: 8 ssl_* columns on service table (0008_service_ssl_columns)", status: "done", smoke: true },
+    { text: "Service model + schema + router: ssl_enabled auto-set, ssl thresholds in create/update, ssl fields in ServiceOut", status: "done", smoke: true },
+    { text: "probe.py: _maybe_check_ssl() runs after uptime check (6h throttle), fires/resolves ssl_expiry alerts", status: "done", smoke: true },
+    { text: "Frontend: Service interface + ServiceCreatePayload with all 8 ssl_* fields", status: "done", smoke: false },
+    { text: "ServiceModal: SSL threshold section (warn/critical days) shown for https:// URLs", status: "done", smoke: true },
+    { text: "ServiceRow: SSL expiry pill (amber/red/dark-red) for expiring_soon/critical/expired status", status: "done", smoke: true },
+    { text: "ServiceDetail: SSL Certificate card with ExpiryBar, issuer, days remaining, last checked", status: "done", smoke: true },
+    { text: "SslDomainsView: hint text pointing HTTPS SSL tracking to Services page", status: "done", smoke: true },
+  ]},
 ];
 
 const grid = document.getElementById('grid');

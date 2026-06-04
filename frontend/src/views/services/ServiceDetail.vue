@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { PageHeader, StatCard, StatusBadge } from '@/components/ui'
+import ExpiryBar from '@/components/ssl-domains/ExpiryBar.vue'
 import MetricChart from '@/components/charts/MetricChart.vue'
 import UptimeTimeline from '@/components/services/UptimeTimeline.vue'
 import ServiceModal from '@/components/services/ServiceModal.vue'
@@ -299,6 +300,44 @@ onUnmounted(() => {
       <StatCard label="Avg Response" :value="avgStr" :delta="{ value: '24h average', direction: 'flat' }" accent="info" />
     </div>
 
+    <!-- SSL Certificate Card — HTTPS services only -->
+    <section v-if="service.ssl_enabled" class="card ssl-section">
+      <div class="ssl-section-header">
+        <h3 class="ssl-section-title">SSL Certificate</h3>
+        <StatusBadge kind="ssl" :status="service.ssl_status ?? 'unreachable'" />
+      </div>
+      <div class="ssl-meta-grid">
+        <div class="ssl-meta-item">
+          <span class="ssl-label">Expiry Date</span>
+          <span class="ssl-value mono">{{ service.ssl_expiry_date ? service.ssl_expiry_date.slice(0, 10) : '—' }}</span>
+        </div>
+        <div class="ssl-meta-item">
+          <span class="ssl-label">Days Left</span>
+          <span
+            class="ssl-value mono"
+            :class="{
+              'ssl-warn': (service.ssl_days_remaining ?? 999) <= service.ssl_warn_days && (service.ssl_days_remaining ?? 999) > service.ssl_critical_days,
+              'ssl-crit': (service.ssl_days_remaining ?? 999) <= service.ssl_critical_days
+            }"
+          >{{ service.ssl_days_remaining ?? '—' }}</span>
+        </div>
+        <div class="ssl-meta-item">
+          <span class="ssl-label">Issuer</span>
+          <span class="ssl-value">{{ service.ssl_issuer ?? '—' }}</span>
+        </div>
+        <div class="ssl-meta-item">
+          <span class="ssl-label">Last Checked</span>
+          <span class="ssl-value muted">{{ service.ssl_last_checked ? relativeTime(service.ssl_last_checked) : 'never' }}</span>
+        </div>
+      </div>
+      <ExpiryBar
+        class="ssl-expiry-bar"
+        :days-remaining="service.ssl_days_remaining"
+        :warn-threshold="service.ssl_warn_days"
+        :status="service.ssl_status ?? 'unreachable'"
+      />
+    </section>
+
     <!-- Uptime timeline -->
     <section class="card">
       <h3>Uptime — last 90 days</h3>
@@ -394,4 +433,15 @@ onUnmounted(() => {
 .summary-paused { background: rgba(107,114,128,0.08); border-color: var(--grey, #6b7280); color: var(--muted); }
 .summary-unknown { background: rgba(99,102,241,0.08); border-color: var(--accent); color: var(--muted); }
 @media (max-width: 720px) { .cards { grid-template-columns: repeat(2, 1fr); } }
+.ssl-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.ssl-section-title { font-size: 13px; font-weight: 600; color: var(--text); margin: 0; }
+.ssl-meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px 20px; margin-bottom: 14px; }
+.ssl-meta-item { display: flex; flex-direction: column; gap: 3px; }
+.ssl-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.ssl-value { font-size: 14px; color: var(--text); }
+.ssl-value.mono { font-family: ui-monospace, monospace; }
+.ssl-value.muted { color: var(--muted); }
+.ssl-warn { color: #f59e0b; }
+.ssl-crit { color: #ef4444; }
+.ssl-expiry-bar { margin-top: 4px; }
 </style>

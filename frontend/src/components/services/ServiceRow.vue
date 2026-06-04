@@ -61,6 +61,12 @@ function pct(v: number | null): string {
           <span class="server">{{ s.server_name }}</span>
           <span v-if="!s.is_active" class="paused-badge">Paused</span>
           <span v-if="s.is_public" class="public-badge">Public</span>
+          <span
+            v-if="s.ssl_enabled && ['expiring_soon', 'critical', 'expired'].includes(s.ssl_status ?? '')"
+            class="ssl-pill"
+            :class="`ssl-pill--${s.ssl_status}`"
+            :title="`SSL ${s.ssl_status === 'expiring_soon' ? 'expiring soon' : s.ssl_status} · ${s.ssl_days_remaining ?? '?'} days left`"
+          >SSL {{ s.ssl_status === 'expiring_soon' ? 'expiring' : s.ssl_status }}</span>
         </div>
         <div class="target">{{ target }}</div>
       </div>
@@ -133,4 +139,8 @@ function pct(v: number | null): string {
 .kmi-div { height: 1px; background: var(--border); margin: 2px 0; }
 .down-banner { width: 100%; display: flex; align-items: center; gap: 10px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
 .db-text { font-size: 12px; color: #fca5a5; }
+.ssl-pill { display: inline-block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 6px; border-radius: 4px; }
+.ssl-pill--expiring_soon { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.ssl-pill--critical      { background: rgba(239,68,68,0.15);  color: #ef4444; }
+.ssl-pill--expired       { background: rgba(239,68,68,0.2);   color: #fca5a5; }
 </style>

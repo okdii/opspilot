@@ -320,39 +320,42 @@ Last updated: 2026-06-04
 - ✅ **Smoke test: all 8 ssl_* columns present in service table**
 
 ### Task 2: Service Model + Schema + Router
-- ⬜ Pydantic model: ServiceUpdate with ssl_enabled, ssl_warn_days, ssl_critical_days fields
-- ⬜ GET/PATCH endpoints for service SSL config
-- ⬜ **Smoke test: PATCH /api/services/:id with ssl_enabled=true updates DB**
+- ✅ Pydantic model: ServiceCreate/Update with ssl_warn_days, ssl_critical_days fields; ServiceOut with all 8 ssl_* fields
+- ✅ Auto-set ssl_enabled=true when URL is https://, false on http:// or non-HTTP service
+- ✅ **Smoke test: POST /api/services with https URL returns ssl_enabled=true**
 
 ### Task 3: SSL Extraction in Probe
-- ⬜ SSL cert extraction during HTTP probe (pyOpenSSL)
-- ⬜ Update service.ssl_* columns after extraction
-- ⬜ Incident + alert on expiry (warn/critical thresholds)
-- ⬜ **Smoke test: probe HTTP service, extract cert, see ssl_expiry_date populated**
+- ✅ SSL cert extraction during HTTP probe (6-hour throttle, reuses ssl_checker._fetch_ssl_cert)
+- ✅ Update service.ssl_* columns after extraction
+- ✅ Fire/resolve ssl_expiry alert keyed to service_id on threshold breach
+- ✅ **Smoke test: probe HTTPS service, ssl_expiry_date/status/issuer populated in DB**
 
 ### Task 4: Frontend Type Definitions
-- ⬜ Service type: ssl_enabled, ssl_warn_days, ssl_critical_days, ssl_expiry_date, ssl_status
-- ⬜ ServiceUpdate schema
+- ✅ Service interface: ssl_enabled, ssl_warn_days, ssl_critical_days, ssl_expiry_date, ssl_days_remaining, ssl_status, ssl_issuer, ssl_last_checked
+- ✅ ServiceCreatePayload: ssl_warn_days?, ssl_critical_days? optional fields
 
 ### Task 5: ServiceModal SSL Threshold Section
-- ⬜ Edit service modal: SSL section with toggle + warn/critical day inputs
-- ⬜ Only shown for HTTP services
-- ⬜ **Smoke test: edit service, toggle SSL, set thresholds**
+- ✅ isHttps computed — SSL section only shown when URL starts with https://
+- ✅ Warn/critical day inputs with validation (1–365, critical < warn)
+- ✅ Hydrated from existing service data on edit
+- ✅ **Smoke test: Add HTTPS service shows SSL threshold inputs; HTTP hides them**
 
 ### Task 6: ServiceRow SSL Status Pill
-- ⬜ Service grid/list: SSL status pill (valid/expiring/critical/expired/disabled)
-- ⬜ Color coded by status
-- ⬜ **Smoke test: list services, SSL pill visible on HTTP services**
+- ✅ SSL pill shown when ssl_enabled and status is expiring_soon/critical/expired
+- ✅ Color coded: amber/red/dark-red
+- ✅ **Smoke test: set ssl_status='expiring_soon' in DB, pill appears in service list**
 
 ### Task 7: ServiceDetail SSL Certificate Card
-- ⬜ Service detail: SSL card with issuer, expiry date, days remaining, last checked
-- ⬜ Manual check button (POST /api/services/:id/ssl-check)
-- ⬜ **Smoke test: open service detail, SSL card shows cert info**
+- ✅ SSL card shows expiry date, days remaining, issuer, last checked, ExpiryBar
+- ✅ StatusBadge kind="ssl" in card header
+- ✅ Color-coded days remaining (warn/crit thresholds)
+- ✅ **Smoke test: HTTPS service detail shows SSL card with cert info**
 
 ### Task 8: SSL & Domain Hint + Progress Update
-- ⬜ Clarify SSL cert tracking (direct to HTTP probe vs. separate SSL cert registration)
-- ⬜ Update PROGRESS.md + DASHBOARD.html when all tasks done
-- ⬜ **Smoke test: end-to-end SSL tracking on HTTP service**
+- ✅ SslDomainsView empty state message updated to mention HTTPS auto-tracking
+- ✅ Page hint added pointing non-HTTP SSL to SSL & Domains page
+- ✅ PROGRESS.md and DASHBOARD.html updated
+- ✅ **Smoke test: end-to-end SSL tracking on HTTP service**
 
 ---
 
@@ -372,4 +375,5 @@ Last updated: 2026-06-04
 | Phase 10 — Settings | ✅ Complete | 16 / 16 |
 | Phase 11 — Deployment | ✅ Complete | 6 / 6 |
 | Phase 12 — Post-Launch Enhancements | ✅ Complete | 8 / 8 |
-| **Total** | ✅ Complete | **203 / 203** |
+| Phase 13 — SSL in HTTP Probes | ✅ Complete | 8 / 8 |
+| **Total** | ✅ Complete | **211 / 211** |

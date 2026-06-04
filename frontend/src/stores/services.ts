@@ -28,6 +28,14 @@ export interface Service {
   uptime_7d: number | null
   avg_response_ms_24h: number | null
   open_incident_id: string | null
+  ssl_enabled: boolean
+  ssl_warn_days: number
+  ssl_critical_days: number
+  ssl_expiry_date: string | null
+  ssl_days_remaining: number | null
+  ssl_status: string | null
+  ssl_issuer: string | null
+  ssl_last_checked: string | null
 }
 
 export interface ServiceCreatePayload {
@@ -42,6 +50,8 @@ export interface ServiceCreatePayload {
   is_active: boolean
   is_public: boolean
   ignore_ssl_errors: boolean
+  ssl_warn_days?: number
+  ssl_critical_days?: number
 }
 
 export type ServiceUpdatePayload = Partial<Omit<ServiceCreatePayload, 'server_id' | 'type'>>

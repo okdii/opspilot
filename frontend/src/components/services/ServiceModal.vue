@@ -44,6 +44,8 @@ interface FormState {
   url: string
   expected_status: number
   ignore_ssl_errors: boolean
+  ssl_warn_days: number
+  ssl_critical_days: number
   // tcp / db
   host: string
   port: number | null
@@ -62,6 +64,8 @@ function blank(): FormState {
     url: '',
     expected_status: 200,
     ignore_ssl_errors: false,
+    ssl_warn_days: 30,
+    ssl_critical_days: 7,
     host: '',
     port: null,
     db_type: 'MySQL',
@@ -89,6 +93,8 @@ function hydrate(): void {
     form.url = s.url ?? ''
     form.expected_status = s.expected_status ?? 200
     form.ignore_ssl_errors = s.ignore_ssl_errors
+    form.ssl_warn_days = s.ssl_warn_days ?? 30
+    form.ssl_critical_days = s.ssl_critical_days ?? 7
   } else {
     form.host = s.url ?? ''
     form.port = s.port
@@ -111,6 +117,7 @@ function autoFillName(): void {
 }
 
 const intervalAdvisory = computed(() => form.interval_sec <= form.timeout_sec)
+const isHttps = computed(() => /^https:\/\//i.test(form.url.trim()))
 
 function validate(): boolean {
   for (const k of Object.keys(errors)) delete errors[k]
@@ -121,6 +128,12 @@ function validate(): boolean {
     if (!/^https?:\/\//.test(form.url.trim())) errors.url = 'Must start with http:// or https://'
     else if (form.url.trim().length > 500) errors.url = 'URL is too long (max 500)'
     if (form.expected_status < 100 || form.expected_status > 599) errors.expected_status = 'Status must be 100–599'
+    if (isHttps.value) {
+      if (form.ssl_warn_days < 1 || form.ssl_warn_days > 365)
+        errors.ssl_warn_days = 'Must be 1–365'
+      if (form.ssl_critical_days < 1 || form.ssl_critical_days >= form.ssl_warn_days)
+        errors.ssl_critical_days = 'Must be ≥ 1 and less than warn threshold'
+    }
   } else {
     if (!form.host.trim()) errors.host = 'Host is required'
     else if (/^https?:\/\//.test(form.host.trim())) errors.host = 'Enter a hostname or IP without protocol'
@@ -145,6 +158,8 @@ async function submit(): Promise<void> {
         payload.url = form.url.trim()
         payload.expected_status = form.expected_status
         payload.ignore_ssl_errors = form.ignore_ssl_errors
+        payload.ssl_warn_days = form.ssl_warn_days
+        payload.ssl_critical_days = form.ssl_critical_days
       } else {
         payload.url = form.host.trim()
         payload.port = form.port
@@ -165,6 +180,10 @@ async function submit(): Promise<void> {
       if (form.type === 'http') {
         payload.url = form.url.trim()
         payload.expected_status = form.expected_status
+        if (isHttps.value) {
+          payload.ssl_warn_days = form.ssl_warn_days
+          payload.ssl_critical_days = form.ssl_critical_days
+        }
       } else {
         payload.url = form.host.trim()
         payload.port = form.port
@@ -244,6 +263,35 @@ function intervalLabel(s: number): string {
         <p v-if="form.ignore_ssl_errors" class="advisory">
           SSL cert errors will be ignored for this probe. SSL expiry is still tracked separately.
         </p>
+
+        <!-- SSL thresholds — shown only for https:// URLs -->
+        <template v-if="isHttps">
+          <div class="section-divider"></div>
+          <p class="ssl-hint">SSL certificate expiry will be tracked automatically for this HTTPS service.</p>
+          <div class="row">
+            <div class="col">
+              <label class="fl">Warn at (days)</label>
+              <input
+                v-model.number="form.ssl_warn_days"
+                type="number"
+                min="1"
+                max="365"
+                :class="{ invalid: errors.ssl_warn_days }"
+              />
+              <p v-if="errors.ssl_warn_days" class="err">{{ errors.ssl_warn_days }}</p>
+            </div>
+            <div class="col">
+              <label class="fl">Critical at (days)</label>
+              <input
+                v-model.number="form.ssl_critical_days"
+                type="number"
+                min="1"
+                :class="{ invalid: errors.ssl_critical_days }"
+              />
+              <p v-if="errors.ssl_critical_days" class="err">{{ errors.ssl_critical_days }}</p>
+            </div>
+          </div>
+        </template>
       </template>
 
       <!-- TCP / DB fields -->
@@ -341,4 +389,6 @@ input:disabled, select:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn.primary:disabled { opacity: 0.6; cursor: wait; }
 .spin { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.section-divider { height: 1px; background: var(--border); margin: 12px 0; }
+.ssl-hint { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 </style>

@@ -401,7 +401,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
     <EmptyState
       v-if="!store.isLoading && store.combinedRows.length === 0"
       title="No domains tracked yet"
-      message="Add your domains to get notified before SSL certificates or domain registrations expire and cause outages."
+      message="Add domains to track WHOIS registration expiry and non-standard SSL certs (e.g. IMAPS:993). SSL for your HTTPS services is tracked automatically on the Services page."
     >
       <template #action>
         <button v-if="canEdit" class="primary" @click="openAddDomain">+ Add Your First Domain</button>
@@ -414,6 +414,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
         <h3 class="panel-title">Expiry Timeline</h3>
         <ExpiryTimeline :dots="store.timelineDots" @dot-click="onDotClick" />
       </section>
+
+      <p class="page-hint">SSL for your HTTPS services is tracked automatically — add non-HTTP certs (e.g. IMAPS, SMTPS) here.</p>
 
       <!-- Filter bar -->
       <div class="filters">
@@ -639,6 +641,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 18px; }
 .panel-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px; }
 
+.page-hint { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
 .filters { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
 .filters select, .search { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 13px; outline: none; }
 .filters select:focus, .search:focus { border-color: var(--accent); }
