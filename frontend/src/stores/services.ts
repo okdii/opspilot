@@ -278,6 +278,16 @@ export const useServiceStore = defineStore('services', () => {
     })
   }
 
+  function handleSslEvent(ev: { service_id: string; ssl_status: string; ssl_expiry_date: string; ssl_days_remaining: number; ssl_issuer: string; ssl_last_checked: string }): void {
+    applyToService(ev.service_id, (s) => {
+      s.ssl_status = ev.ssl_status
+      s.ssl_expiry_date = ev.ssl_expiry_date
+      s.ssl_days_remaining = ev.ssl_days_remaining
+      s.ssl_issuer = ev.ssl_issuer
+      s.ssl_last_checked = ev.ssl_last_checked
+    })
+  }
+
   function handleIncidentResolved(ev: IncidentResolvedEvent): void {
     applyToService(ev.service_id, (s) => {
       s.open_incident_id = null
@@ -327,6 +337,7 @@ export const useServiceStore = defineStore('services', () => {
     deleteService,
     toggleActive,
     handleCheckEvent,
+    handleSslEvent,
     handleIncidentOpened,
     handleIncidentResolved,
     reset,

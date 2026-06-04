@@ -226,6 +226,8 @@ function bindWs() {
           p95_ms: msg.data.response_time_ms,
         })
       }
+    } else if (msg?.event === 'service_ssl_updated' && msg.data?.service_id === serviceId.value) {
+      store.handleSslEvent(msg.data)
     } else if (msg?.event === 'incident_opened' && msg.data?.service_id === serviceId.value) {
       store.handleIncidentOpened(msg.data)
       void store.fetchIncidents(serviceId.value)

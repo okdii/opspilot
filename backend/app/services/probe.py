@@ -73,6 +73,9 @@ async def _maybe_check_ssl(service_id: str) -> None:
         if service is None or not service.ssl_enabled:
             return
 
+        server = await db.get(Server, service.server_id)
+        org_id = str(server.org_id) if server else None
+
         now = _now()
         last = _aware(service.ssl_last_checked)
         if last is not None and (now - last) < timedelta(hours=6):
@@ -124,6 +127,14 @@ async def _maybe_check_ssl(service_id: str) -> None:
                     await alerting.resolve_alert(db, alert, commit=False)
 
             await db.commit()
+            await _broadcast(org_id, "service_ssl_updated", {
+                "service_id": service_id,
+                "ssl_status": ssl_status,
+                "ssl_expiry_date": expiry.isoformat(),
+                "ssl_days_remaining": days,
+                "ssl_issuer": issuer,
+                "ssl_last_checked": now.isoformat(),
+            })
 
         except Exception:  # noqa: BLE001
             logger.info(
