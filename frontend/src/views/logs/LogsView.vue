@@ -32,7 +32,7 @@ const volumeSeries = computed(() =>
   })).filter((s) => s.data.some((n) => n > 0)),
 )
 const volumeCategories = computed(() =>
-  logs.volumeData.map((b: VolumeBucket) => new Date(b.time).getTime()),
+  logs.volumeData.map((b: VolumeBucket) => formatTime(b.time)),
 )
 const volumeColors = computed(() =>
   volumeSeries.value.map((s) => SEV_COLORS[s.name as LogSeverity]),
