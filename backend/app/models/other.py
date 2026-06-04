@@ -5,7 +5,7 @@ from sqlalchemy import (
     BigInteger, Boolean, DateTime, Float, ForeignKey,
     Integer, String, Text, text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -37,6 +37,7 @@ class Service(Base):
     ssl_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
     ssl_issuer: Mapped[str | None] = mapped_column(String(255), nullable=True)
     ssl_last_checked: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_security_scan: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     server: Mapped["Server"] = relationship(back_populates="services")
     incidents: Mapped[list["Incident"]] = relationship(back_populates="service", cascade="all, delete-orphan")
@@ -90,6 +91,36 @@ class SSLCert(Base):
 
     domain: Mapped["Domain"] = relationship(back_populates="ssl_certs")
     alerts: Mapped[list["Alert"]] = relationship(back_populates="ssl_cert")
+
+
+class ServiceSecurityScan(Base):
+    __tablename__ = "service_security_scans"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    service_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("service.id", ondelete="CASCADE"), nullable=False, index=True)
+    scanned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    grade: Mapped[str] = mapped_column(String(2), nullable=False)
+    score: Mapped[int] = mapped_column(Integer, nullable=False)
+    tls_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    tls_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    cipher_suite: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    cipher_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    pfs_supported: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    key_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    key_size_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    self_signed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    ocsp_stapling: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    https_redirect: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    hsts: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    hsts_max_age: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    csp: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    x_frame_options: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    x_content_type: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    referrer_policy: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    permissions_policy: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    server_disclosure: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    x_powered_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    findings: Mapped[list] = mapped_column(JSONB(astext_type=Text()), nullable=False, default=list)
 
 
 class Alert(Base):
