@@ -184,6 +184,14 @@ const inodeList = computed<InodeMount[]>(() =>
     .sort((a, b) => b.pct - a.pct),
 )
 
+function humanCount(n: number | null | undefined): string {
+  if (n == null) return '—'
+  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + 'B'
+  if (n >= 1_000_000)     return (n / 1_000_000).toFixed(1) + 'M'
+  if (n >= 1_000)         return (n / 1_000).toFixed(1) + 'K'
+  return String(n)
+}
+
 // Stricter ceiling than disk space (85) — inode exhaustion is silent and unrecoverable.
 function inodePctClass(pct: number): string {
   if (pct >= 90) return 'pct-red'
@@ -258,9 +266,9 @@ const deviceLabel = computed(() => (ioDevices.value.length ? selectedDevice.valu
               </div>
               <MetricBar label="" :value="m.pct" class="partition-bar" />
               <div class="partition-sub">
-                <span>{{ m.used?.toLocaleString() }} used</span>
-                <span class="partition-free">{{ m.free?.toLocaleString() }} free</span>
-                <span class="partition-total">of {{ m.total?.toLocaleString() }}</span>
+                <span>{{ humanCount(m.used) }} used</span>
+                <span class="partition-free">{{ humanCount(m.free) }} free</span>
+                <span class="partition-total">of {{ humanCount(m.total) }}</span>
               </div>
             </div>
           </div>
