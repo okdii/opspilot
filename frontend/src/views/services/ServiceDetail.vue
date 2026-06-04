@@ -53,6 +53,28 @@ const target = computed(() => {
   return s.type === 'http' ? (s.url ?? '') : `${s.url ?? ''}:${s.port ?? ''}`
 })
 
+// ── Plain English summary ────────────────────────────────────────────────────
+const summary = computed(() => {
+  const s = service.value
+  if (!s) return null
+  if (!s.is_active) return { text: 'This service is paused — monitoring is stopped.', tone: 'paused' }
+  if (s.last_status == null) return { text: 'Waiting for the first check — this usually takes under a minute.', tone: 'unknown' }
+  if (s.last_status === 'down' || s.last_status === 'timeout') {
+    return { text: `${s.name} is DOWN right now. OpsPilot detected a failure — check the incidents below.`, tone: 'down' }
+  }
+  const uptime = s.uptime_24h
+  const avg = s.avg_response_ms_24h
+  if (uptime != null && uptime < 99) {
+    const avgPart = avg != null ? ` Response time is ${avg}ms.` : ''
+    return { text: `${s.name} is mostly healthy but had some hiccups today (${uptime}% uptime in the last 24h). Worth keeping an eye on.${avgPart}`, tone: 'warn' }
+  }
+  if (avg != null && avg > 500) {
+    return { text: `${s.name} is up but responding slowly (${avg}ms average). Normal is under 100ms for a TCP check.`, tone: 'warn' }
+  }
+  const avgPart = avg != null ? ` and responds in ${avg}ms` : ''
+  return { text: `${s.name} is running perfectly. It answered every check in the last 24h${avgPart} — nothing to worry about.`, tone: 'ok' }
+})
+
 // ── Uptime summary ───────────────────────────────────────────────────────────
 const uptime30d = ref<number | null>(null)
 const incidentCount = ref(0)
@@ -73,14 +95,61 @@ const range = ref<ResponseRange>('24h')
 const respData = ref<ResponseTimeData | null>(null)
 const respLoading = ref(false)
 
+// Range window in ms — used to filter individual check dots to the visible window.
+const RANGE_MS: Record<ResponseRange, number> = {
+  '1h': 60 * 60 * 1000,
+  '6h': 6 * 60 * 60 * 1000,
+  '24h': 24 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 60 * 1000,
+  '30d': 30 * 24 * 60 * 60 * 1000,
+}
+
+// Insert null breakpoints at incident boundaries so the line visually stops at downtime.
+function withNullBreaks(raw: [number, number | null][]): [number, number | null][] {
+  const pts: [number, number | null][] = [...raw]
+  for (const period of downPeriods.value) {
+    pts.push([period.start, null])
+    pts.push([period.end, null])
+  }
+  return pts.sort((a, b) => a[0] - b[0])
+}
+
 const respSeries = computed(() => {
   const d = respData.value?.data ?? []
-  return [
-    { name: 'Avg', data: d.map((p) => [new Date(p.time).getTime(), p.avg_ms]) },
-    { name: 'P95', data: d.map((p) => [new Date(p.time).getTime(), p.p95_ms]) },
+  const series: any[] = [
+    { name: 'Avg', type: 'line', data: withNullBreaks(d.map((p) => [new Date(p.time).getTime(), p.avg_ms])) },
+    { name: 'P95', type: 'line', data: withNullBreaks(d.map((p) => [new Date(p.time).getTime(), p.p95_ms])) },
   ]
+  // Individual check dots — only for shorter ranges where 50 checks give good coverage.
+  if (range.value === '1h' || range.value === '6h') {
+    const cutoff = Date.now() - RANGE_MS[range.value]
+    const dots = store.checkHistory
+      .filter((c) => c.status === 'up' && c.response_time_ms != null && new Date(c.time).getTime() >= cutoff)
+      .map((c) => [new Date(c.time).getTime(), c.response_time_ms])
+    if (dots.length) series.push({ name: 'Each check', type: 'scatter', data: dots })
+  }
+  return series
 })
 const hasRespData = computed(() => (respData.value?.data ?? []).some((p) => p.avg_ms != null))
+
+// Tick amount per range — 1h shows every minute, others scaled to fit.
+const RANGE_TICKS: Record<ResponseRange, number> = {
+  '1h': 60,
+  '6h': 12,
+  '24h': 24,
+  '7d': 7,
+  '30d': 15,
+}
+const tickAmount = computed(() => RANGE_TICKS[range.value])
+
+const downPeriods = computed(() =>
+  store.incidents
+    .filter((inc) => inc.started_at != null)
+    .map((inc) => ({
+      start: new Date(inc.started_at!).getTime(),
+      end: inc.resolved_at ? new Date(inc.resolved_at).getTime() : Date.now(),
+    })),
+)
 
 async function loadResponse(r: ResponseRange) {
   respLoading.value = true
@@ -120,6 +189,7 @@ async function load() {
       store.fetchUptimeTimeline(serviceId.value, 90),
       loadResponse(range.value),
       store.fetchIncidents(serviceId.value),
+      store.fetchChecks(serviceId.value),
     ])
     // 30d uptime + incident count derived from timeline / incident list.
     const tl = store.uptimeTimeline
@@ -216,6 +286,11 @@ onUnmounted(() => {
       <span v-if="service.is_public" class="public-badge">Public</span>
     </div>
 
+    <!-- Plain English summary -->
+    <div v-if="summary" class="summary-banner" :class="`summary-${summary.tone}`">
+      {{ summary.text }}
+    </div>
+
     <!-- Uptime summary cards -->
     <div class="cards">
       <StatCard label="Uptime 24h" :value="uptime24hStr" accent="success" />
@@ -242,7 +317,7 @@ onUnmounted(() => {
           >{{ r }}</button>
         </div>
       </div>
-      <MetricChart v-if="hasRespData" type="line" unit="ms" :series="respSeries" :height="260" />
+      <MetricChart v-if="hasRespData" type="line" unit="ms" :series="respSeries" :height="260" :down-periods="downPeriods" :tick-amount="tickAmount" />
       <p v-else class="placeholder">No response time data for this period.</p>
     </section>
 
@@ -312,5 +387,11 @@ onUnmounted(() => {
 .dur { color: var(--muted); }
 .dur.open { color: var(--red); font-weight: 600; }
 .ongoing { color: var(--red); font-weight: 600; font-size: 12px; }
+.summary-banner { padding: 14px 18px; border-radius: 10px; border-left: 4px solid; font-size: 14px; line-height: 1.5; margin-bottom: 20px; }
+.summary-ok { background: rgba(34,197,94,0.08); border-color: var(--green); color: var(--text); }
+.summary-warn { background: rgba(245,158,11,0.08); border-color: var(--amber); color: var(--text); }
+.summary-down { background: rgba(239,68,68,0.1); border-color: var(--red); color: var(--text); }
+.summary-paused { background: rgba(107,114,128,0.08); border-color: var(--grey, #6b7280); color: var(--muted); }
+.summary-unknown { background: rgba(99,102,241,0.08); border-color: var(--accent); color: var(--muted); }
 @media (max-width: 720px) { .cards { grid-template-columns: repeat(2, 1fr); } }
 </style>

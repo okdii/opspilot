@@ -16,6 +16,7 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    allowedHosts: 'all',
     proxy: {
       '/api': { target: apiTarget, changeOrigin: true },
       '/ws':  { target: wsTarget, ws: true },
