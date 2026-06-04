@@ -11,6 +11,7 @@ import DiskTab from '@/components/servers/tabs/DiskTab.vue'
 import NetworkTab from '@/components/servers/tabs/NetworkTab.vue'
 import SystemTab from '@/components/servers/tabs/SystemTab.vue'
 import ProcessesTab from '@/components/servers/tabs/ProcessesTab.vue'
+import ServicesTab from '@/components/servers/tabs/ServicesTab.vue'
 import AgentStatusFooter from '@/components/servers/AgentStatusFooter.vue'
 import { getServer } from '@/services/api'
 import { useMetricsStore } from '@/stores/metrics'
@@ -35,11 +36,12 @@ const maintenanceOpen = ref(false)
 const menuOpen = ref(false)
 
 // --- Tabs ------------------------------------------------------------------
-const TABS = ['Overview', 'CPU', 'Memory', 'Disk', 'Network', 'System', 'Processes'] as const
+const TABS = ['Overview', 'CPU', 'Memory', 'Disk', 'Network', 'System', 'Processes', 'Services'] as const
 type Tab = (typeof TABS)[number]
 const TAB_COMPONENTS = {
   Overview: OverviewTab, CPU: CpuTab, Memory: MemoryTab,
   Disk: DiskTab, Network: NetworkTab, System: SystemTab, Processes: ProcessesTab,
+  Services: ServicesTab,
 }
 const activeTab = ref<Tab>('Overview')
 const RANGES: MetricRange[] = ['1h', '6h', '24h', '7d', '30d']
