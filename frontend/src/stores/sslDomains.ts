@@ -30,9 +30,23 @@ export interface SslCert {
   status: string | null
 }
 
+export interface ServiceSslRec {
+  id: string
+  name: string
+  url: string | null
+  ssl_status: string | null
+  ssl_expiry_date: string | null
+  ssl_days_remaining: number | null
+  ssl_issuer: string | null
+  ssl_last_checked: string | null
+  ssl_warn_days: number
+  ssl_critical_days: number
+}
+
 interface SslDomainsResponse {
   domains: DomainRec[]
   ssl_certs: SslCert[]
+  service_ssl: ServiceSslRec[]
 }
 
 export interface CreateDomainPayload {
@@ -55,7 +69,7 @@ export type ThresholdPayload = { warn_days?: number; critical_days?: number; por
 export interface CombinedRow {
   id: string
   domainName: string
-  type: 'domain' | 'ssl'
+  type: 'domain' | 'ssl' | 'service'
   port?: number
   expiryDate: string | null
   daysRemaining: number | null
@@ -66,13 +80,14 @@ export interface CombinedRow {
   criticalDays: number
   issuer?: string | null
   domainId?: string
+  serviceId?: string       // set for type === 'service'
   // The threshold the bar/colour are measured against (warn_days).
   warnThreshold: number
 }
 
 export interface TimelineDot {
   id: string
-  type: 'domain' | 'ssl'
+  type: 'domain' | 'ssl' | 'service'
   label: string
   expiryDate: string
   daysRemaining: number | null
@@ -94,6 +109,7 @@ const STATUS_RANK: Record<string, number> = {
 export const useSslDomainStore = defineStore('sslDomains', () => {
   const domains = ref<DomainRec[]>([])
   const sslCerts = ref<SslCert[]>([])
+  const serviceSsl = ref<ServiceSslRec[]>([])
   const isLoading = ref(false)
   const error = ref<string | null>(null)
 
@@ -138,6 +154,22 @@ export const useSslDomainStore = defineStore('sslDomains', () => {
         warnDays: c.warn_days,
         criticalDays: c.critical_days,
         warnThreshold: c.warn_days,
+      })
+    }
+    for (const s of serviceSsl.value) {
+      rows.push({
+        id: s.id,
+        domainName: s.name,
+        type: 'service',
+        expiryDate: s.ssl_expiry_date,
+        daysRemaining: s.ssl_days_remaining,
+        status: s.ssl_status ?? 'checking',
+        lastChecked: s.ssl_last_checked,
+        issuer: s.ssl_issuer,
+        serviceId: s.id,
+        warnDays: s.ssl_warn_days,
+        criticalDays: s.ssl_critical_days,
+        warnThreshold: s.ssl_warn_days,
       })
     }
     return rows
@@ -187,6 +219,7 @@ export const useSslDomainStore = defineStore('sslDomains', () => {
       )
       domains.value = data.domains
       sslCerts.value = data.ssl_certs
+      serviceSsl.value = data.service_ssl ?? []
     } catch {
       error.value = 'Could not load SSL & domain data.'
     } finally {
@@ -264,6 +297,7 @@ export const useSslDomainStore = defineStore('sslDomains', () => {
   function reset(): void {
     domains.value = []
     sslCerts.value = []
+    serviceSsl.value = []
     isLoading.value = false
     error.value = null
   }

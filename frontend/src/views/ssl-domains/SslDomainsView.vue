@@ -138,7 +138,9 @@ async function checkNow(r: CombinedRow) {
     if (r.type === 'domain') await store.checkDomain(r.id)
     else await store.checkCert(r.id)
     notify.info(`Re-checking ${rowName(r)}… this may take a few seconds.`)
-    await store.pollUntilChecked(orgStore.activeOrgId, r.type, r.id)
+    if (r.type === 'domain' || r.type === 'ssl') {
+      await store.pollUntilChecked(orgStore.activeOrgId, r.type, r.id)
+    }
   } catch (err) {
     const apiErr = getApiError(err)
     if (apiErr?.error === 'rate_limited') {
