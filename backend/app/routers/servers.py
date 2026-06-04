@@ -1,7 +1,7 @@
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import decrypt, encrypt
@@ -241,7 +241,7 @@ async def get_onboarding(server_id: str, user: CurrentUser, db: AsyncSession = D
         outcome = "failed"
     elif running:
         outcome = "running"
-    elif last.step_number == 10 and last.status in ("done", "skipped"):
+    elif last.step_number == 11 and last.status in ("done", "skipped"):
         outcome = "success"
     else:
         outcome = "running"
@@ -296,6 +296,37 @@ async def _get_accessible_server(server_id: str, user, db: AsyncSession) -> Serv
         if not membership:
             raise HTTPException(403, detail={"error": "forbidden", "message": "Access denied."})
     return server
+
+
+@router.get("/api/servers/{server_id}/services")
+async def get_server_services(
+    server_id: str,
+    user: CurrentUser,
+    include_not_installed: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_accessible_server(server_id, user, db)
+    rows = (await db.execute(
+        text("""
+            SELECT DISTINCT ON (service_name)
+                service_name, status, cpu_pct, mem_mb, uptime_seconds
+            FROM server_service_metrics
+            WHERE server_id = :sid
+              AND (:include_ni OR status != 'not_installed')
+            ORDER BY service_name, time DESC
+        """),
+        {"sid": server_id, "include_ni": include_not_installed},
+    )).all()
+    return [
+        {
+            "name": row.service_name,
+            "status": row.status,
+            "cpu_pct": row.cpu_pct,
+            "mem_mb": row.mem_mb,
+            "uptime_seconds": row.uptime_seconds,
+        }
+        for row in rows
+    ]
 
 
 async def _assert_server_access(server_id: str, user, db: AsyncSession) -> Server:
