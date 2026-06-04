@@ -105,13 +105,14 @@ async def ingest_heartbeat(
     server: Annotated[Server, Depends(_authenticated_server)],
     db: AsyncSession = Depends(get_db),
 ):
-    server.last_seen_at = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+    server.last_seen_at = now
+    row_count = 0
     if payload.services:
-        now = datetime.now(timezone.utc)
         rows = [
             {
                 "ts": now,
-                "sid": str(server.id),
+                "sid": server.id,
                 "sname": s.name,
                 "status": s.status,
                 "cpu_pct": s.cpu_pct,
@@ -129,5 +130,6 @@ async def ingest_heartbeat(
             """),
             rows,
         )
+        row_count = len(rows)
     await db.commit()
-    return {"ok": True}
+    return {"ok": True, "rows": row_count}
