@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""OpsPilot agent — collects system service metrics and reports to backend."""
+import json
+import subprocess
+import time
+import urllib.request
+import urllib.error
+
+OPSPILOT_URL = "{{ base_url }}"
+INGESTION_TOKEN = "{{ ingestion_token }}"
+INTERVAL_SEC = 60
+
+SERVICES = [
+    {"name": "apache",     "aliases": ["apache2", "httpd"]},
+    {"name": "nginx",      "aliases": ["nginx"]},
+    {"name": "mysql",      "aliases": ["mysql", "mysqld", "mariadb"]},
+    {"name": "php-fpm",    "aliases": ["php-fpm", "php8.1-fpm", "php8.2-fpm", "php7.4-fpm"]},
+    {"name": "postgresql", "aliases": ["postgresql", "postgres"]},
+    {"name": "redis",      "aliases": ["redis", "redis-server"]},
+    {"name": "mongodb",    "aliases": ["mongod"]},
+    {"name": "nodejs",     "aliases": ["node", "nodejs"]},
+    {"name": "docker",     "aliases": ["docker"]},
+]
+
+
+def _systemctl_active(unit):
+    try:
+        r = subprocess.run(
+            ["systemctl", "is-active", unit],
+            capture_output=True, text=True, timeout=5,
+        )
+        return r.stdout.strip()
+    except Exception:
+        return "unknown"
+
+
+def _proc_stats(service_name):
+    try:
+        import psutil
+        target = service_name.lower()
+        for proc in psutil.process_iter(["name", "cpu_percent", "memory_info", "create_time"]):
+            try:
+                if target in proc.info["name"].lower():
+                    cpu = proc.cpu_percent(interval=0.1)
+                    mem_mb = round(proc.info["memory_info"].rss / (1024 * 1024), 2)
+                    uptime = int(time.time() - proc.info["create_time"])
+                    return {"cpu_pct": round(cpu, 2), "mem_mb": mem_mb, "uptime_seconds": uptime}
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+    except ImportError:
+        pass
+    return {"cpu_pct": None, "mem_mb": None, "uptime_seconds": None}
+
+
+def collect_services():
+    results = []
+    for svc in SERVICES:
+        status = "not_installed"
+        for alias in svc["aliases"]:
+            state = _systemctl_active(alias)
+            if state == "active":
+                status = "running"
+                break
+            if state in ("inactive", "failed", "activating", "deactivating"):
+                status = "stopped"
+                break
+        entry = {"name": svc["name"], "status": status}
+        if status == "running":
+            entry.update(_proc_stats(svc["name"]))
+        else:
+            entry.update({"cpu_pct": None, "mem_mb": None, "uptime_seconds": None})
+        results.append(entry)
+    return results
+
+
+def send_heartbeat(services):
+    payload = json.dumps({"services": services}).encode()
+    req = urllib.request.Request(
+        OPSPILOT_URL.rstrip("/") + "/api/ingest/heartbeat",
+        data=payload,
+        headers={
+            "Authorization": "Bearer " + INGESTION_TOKEN,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp.read()
+    except urllib.error.URLError:
+        pass
+
+
+def main():
+    while True:
+        services = collect_services()
+        send_heartbeat(services)
+        time.sleep(INTERVAL_SEC)
+
+
+if __name__ == "__main__":
+    main()
