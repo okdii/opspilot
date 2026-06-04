@@ -238,7 +238,7 @@ function fmtWindowSec(sec: number) { return sec >= 60 ? `${Math.round(sec / 60)}
 </template>
 
 <style scoped>
-.alerts-tab { padding: 4px 0; }
+.alerts-tab { padding: 4px 0 32px; }
 
 .sub-tabbar {
   display: flex;
