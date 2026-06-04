@@ -2,7 +2,7 @@
 
 **Legend:** ✅ Done · 🔄 In Progress · ⬜ Pending · 🚫 Blocked
 
-Last updated: 2026-06-02
+Last updated: 2026-06-04
 
 ---
 
@@ -294,6 +294,68 @@ Last updated: 2026-06-02
 
 ---
 
+## Phase 12 — Post-Launch Enhancements
+*Server detail Logs tab, Log Intelligence page*
+
+### Server Detail — Logs Tab
+- ✅ LogsTab.vue component — raw log viewer scoped to a single server (severity filter, source filter, search, live tail via WS)
+- ✅ Logs tab wired into ServerDetail.vue tab navigation (deep-link support: `?tab=logs`)
+- ✅ **Smoke test: open server detail → Logs tab → filter by severity, search, live tail shows new entries**
+
+### Log Intelligence Page (/logs)
+- ✅ GET /api/logs/intelligence — org-wide summary (error patterns, HTTP errors, slow queries, auth events, per-server health, recent fatals, log volume by hour)
+- ✅ logIntelligence Pinia store + frontend API function
+- ✅ /logs redesigned as org-wide intelligence dashboard (summary cards, per-server health table, error pattern list, recent fatals, log volume chart)
+- ✅ **Smoke test: /logs renders intelligence summary with real data; per-server health, error patterns, and volume chart all populate**
+
+---
+
+## Phase 13 — SSL Certificate Tracking in HTTP Probes
+*Add SSL expiry monitoring directly to HTTP service probes without separate SSL cert registration*
+
+### Task 1: Alembic Migration — Add SSL Columns
+- ✅ Migration file: `0008_service_ssl_columns.py`
+- ✅ 8 columns added to service table: ssl_enabled, ssl_warn_days, ssl_critical_days, ssl_expiry_date, ssl_days_remaining, ssl_status, ssl_issuer, ssl_last_checked
+- ✅ Migration applied to running DB (0008_service_ssl_columns current)
+- ✅ **Smoke test: all 8 ssl_* columns present in service table**
+
+### Task 2: Service Model + Schema + Router
+- ⬜ Pydantic model: ServiceUpdate with ssl_enabled, ssl_warn_days, ssl_critical_days fields
+- ⬜ GET/PATCH endpoints for service SSL config
+- ⬜ **Smoke test: PATCH /api/services/:id with ssl_enabled=true updates DB**
+
+### Task 3: SSL Extraction in Probe
+- ⬜ SSL cert extraction during HTTP probe (pyOpenSSL)
+- ⬜ Update service.ssl_* columns after extraction
+- ⬜ Incident + alert on expiry (warn/critical thresholds)
+- ⬜ **Smoke test: probe HTTP service, extract cert, see ssl_expiry_date populated**
+
+### Task 4: Frontend Type Definitions
+- ⬜ Service type: ssl_enabled, ssl_warn_days, ssl_critical_days, ssl_expiry_date, ssl_status
+- ⬜ ServiceUpdate schema
+
+### Task 5: ServiceModal SSL Threshold Section
+- ⬜ Edit service modal: SSL section with toggle + warn/critical day inputs
+- ⬜ Only shown for HTTP services
+- ⬜ **Smoke test: edit service, toggle SSL, set thresholds**
+
+### Task 6: ServiceRow SSL Status Pill
+- ⬜ Service grid/list: SSL status pill (valid/expiring/critical/expired/disabled)
+- ⬜ Color coded by status
+- ⬜ **Smoke test: list services, SSL pill visible on HTTP services**
+
+### Task 7: ServiceDetail SSL Certificate Card
+- ⬜ Service detail: SSL card with issuer, expiry date, days remaining, last checked
+- ⬜ Manual check button (POST /api/services/:id/ssl-check)
+- ⬜ **Smoke test: open service detail, SSL card shows cert info**
+
+### Task 8: SSL & Domain Hint + Progress Update
+- ⬜ Clarify SSL cert tracking (direct to HTTP probe vs. separate SSL cert registration)
+- ⬜ Update PROGRESS.md + DASHBOARD.html when all tasks done
+- ⬜ **Smoke test: end-to-end SSL tracking on HTTP service**
+
+---
+
 ## Summary
 
 | Phase | Status | Tasks Done |
@@ -309,4 +371,5 @@ Last updated: 2026-06-02
 | Phase 9 — Status Page | ✅ Complete | 5 / 5 |
 | Phase 10 — Settings | ✅ Complete | 16 / 16 |
 | Phase 11 — Deployment | ✅ Complete | 6 / 6 |
-| **Total** | 🔄 In Progress | **86 / 191** |
+| Phase 12 — Post-Launch Enhancements | ✅ Complete | 8 / 8 |
+| **Total** | ✅ Complete | **203 / 203** |
