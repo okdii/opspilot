@@ -372,33 +372,23 @@ async def log_intelligence(
     # 4. Slow queries from mariadb_slow
     slow_queries = None
     stmt = text("""
-        SELECT COUNT(*) AS total,
-               MAX(CASE WHEN raw->>'query_time' ~ '^[0-9.]+$'
-                        THEN (raw->>'query_time')::float ELSE 0 END) AS worst_s,
+        SELECT COUNT(*) OVER () AS total,
+               (raw->>'query_time')::float AS query_s,
+               message,
                server_id::text
         FROM server_logs
         WHERE server_id IN :sids AND time >= :frm AND source = 'mariadb_slow'
-        GROUP BY server_id
-        ORDER BY worst_s DESC
+          AND raw->>'query_time' ~ '^[0-9.]+$'
+        ORDER BY query_s DESC
         LIMIT 1
     """).bindparams(bindparam("sids", expanding=True))
     row = (await db.execute(stmt, {"sids": server_ids, "frm": frm})).one_or_none()
     if row and row[0]:
-        total_slow, worst_s, worst_sid = int(row[0]), float(row[1] or 0), str(row[2])
-        stmt2 = text("""
-            SELECT message
-            FROM server_logs
-            WHERE server_id IN :sids AND time >= :frm AND source = 'mariadb_slow'
-              AND raw->>'query_time' ~ '^[0-9.]+$'
-            ORDER BY (raw->>'query_time')::float DESC
-            LIMIT 1
-        """).bindparams(bindparam("sids", expanding=True))
-        msg_row = (await db.execute(stmt2, {"sids": server_ids, "frm": frm})).one_or_none()
         slow_queries = {
-            "total": total_slow,
-            "worst_duration_ms": round(worst_s * 1000),
-            "worst_query": msg_row[0] if msg_row else "",
-            "server_name": server_map.get(worst_sid, worst_sid),
+            "total": int(row[0]),
+            "worst_duration_ms": round(float(row[1]) * 1000),
+            "worst_query": row[2],
+            "server_name": server_map.get(str(row[3]), str(row[3])),
         }
 
     # 5. Auth failures
@@ -415,10 +405,20 @@ async def log_intelligence(
         LIMIT 5
     """).bindparams(bindparam("sids", expanding=True))
     rows = (await db.execute(stmt, {"sids": server_ids, "frm": frm})).all()
-    if rows:
-        failed_logins = sum(int(r[1]) for r in rows)
+    total_stmt = text("""
+        SELECT COUNT(*) AS n
+        FROM server_logs
+        WHERE server_id IN :sids AND time >= :frm AND source = 'auth'
+          AND (message ILIKE '%failed password%'
+               OR message ILIKE '%authentication failure%'
+               OR message ILIKE '%invalid user%')
+    """).bindparams(bindparam("sids", expanding=True))
+    total_row = (await db.execute(total_stmt, {"sids": server_ids, "frm": frm})).one_or_none()
+    total_failed = int(total_row[0]) if total_row else 0
+
+    if total_failed > 0:
         auth_events = {
-            "failed_logins": failed_logins,
+            "failed_logins": total_failed,
             "top_ips": [{"ip": r[0] or "unknown", "count": int(r[1])} for r in rows],
         }
 
@@ -469,11 +469,11 @@ async def log_intelligence(
         SELECT l.time, l.server_id::text, l.source, l.message,
                md5(l.time::text || '|' || l.server_id::text || '|' || l.source || '|' || l.message) AS id
         FROM server_logs l
-        WHERE l.server_id IN :sids AND l.severity = 'fatal'
+        WHERE l.server_id IN :sids AND l.severity = 'fatal' AND l.time >= :frm
         ORDER BY l.time DESC
         LIMIT 10
     """).bindparams(bindparam("sids", expanding=True))
-    rows = (await db.execute(stmt, {"sids": server_ids})).all()
+    rows = (await db.execute(stmt, {"sids": server_ids, "frm": frm})).all()
     recent_fatals = [
         {
             "id": r[4],
