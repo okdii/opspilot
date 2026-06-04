@@ -282,6 +282,17 @@ export interface LogFilters {
   to: string | null
 }
 
+export interface LogSummaryBand {
+  count: number
+  latest: LogEntry | null
+}
+
+export interface LogSummary {
+  fatal: LogSummaryBand
+  error: LogSummaryBand
+  warn:  LogSummaryBand
+}
+
 // --- Alerting (Phase 8, spec 10) -------------------------------------------
 
 export type AlertSeverity = 'critical' | 'warning'
