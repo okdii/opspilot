@@ -647,7 +647,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 .filters select:focus, .search:focus { border-color: var(--accent); }
 .search { flex: 1; min-width: 200px; }
 
-.table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
 table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 thead th { text-align: left; padding: 12px 14px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--surface-2); white-space: nowrap; }
 th.sortable { cursor: pointer; user-select: none; }
