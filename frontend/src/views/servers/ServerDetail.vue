@@ -14,6 +14,7 @@ import ProcessesTab from '@/components/servers/tabs/ProcessesTab.vue'
 import ServicesTab from '@/components/servers/tabs/ServicesTab.vue'
 import AlertsTab from '@/components/servers/tabs/AlertsTab.vue'
 import InfoTab from '@/components/servers/tabs/InfoTab.vue'
+import LogsTab from '@/components/servers/tabs/LogsTab.vue'
 import AgentStatusFooter from '@/components/servers/AgentStatusFooter.vue'
 import { getServer } from '@/services/api'
 import { useMetricsStore } from '@/stores/metrics'
@@ -38,14 +39,20 @@ const maintenanceOpen = ref(false)
 const menuOpen = ref(false)
 
 // --- Tabs ------------------------------------------------------------------
-const TABS = ['Info', 'Overview', 'CPU', 'Memory', 'Disk', 'Network', 'System', 'Processes', 'Services', 'Alerts'] as const
+const TABS = ['Info', 'Overview', 'CPU', 'Memory', 'Disk', 'Network', 'System', 'Processes', 'Services', 'Alerts', 'Logs'] as const
 type Tab = (typeof TABS)[number]
 const TAB_COMPONENTS = {
   Info: InfoTab, Overview: OverviewTab, CPU: CpuTab, Memory: MemoryTab,
   Disk: DiskTab, Network: NetworkTab, System: SystemTab, Processes: ProcessesTab,
-  Services: ServicesTab, Alerts: AlertsTab,
+  Services: ServicesTab, Alerts: AlertsTab, Logs: LogsTab,
 }
 const activeTab = ref<Tab>('Info')
+onMounted(() => {
+  const tab = route.query.tab as string | undefined
+  if (tab && (TABS as readonly string[]).includes(tab)) {
+    activeTab.value = tab as Tab
+  }
+})
 const RANGES: MetricRange[] = ['1h', '6h', '24h', '7d', '30d']
 const currentRange = computed(() => metrics.rangeFor(activeTab.value))
 function setRange(r: MetricRange) {
