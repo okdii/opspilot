@@ -11,7 +11,8 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from sqlalchemy import select
+from pydantic import BaseModel
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -19,6 +20,18 @@ from app.models.server import Server
 from app.services.ingestion import write_logs, write_metrics
 
 router = APIRouter(prefix="/api/ingest", tags=["ingest"])
+
+
+class _ServiceMetric(BaseModel):
+    name: str
+    status: str
+    cpu_pct: float | None = None
+    mem_mb: float | None = None
+    uptime_seconds: int | None = None
+
+
+class _HeartbeatPayload(BaseModel):
+    services: list[_ServiceMetric] | None = None
 
 
 async def _read_decoded_body(request: Request) -> bytes:
@@ -84,3 +97,37 @@ async def ingest_logs(
     records = payload if isinstance(payload, list) else [payload]
     count = await write_logs(server.id, records, db, org_id=server.org_id)
     return {"ok": True, "rows": count}
+
+
+@router.post("/heartbeat")
+async def ingest_heartbeat(
+    payload: _HeartbeatPayload,
+    server: Annotated[Server, Depends(_authenticated_server)],
+    db: AsyncSession = Depends(get_db),
+):
+    server.last_seen_at = datetime.now(timezone.utc)
+    if payload.services:
+        now = datetime.now(timezone.utc)
+        rows = [
+            {
+                "ts": now,
+                "sid": str(server.id),
+                "sname": s.name,
+                "status": s.status,
+                "cpu_pct": s.cpu_pct,
+                "mem_mb": s.mem_mb,
+                "uptime_seconds": s.uptime_seconds,
+            }
+            for s in payload.services
+        ]
+        await db.execute(
+            text("""
+                INSERT INTO server_service_metrics
+                    (time, server_id, service_name, status, cpu_pct, mem_mb, uptime_seconds)
+                VALUES
+                    (:ts, :sid, :sname, :status, :cpu_pct, :mem_mb, :uptime_seconds)
+            """),
+            rows,
+        )
+    await db.commit()
+    return {"ok": True}
