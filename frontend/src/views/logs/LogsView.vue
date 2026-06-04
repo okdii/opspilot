@@ -221,7 +221,7 @@ onUnmounted(() => {
               <div v-if="s.sparkline.length" class="sc-spark">
                 <span v-for="(v, i) in s.sparkline" :key="i"
                   class="spark-bar"
-                  :style="{ height: `${Math.max(2, Math.min(24, v))}px` }">
+                  :style="{ height: `${Math.max(2, Math.round((v / (Math.max(...s.sparkline) || 1)) * 24))}px` }">
                 </span>
               </div>
               <div class="sc-link">View logs →</div>
