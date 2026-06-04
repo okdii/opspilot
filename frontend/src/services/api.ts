@@ -14,6 +14,7 @@ import type {
   StartMaintenancePayload,
   LogsResponse,
   VolumeResponse,
+  LogSummary,
   Alert,
   AlertHistoryPage,
   AlertHistoryFilters,
@@ -187,6 +188,11 @@ export async function getLogs(params: Record<string, string>): Promise<LogsRespo
 
 export async function getLogVolume(params: Record<string, string>): Promise<VolumeResponse> {
   const { data } = await api.get<VolumeResponse>('/api/logs/volume', { params })
+  return data
+}
+
+export async function getLogSummary(params: Record<string, string>): Promise<LogSummary> {
+  const { data } = await api.get<LogSummary>('/api/logs/summary', { params })
   return data
 }
 
