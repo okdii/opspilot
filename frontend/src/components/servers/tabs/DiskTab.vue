@@ -162,19 +162,34 @@ const ioAwaitSeries = computed(() =>
   }),
 )
 
-// ── 7. Inode usage (only if any mount > 50%) ─────────────────────────────────
-const showInodes = computed(() =>
-  realMounts(labeledList(metrics.latestValues, 'disk.inodes_used_percent')).some(
-    (e) => (e.value ?? 0) > 50,
-  ),
+// ── 7. Inode Usage — partition list ──────────────────────────────────────────
+// Same shape as MountDetail — kept separate because fields are plain counts, not byte sizes.
+interface InodeMount {
+  path: string
+  pct: number
+  used: number | null
+  free: number | null
+  total: number | null
+}
+
+const inodeList = computed<InodeMount[]>(() =>
+  realMounts(labeledList(metrics.latestValues, 'disk.inodes_used_percent'))
+    .map((m) => ({
+      path: m.labels.path ?? m.labels.device ?? 'disk',
+      pct: m.value ?? 0,
+      used: bytesFor(m.labels.path ?? '', 'disk.inodes_used'),
+      free: bytesFor(m.labels.path ?? '', 'disk.inodes_free'),
+      total: bytesFor(m.labels.path ?? '', 'disk.inodes_total'),
+    }))
+    .sort((a, b) => b.pct - a.pct),
 )
-const inodeSeries = computed(() => {
-  if (!showInodes.value) return []
-  return realMounts(labeledList(metrics.latestValues, 'disk.inodes_used_percent')).map((e) => ({
-    name: e.labels.path ?? 'inodes',
-    data: [[Date.now(), e.value] as [number, number | null]],
-  }))
-})
+
+// Stricter ceiling than disk space (85) — inode exhaustion is silent and unrecoverable.
+function inodePctClass(pct: number): string {
+  if (pct >= 90) return 'pct-red'
+  if (pct >= 70) return 'pct-amber'
+  return 'pct-green'
+}
 
 const deviceLabel = computed(() => (ioDevices.value.length ? selectedDevice.value : ''))
 </script>
@@ -247,10 +262,26 @@ const deviceLabel = computed(() => (ioDevices.value.length ? selectedDevice.valu
       <MetricChart type="line" unit="ms" :series="ioAwaitSeries" :height="240" />
     </section>
 
-    <!-- 7. Inode usage (only if any mount > 50%) -->
-    <section v-if="showInodes" class="card">
+    <!-- 7. Inode Usage -->
+    <section class="card">
       <h3>Inode Usage</h3>
-      <MetricChart type="bar" unit="%" :series="inodeSeries" :height="200" />
+      <div v-if="inodeList.length" class="partition-list">
+        <div v-for="m in inodeList" :key="m.path" class="partition-row">
+          <div class="partition-head">
+            <span class="partition-path">{{ m.path }}</span>
+            <span class="partition-pct" :class="inodePctClass(m.pct)">
+              {{ m.pct.toFixed(2) }}%
+            </span>
+          </div>
+          <MetricBar label="" :value="m.pct" class="partition-bar" />
+          <div class="partition-sub">
+            <span>{{ m.used?.toLocaleString() }} used</span>
+            <span class="partition-free">{{ m.free?.toLocaleString() }} free</span>
+            <span class="partition-total">of {{ m.total?.toLocaleString() }}</span>
+          </div>
+        </div>
+      </div>
+      <p v-else class="empty">No inode data.</p>
     </section>
   </div>
 </template>
