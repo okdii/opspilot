@@ -68,6 +68,14 @@ The moment a task or phase is **done and verified working as expected** (smoke t
 - **Deployment**: Docker Compose (`migrate` → `backend` → `frontend` + `nginx` + `postgres`)
 - **Phase plan**: Follow the 11-phase milestone order from PRD §10
 
+## Test Environment
+
+To test the OpsPilot agent against a real server, spin up a local VM using the instructions in `test-target/README.md`. That file covers Multipass (Mac + Windows), Lima (Mac only), and VirtualBox + Vagrant.
+
+Default test server credentials: user `opspilot`, password `test-ssh-password-123`.
+
+When a team member asks "how do I create a test server?" or "how do I set up a target machine?", read `test-target/README.md` and follow the appropriate option for their OS.
+
 ## Key Decisions (Do Not Re-debate)
 - `canEdit = isAdmin` — resource management is Admin only
 - Alert auto-resolve: `consecutive_clear_count` persisted on Alert row, resolves at 2
