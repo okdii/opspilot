@@ -191,63 +191,83 @@ function inodePctClass(pct: number): string {
   return 'pct-green'
 }
 
+const inodeDonutList = computed(() => {
+  const list = inodeList.value.map((m) => ({ path: m.path, pct: m.pct }))
+  if (list.length <= 3) return list
+  const top = list.slice(0, 3)
+  const otherPct = list.slice(3).reduce((sum, m) => sum + m.pct, 0)
+  return [...top, { path: 'Other', pct: otherPct }]
+})
+const inodeDonutSeries = computed(() => inodeDonutList.value.map((m) => m.pct))
+const inodeDonutLabels = computed(() => inodeDonutList.value.map((m) => m.path))
+
 const deviceLabel = computed(() => (ioDevices.value.length ? selectedDevice.value : ''))
 </script>
 
 <template>
   <div class="disk">
-    <!-- 1. Disk Space — Current + Partitions -->
-    <section class="card">
-      <h3>Disk Space — Current</h3>
-      <div v-if="allMounts.length" class="disk-current">
-        <MetricChart
-          type="donut"
-          unit="%"
-          :series="donutSeries"
-          :labels="donutLabels"
-          :height="260"
-        />
-        <div class="partition-list">
-          <div v-for="m in allMounts" :key="m.path" class="partition-row">
-            <div class="partition-head">
-              <span class="partition-path">{{ m.path }}</span>
-              <span class="partition-pct" :class="m.pct >= 85 ? 'pct-red' : m.pct >= 70 ? 'pct-amber' : 'pct-green'">
-                {{ Math.round(m.pct) }}%
-              </span>
-            </div>
-            <MetricBar label="" :value="m.pct" class="partition-bar" />
-            <div class="partition-sub">
-              <span>{{ humanBytes(m.used) }} used</span>
-              <span class="partition-free">{{ humanBytes(m.free) }} free</span>
-              <span class="partition-total">of {{ humanBytes(m.total) }}</span>
+    <!-- 1+2. Disk Space + Inode Usage — side by side -->
+    <div class="disk-top-row">
+      <section class="card">
+        <h3>Disk Space — Current</h3>
+        <div v-if="allMounts.length" class="disk-current">
+          <MetricChart
+            type="donut"
+            unit="%"
+            :series="donutSeries"
+            :labels="donutLabels"
+            :height="260"
+          />
+          <div class="partition-list">
+            <div v-for="m in allMounts" :key="m.path" class="partition-row">
+              <div class="partition-head">
+                <span class="partition-path">{{ m.path }}</span>
+                <span class="partition-pct" :class="m.pct >= 85 ? 'pct-red' : m.pct >= 70 ? 'pct-amber' : 'pct-green'">
+                  {{ Math.round(m.pct) }}%
+                </span>
+              </div>
+              <MetricBar label="" :value="m.pct" class="partition-bar" />
+              <div class="partition-sub">
+                <span>{{ humanBytes(m.used) }} used</span>
+                <span class="partition-free">{{ humanBytes(m.free) }} free</span>
+                <span class="partition-total">of {{ humanBytes(m.total) }}</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-      <p v-else class="empty">No disk data.</p>
-    </section>
+        <p v-else class="empty">No disk data.</p>
+      </section>
 
-    <!-- 2. Inode Usage -->
-    <section class="card">
-      <h3>Inode Usage</h3>
-      <div v-if="inodeList.length" class="partition-list">
-        <div v-for="m in inodeList" :key="m.path" class="partition-row">
-          <div class="partition-head">
-            <span class="partition-path">{{ m.path }}</span>
-            <span class="partition-pct" :class="inodePctClass(m.pct)">
-              {{ m.pct.toFixed(2) }}%
-            </span>
-          </div>
-          <MetricBar label="" :value="m.pct" class="partition-bar" />
-          <div class="partition-sub">
-            <span>{{ m.used?.toLocaleString() }} used</span>
-            <span class="partition-free">{{ m.free?.toLocaleString() }} free</span>
-            <span class="partition-total">of {{ m.total?.toLocaleString() }}</span>
+      <section class="card">
+        <h3>Inode Usage</h3>
+        <div v-if="inodeList.length" class="disk-current">
+          <MetricChart
+            type="donut"
+            unit="%"
+            :series="inodeDonutSeries"
+            :labels="inodeDonutLabels"
+            :height="260"
+          />
+          <div class="partition-list">
+            <div v-for="m in inodeList" :key="m.path" class="partition-row">
+              <div class="partition-head">
+                <span class="partition-path">{{ m.path }}</span>
+                <span class="partition-pct" :class="inodePctClass(m.pct)">
+                  {{ m.pct.toFixed(2) }}%
+                </span>
+              </div>
+              <MetricBar label="" :value="m.pct" class="partition-bar" />
+              <div class="partition-sub">
+                <span>{{ m.used?.toLocaleString() }} used</span>
+                <span class="partition-free">{{ m.free?.toLocaleString() }} free</span>
+                <span class="partition-total">of {{ m.total?.toLocaleString() }}</span>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-      <p v-else class="empty">No inode data.</p>
-    </section>
+        <p v-else class="empty">No inode data.</p>
+      </section>
+    </div>
 
     <!-- 3. Disk Space History -->
     <section class="card">
@@ -288,6 +308,8 @@ const deviceLabel = computed(() => (ioDevices.value.length ? selectedDevice.valu
 
 <style scoped>
 .disk { display: flex; flex-direction: column; gap: 16px; }
+.disk-top-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 960px) { .disk-top-row { grid-template-columns: 1fr; } }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
 .card h3 { font-size: 13px; color: var(--text); margin-bottom: 12px; font-weight: 600; }
 .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
