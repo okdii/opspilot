@@ -293,3 +293,216 @@ async def log_volume(
             b[sev] += n
 
     return {"buckets": list(buckets.values()), "bucket_seconds": bucket_seconds}
+
+
+@router.get("/intelligence")
+async def log_intelligence(
+    user: CurrentUser,
+    org_id: str = Query(...),
+    range: str = Query("24h"),
+    db: AsyncSession = Depends(get_db),
+):
+    valid_ranges = {"1h": 1, "6h": 6, "24h": 24}
+    hours = valid_ranges.get(range, 24)
+    frm = datetime.now(timezone.utc) - timedelta(hours=hours)
+
+    servers = await _resolve_scope(user, db, org_id, None)
+    if not servers:
+        return _empty_intelligence()
+    server_ids = [str(s.id) for s in servers]
+    server_map = {str(s.id): s.name for s in servers}
+
+    # 1. Severity summary
+    stmt = text("""
+        SELECT COALESCE(NULLIF(severity, ''), 'info') as sev, COUNT(*) as n
+        FROM server_logs
+        WHERE server_id IN :sids AND time >= :frm
+        GROUP BY sev
+    """).bindparams(bindparam("sids", expanding=True))
+    rows = (await db.execute(stmt, {"sids": server_ids, "frm": frm})).all()
+    summary: dict = {"fatal": 0, "error": 0, "warn": 0, "info": 0, "debug": 0}
+    for sev, n in rows:
+        if sev in summary:
+            summary[sev] += int(n)
+
+    # 2. Top recurring errors (group by truncated message)
+    stmt = text("""
+        SELECT LEFT(message, 150) as msg, COUNT(*) as n, source, MAX(time) as last_seen
+        FROM server_logs
+        WHERE server_id IN :sids AND time >= :frm AND severity IN ('error', 'fatal')
+        GROUP BY LEFT(message, 150), source
+        ORDER BY n DESC
+        LIMIT 8
+    """).bindparams(bindparam("sids", expanding=True))
+    rows = (await db.execute(stmt, {"sids": server_ids, "frm": frm})).all()
+    top_errors = [
+        {"message": r[0], "count": int(r[1]), "source": r[2], "last_seen": r[3].isoformat()}
+        for r in rows
+    ]
+
+    # 3. HTTP errors from nginx_access
+    http_errors = None
+    stmt = text("""
+        SELECT
+            COUNT(*) FILTER (WHERE raw->>'status_code' ~ '^[0-9]+$' AND (raw->>'status_code')::int >= 500) AS total_5xx,
+            COUNT(*) FILTER (WHERE raw->>'status_code' ~ '^[0-9]+$' AND (raw->>'status_code')::int BETWEEN 400 AND 499) AS total_4xx
+        FROM server_logs
+        WHERE server_id IN :sids AND time >= :frm AND source = 'nginx_access'
+    """).bindparams(bindparam("sids", expanding=True))
+    row = (await db.execute(stmt, {"sids": server_ids, "frm": frm})).one_or_none()
+    if row and (row[0] or row[1]):
+        total_5xx, total_4xx = int(row[0] or 0), int(row[1] or 0)
+        stmt2 = text("""
+            SELECT raw->>'url' AS url, (raw->>'status_code')::int AS status, COUNT(*) AS n
+            FROM server_logs
+            WHERE server_id IN :sids AND time >= :frm AND source = 'nginx_access'
+              AND raw->>'status_code' ~ '^[0-9]+$'
+              AND (raw->>'status_code')::int >= 400
+            GROUP BY url, status
+            ORDER BY n DESC
+            LIMIT 5
+        """).bindparams(bindparam("sids", expanding=True))
+        url_rows = (await db.execute(stmt2, {"sids": server_ids, "frm": frm})).all()
+        http_errors = {
+            "total_5xx": total_5xx,
+            "total_4xx": total_4xx,
+            "top_urls": [{"url": r[0], "status": r[1], "count": int(r[2])} for r in url_rows],
+        }
+
+    # 4. Slow queries from mariadb_slow
+    slow_queries = None
+    stmt = text("""
+        SELECT COUNT(*) AS total,
+               MAX(CASE WHEN raw->>'query_time' ~ '^[0-9.]+$'
+                        THEN (raw->>'query_time')::float ELSE 0 END) AS worst_s,
+               server_id::text
+        FROM server_logs
+        WHERE server_id IN :sids AND time >= :frm AND source = 'mariadb_slow'
+        GROUP BY server_id
+        ORDER BY worst_s DESC
+        LIMIT 1
+    """).bindparams(bindparam("sids", expanding=True))
+    row = (await db.execute(stmt, {"sids": server_ids, "frm": frm})).one_or_none()
+    if row and row[0]:
+        total_slow, worst_s, worst_sid = int(row[0]), float(row[1] or 0), str(row[2])
+        stmt2 = text("""
+            SELECT message
+            FROM server_logs
+            WHERE server_id IN :sids AND time >= :frm AND source = 'mariadb_slow'
+              AND raw->>'query_time' ~ '^[0-9.]+$'
+            ORDER BY (raw->>'query_time')::float DESC
+            LIMIT 1
+        """).bindparams(bindparam("sids", expanding=True))
+        msg_row = (await db.execute(stmt2, {"sids": server_ids, "frm": frm})).one_or_none()
+        slow_queries = {
+            "total": total_slow,
+            "worst_duration_ms": round(worst_s * 1000),
+            "worst_query": msg_row[0] if msg_row else "",
+            "server_name": server_map.get(worst_sid, worst_sid),
+        }
+
+    # 5. Auth failures
+    auth_events = None
+    stmt = text("""
+        SELECT raw->>'source_ip' AS ip, COUNT(*) AS n
+        FROM server_logs
+        WHERE server_id IN :sids AND time >= :frm AND source = 'auth'
+          AND (message ILIKE '%failed password%'
+               OR message ILIKE '%authentication failure%'
+               OR message ILIKE '%invalid user%')
+        GROUP BY raw->>'source_ip'
+        ORDER BY n DESC
+        LIMIT 5
+    """).bindparams(bindparam("sids", expanding=True))
+    rows = (await db.execute(stmt, {"sids": server_ids, "frm": frm})).all()
+    if rows:
+        failed_logins = sum(int(r[1]) for r in rows)
+        auth_events = {
+            "failed_logins": failed_logins,
+            "top_ips": [{"ip": r[0] or "unknown", "count": int(r[1])} for r in rows],
+        }
+
+    # 6. Per-server breakdown + sparkline
+    stmt = text("""
+        SELECT server_id::text,
+               COUNT(*) FILTER (WHERE severity = 'fatal') AS fatal,
+               COUNT(*) FILTER (WHERE severity = 'error') AS error,
+               COUNT(*) FILTER (WHERE severity = 'warn')  AS warn
+        FROM server_logs
+        WHERE server_id IN :sids AND time >= :frm
+        GROUP BY server_id
+    """).bindparams(bindparam("sids", expanding=True))
+    rows = (await db.execute(stmt, {"sids": server_ids, "frm": frm})).all()
+    counts_by_server = {r[0]: (int(r[1]), int(r[2]), int(r[3])) for r in rows}
+
+    bucket_secs = max(600, (hours * 3600) // 6)
+    stmt2 = text("""
+        SELECT server_id::text,
+               time_bucket(make_interval(secs => :bsec), time) AS bucket,
+               COUNT(*) FILTER (WHERE severity IN ('error', 'fatal')) AS n
+        FROM server_logs
+        WHERE server_id IN :sids AND time >= :frm
+        GROUP BY server_id, bucket
+        ORDER BY bucket ASC
+    """).bindparams(bindparam("sids", expanding=True))
+    spark_rows = (await db.execute(stmt2, {"sids": server_ids, "frm": frm, "bsec": bucket_secs})).all()
+    sparklines: dict[str, list[int]] = {sid: [] for sid in server_ids}
+    for sid, _bucket, n in spark_rows:
+        sparklines[str(sid)].append(int(n))
+
+    per_server = []
+    for s in servers:
+        sid = str(s.id)
+        fatal, error, warn = counts_by_server.get(sid, (0, 0, 0))
+        per_server.append({
+            "server_id": sid,
+            "server_name": s.name,
+            "fatal": fatal,
+            "error": error,
+            "warn": warn,
+            "sparkline": sparklines.get(sid, []),
+        })
+    per_server.sort(key=lambda x: x["fatal"] * 100 + x["error"], reverse=True)
+
+    # 7. Recent fatals (last 10, regardless of range)
+    stmt = text("""
+        SELECT l.time, l.server_id::text, l.source, l.message,
+               md5(l.time::text || '|' || l.server_id::text || '|' || l.source || '|' || l.message) AS id
+        FROM server_logs l
+        WHERE l.server_id IN :sids AND l.severity = 'fatal'
+        ORDER BY l.time DESC
+        LIMIT 10
+    """).bindparams(bindparam("sids", expanding=True))
+    rows = (await db.execute(stmt, {"sids": server_ids})).all()
+    recent_fatals = [
+        {
+            "id": r[4],
+            "time": r[0].isoformat(),
+            "server_name": server_map.get(str(r[1]), str(r[1])),
+            "source": r[2],
+            "message": r[3],
+        }
+        for r in rows
+    ]
+
+    return {
+        "summary": summary,
+        "top_errors": top_errors,
+        "http_errors": http_errors,
+        "slow_queries": slow_queries,
+        "auth_events": auth_events,
+        "per_server": per_server,
+        "recent_fatals": recent_fatals,
+    }
+
+
+def _empty_intelligence() -> dict:
+    return {
+        "summary": {"fatal": 0, "error": 0, "warn": 0, "info": 0, "debug": 0},
+        "top_errors": [],
+        "http_errors": None,
+        "slow_queries": None,
+        "auth_events": None,
+        "per_server": [],
+        "recent_fatals": [],
+    }
