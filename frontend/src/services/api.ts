@@ -6,6 +6,7 @@ import type {
   MaintenanceState,
   MetricRange,
   MetricsResponse,
+  MonitoringService,
   ProcessSnapshot,
   RecentAlert,
   Server,
@@ -127,6 +128,11 @@ export async function getServerServices(
     `/api/servers/${serverId}/services`,
     { params },
   )
+  return data
+}
+
+export async function getServerMonitoring(serverId: string): Promise<MonitoringService[]> {
+  const { data } = await api.get<MonitoringService[]>(`/api/servers/${serverId}/monitoring`)
   return data
 }
 

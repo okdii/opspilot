@@ -163,6 +163,30 @@ async def list_services(org_id: str, user: CurrentUser, db: AsyncSession = Depen
     return [await _service_to_out(svc, server_name, db) for svc, server_name in rows]
 
 
+@router.get("/api/servers/{server_id}/monitoring", response_model=list[ServiceOut])
+async def list_server_monitoring(
+    server_id: str, user: CurrentUser, db: AsyncSession = Depends(get_db)
+):
+    server = await db.get(Server, server_id)
+    if not server:
+        raise HTTPException(404, detail={"error": "not_found", "message": "Server not found."})
+    if user.role != "admin":
+        membership = await db.scalar(
+            select(UserOrganization).where(
+                UserOrganization.user_id == user.id,
+                UserOrganization.org_id == server.org_id,
+            )
+        )
+        if not membership:
+            raise HTTPException(403, detail={"error": "forbidden", "message": "Access denied."})
+    rows = (
+        await db.execute(
+            select(Service).where(Service.server_id == server_id).order_by(Service.name)
+        )
+    ).scalars().all()
+    return [await _service_to_out(svc, server.name, db) for svc in rows]
+
+
 @router.get("/api/services/{service_id}", response_model=ServiceOut)
 async def get_service(service_id: str, user: CurrentUser, db: AsyncSession = Depends(get_db)):
     service = await _get_accessible_service(service_id, user, db)

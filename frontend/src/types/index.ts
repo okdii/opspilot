@@ -214,6 +214,22 @@ export interface ServerServiceEntry {
   uptime_seconds: number | null
 }
 
+// --- Monitoring checks (HTTP/TCP probes) ------------------------------------
+
+export type MonitoringServiceStatus = 'up' | 'down' | 'timeout' | null
+export type MonitoringServiceType = 'http' | 'tcp' | 'db'
+
+export interface MonitoringService {
+  id: string
+  name: string
+  type: MonitoringServiceType
+  url: string | null
+  port: number | null
+  last_status: MonitoringServiceStatus
+  uptime_24h: number | null
+  avg_response_ms_24h: number | null
+}
+
 // --- Log Viewer (Phase 3, spec 05) -----------------------------------------
 
 export type LogSource =
