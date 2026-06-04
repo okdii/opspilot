@@ -39,7 +39,7 @@ const atTop = ref(true)
 
 let unbindWs: (() => void) | null = null
 let searchTimer: number | null = null
-let subscribedServer = false
+const subscribedServer = ref(false)
 
 // Local filtersActive: excludes serverIds (that's the scope, not a user filter)
 const filtersActive = computed(() => {
@@ -102,10 +102,8 @@ function clearSearch(): void {
 }
 
 function clearFilters(): void {
-  logs.setFilter('sources', [...ALL_SOURCES])
-  logs.setFilter('severities', [...ALL_SEVERITIES])
-  logs.setFilter('search', '')
-  logs.setFilter('range', '1h')
+  logs.clearFilters()
+  logs.setFilter('serverIds', [serverId.value])
   reload()
 }
 
@@ -139,18 +137,18 @@ function scrollToTop(): void {
 
 function startLiveTail(): void {
   logs.setLiveTail(true)
-  if (!subscribedServer && serverId.value) {
+  if (!subscribedServer.value && serverId.value) {
     wsClient.send({ action: 'subscribe_logs', server_id: serverId.value })
     wsClient.send({ action: 'subscribe', server_id: serverId.value })
-    subscribedServer = true
+    subscribedServer.value = true
   }
 }
 
 function stopLiveTail(): void {
   logs.setLiveTail(false)
-  if (subscribedServer && serverId.value) {
+  if (subscribedServer.value && serverId.value) {
     wsClient.send({ action: 'unsubscribe_logs', server_id: serverId.value })
-    subscribedServer = false
+    subscribedServer.value = false
   }
 }
 
@@ -186,6 +184,7 @@ function onFilterIp(ip: string): void {
 onMounted(async () => {
   unbindWs = wsClient.on(handleWsMessage)
   logs.reset()
+  if (!serverId.value) return
   logs.setFilter('serverIds', [serverId.value])
   await reload()
 })
