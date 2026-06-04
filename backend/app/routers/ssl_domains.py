@@ -15,12 +15,14 @@ from app.database import get_db
 from app.deps import AdminUser, CurrentUser
 from app.jobs.scheduler import scheduler
 from app.models.organization import Organization
-from app.models.other import Alert, Domain, SSLCert
+from app.models.other import Alert, Domain, Service, SSLCert
+from app.models.server import Server
 from app.models.user import UserOrganization
 from app.schemas.ssl_domains import (
     DomainCreate,
     DomainOut,
     DomainUpdate,
+    ServiceSslOut,
     SSLCertCreate,
     SSLCertOut,
     SSLCertUpdate,
@@ -119,9 +121,26 @@ async def list_ssl_domains(org_id: str, user: CurrentUser, db: AsyncSession = De
             await db.execute(select(SSLCert).where(SSLCert.domain_id.in_(domain_ids)))
         ).scalars().all()
 
+    # Fetch HTTPS services for this org
+    server_ids_result = await db.execute(
+        select(Server.id).where(Server.org_id == org_id)
+    )
+    server_ids = [str(sid) for sid in server_ids_result.scalars().all()]
+    service_ssl_rows: list[Service] = []
+    if server_ids:
+        service_ssl_rows = (
+            await db.execute(
+                select(Service).where(
+                    Service.server_id.in_(server_ids),
+                    Service.ssl_enabled == True,  # noqa: E712
+                )
+            )
+        ).scalars().all()
+
     return SSLDomainsResponse(
         domains=[_domain_out(d) for d in domains],
         ssl_certs=[_ssl_out(c, domain_name_by_id.get(c.domain_id)) for c in ssl_certs],
+        service_ssl=[ServiceSslOut.model_validate(s) for s in service_ssl_rows],
     )
 
 

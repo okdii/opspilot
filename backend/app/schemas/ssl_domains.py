@@ -112,6 +112,22 @@ class SSLCertOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ServiceSslOut(BaseModel):
+    id: UUID
+    name: str
+    url: str
+    ssl_status: str | None
+    ssl_expiry_date: datetime | None
+    ssl_days_remaining: int | None
+    ssl_issuer: str | None
+    ssl_last_checked: datetime | None
+    ssl_warn_days: int
+    ssl_critical_days: int
+
+    model_config = {"from_attributes": True}
+
+
 class SSLDomainsResponse(BaseModel):
     domains: list[DomainOut]
     ssl_certs: list[SSLCertOut]
+    service_ssl: list[ServiceSslOut]
