@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { useOrgStore } from '@/stores/org'
 import { useAuthStore } from '@/stores/auth'
 import { useSslDomainStore, type CombinedRow } from '@/stores/sslDomains'
@@ -9,6 +10,7 @@ import { PageHeader, StatusBadge, EmptyState, SlideOver } from '@/components/ui'
 import ExpiryBar from '@/components/ssl-domains/ExpiryBar.vue'
 import ExpiryTimeline from '@/components/ssl-domains/ExpiryTimeline.vue'
 
+const router = useRouter()
 const orgStore = useOrgStore()
 const auth = useAuthStore()
 const store = useSslDomainStore()
@@ -26,7 +28,7 @@ watch(() => orgStore.activeOrgId, load)
 onUnmounted(() => store.reset())
 
 // ── Filters + sort ──────────────────────────────────────────────────────────
-const typeFilter = ref<'all' | 'domain' | 'ssl'>('all')
+const typeFilter = ref<'all' | 'domain' | 'ssl' | 'service'>('all')
 const statusFilter = ref<'all' | string>('all')
 const search = ref('')
 const debouncedSearch = ref('')
@@ -136,7 +138,8 @@ async function checkNow(r: CombinedRow) {
   checking[r.id] = true
   try {
     if (r.type === 'domain') await store.checkDomain(r.id)
-    else await store.checkCert(r.id)
+    else if (r.type === 'ssl') await store.checkCert(r.id)
+    else return
     notify.info(`Re-checking ${rowName(r)}… this may take a few seconds.`)
     if (r.type === 'domain' || r.type === 'ssl') {
       await store.pollUntilChecked(orgStore.activeOrgId, r.type, r.id)
@@ -425,6 +428,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
           <option value="all">All Types</option>
           <option value="domain">Domain</option>
           <option value="ssl">SSL</option>
+          <option value="service">Service</option>
         </select>
         <select v-model="statusFilter">
           <option value="all">All Status</option>
@@ -457,11 +461,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
               v-for="r in sorted"
               :id="`row-${r.id}`"
               :key="r.id"
-              :class="{ highlight: highlightId === r.id, 'is-ssl': r.type === 'ssl' }"
+              :class="{ highlight: highlightId === r.id, 'is-ssl': r.type === 'ssl' || r.type === 'service' }"
             >
               <td class="name">{{ rowName(r) }}</td>
               <td>
-                <span class="type-badge" :class="r.type">{{ r.type === 'ssl' ? 'SSL' : 'Domain' }}</span>
+                <span class="type-badge" :class="r.type">{{ r.type === 'ssl' ? 'SSL' : r.type === 'service' ? 'Service' : 'Domain' }}</span>
               </td>
               <td class="mono">{{ fmtDate(r.expiryDate) }}</td>
               <td class="num mono">{{ daysLabel(r) }}</td>
@@ -478,11 +482,16 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
               <td v-if="canEdit" class="kebab-col" @click.stop>
                 <button class="kebab" aria-label="Row actions" @click="openMenuId = openMenuId === r.id ? null : r.id">⋮</button>
                 <div v-if="openMenuId === r.id" class="kebab-menu">
-                  <button class="kmi" @click="checkNow(r)">Check Now</button>
-                  <button v-if="r.type === 'domain' && !store.domainIdsWithCert.has(r.id)" class="kmi" @click="openAddSsl(r)">Add SSL Cert</button>
-                  <button class="kmi" @click="r.type === 'domain' ? openEditDomain(r) : openEditSsl(r)">Edit</button>
-                  <div class="kmi-div"></div>
-                  <button class="kmi danger" @click="askDelete(r)">Delete</button>
+                  <template v-if="r.type === 'service'">
+                    <button class="kmi" @click="router.push(`/services/${r.serviceId}`)">View in Services →</button>
+                  </template>
+                  <template v-else>
+                    <button class="kmi" @click="checkNow(r)">Check Now</button>
+                    <button v-if="r.type === 'domain' && !store.domainIdsWithCert.has(r.id)" class="kmi" @click="openAddSsl(r)">Add SSL Cert</button>
+                    <button class="kmi" @click="r.type === 'domain' ? openEditDomain(r) : openEditSsl(r)">Edit</button>
+                    <div class="kmi-div"></div>
+                    <button class="kmi danger" @click="askDelete(r)">Delete</button>
+                  </template>
                 </div>
               </td>
             </tr>
@@ -671,6 +680,7 @@ tr.highlight td { outline: 2px solid var(--amber); outline-offset: -2px; animati
 .type-badge { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 4px; }
 .type-badge.domain { background: rgba(99,102,241,0.15); color: var(--accent-2); }
 .type-badge.ssl { background: rgba(6,182,212,0.15); color: #22d3ee; }
+.type-badge.service { background: rgba(168,85,247,0.15); color: #c084fc; }
 .checking { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
 .no-match { padding: 28px; text-align: center; color: var(--muted); font-size: 13px; }
 

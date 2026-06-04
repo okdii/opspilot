@@ -106,10 +106,10 @@ const options = computed<ApexOptions>(() => ({
       const p = series.value[0].data[dataPointIndex] as { meta: TimelineDot } | undefined
       if (!p) return ''
       const m = p.meta
-      const kind = m.type === 'ssl' ? 'SSL Certificate' : 'Domain Registration'
+      const kind = m.type === 'ssl' ? 'SSL Certificate' : m.type === 'service' ? 'Service SSL' : 'Domain Registration'
       const exp = m.expiryDate?.slice(0, 10) ?? '—'
       const days = m.daysRemaining == null ? '—' : `${m.daysRemaining}`
-      const issuerLine = m.type === 'ssl'
+      const issuerLine = m.type === 'ssl' || m.type === 'service'
         ? `<div class="tl-row">Issuer: ${escapeHtml(m.issuer ?? '—')}</div>`
         : `<div class="tl-row">Registrar: ${escapeHtml(m.registrar ?? '—')}</div>`
       return (
