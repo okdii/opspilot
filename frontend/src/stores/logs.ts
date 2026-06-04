@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { getLogs, getLogVolume } from '@/services/api'
+import { getLogs, getLogVolume, getLogSummary } from '@/services/api'
 import type {
-  LogEntry, LogFilters, LogSeverity, LogSource, LogTimeRange, VolumeBucket,
+  LogEntry, LogFilters, LogSeverity, LogSource, LogSummary, LogTimeRange, VolumeBucket,
 } from '@/types'
 
 export const ALL_SOURCES: LogSource[] = [
@@ -45,6 +45,7 @@ export const useLogStore = defineStore('logs', () => {
   const newEntryCount = ref(0)
   const filters = ref<LogFilters>(defaultFilters())
   const volumeData = ref<VolumeBucket[]>([])
+  const summary = ref<LogSummary | null>(null)
 
   const orgId = ref<string | null>(null)
 
@@ -137,8 +138,20 @@ export const useLogStore = defineStore('logs', () => {
     }
   }
 
+  async function fetchSummary(): Promise<void> {
+    if (!orgId.value && !filters.value.serverIds.length) return
+    try {
+      const params = buildParams()
+      delete params.severities  // summary always covers all severities
+      const res = await getLogSummary(params)
+      summary.value = res
+    } catch {
+      summary.value = null
+    }
+  }
+
   async function refresh(): Promise<void> {
-    await Promise.all([fetchLogs(), fetchVolume()])
+    await Promise.all([fetchLogs(), fetchVolume(), fetchSummary()])
   }
 
   /** True when an incoming live entry passes the active filters (spec §8.4). */
@@ -199,14 +212,15 @@ export const useLogStore = defineStore('logs', () => {
     liveTailActive.value = false
     newEntryCount.value = 0
     volumeData.value = []
+    summary.value = null
     filters.value = defaultFilters()
   }
 
   return {
     entries, nextCursor, limitReached, loading, loadingMore, error,
-    liveTailActive, newEntryCount, filters, volumeData, orgId,
+    liveTailActive, newEntryCount, filters, volumeData, summary, orgId,
     filtersActive,
-    setOrg, fetchLogs, fetchMore, fetchVolume, refresh,
+    setOrg, fetchLogs, fetchMore, fetchVolume, fetchSummary, refresh,
     matchesFilters, appendLiveEntry, setLiveTail, resetNewCount,
     setFilter, clearFilters, reset, resolveRange,
   }
