@@ -21,6 +21,8 @@ class ServiceCreate(BaseModel):
     is_active: bool = True
     is_public: bool = False
     ignore_ssl_errors: bool = False
+    ssl_warn_days: int = 30
+    ssl_critical_days: int = 7
 
     @field_validator("name")
     @classmethod
@@ -81,6 +83,8 @@ class ServiceUpdate(BaseModel):
     is_active: bool | None = None
     is_public: bool | None = None
     ignore_ssl_errors: bool | None = None
+    ssl_warn_days: int | None = None
+    ssl_critical_days: int | None = None
 
     @field_validator("name")
     @classmethod
@@ -150,3 +154,11 @@ class ServiceOut(BaseModel):
     uptime_7d: float | None
     avg_response_ms_24h: int | None
     open_incident_id: str | None
+    ssl_enabled: bool
+    ssl_warn_days: int
+    ssl_critical_days: int
+    ssl_expiry_date: datetime | None
+    ssl_days_remaining: int | None
+    ssl_status: str | None
+    ssl_issuer: str | None
+    ssl_last_checked: datetime | None

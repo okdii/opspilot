@@ -18,7 +18,7 @@ from app.models.other import Alert, Incident, Service
 from app.models.server import Server
 from app.models.user import UserOrganization
 from app.schemas.service import ServiceCreate, ServiceOut, ServiceUpdate
-from app.services import probe
+from app.services import alerting, probe
 
 router = APIRouter(tags=["services"])
 
@@ -143,6 +143,14 @@ async def _service_to_out(service: Service, server_name: str, db: AsyncSession) 
         uptime_7d=await _uptime_pct(db, sid, "7 days"),
         avg_response_ms_24h=await _avg_response_24h(db, sid),
         open_incident_id=await _open_incident_id(db, sid),
+        ssl_enabled=service.ssl_enabled,
+        ssl_warn_days=service.ssl_warn_days,
+        ssl_critical_days=service.ssl_critical_days,
+        ssl_expiry_date=service.ssl_expiry_date,
+        ssl_days_remaining=service.ssl_days_remaining,
+        ssl_status=service.ssl_status,
+        ssl_issuer=service.ssl_issuer,
+        ssl_last_checked=service.ssl_last_checked,
     )
 
 
@@ -214,11 +222,13 @@ async def create_service(body: ServiceCreate, user: AdminUser, db: AsyncSession 
         expected_status = body.expected_status or 200
         url = body.url
         port = None
+        ssl_enabled = url.lower().startswith("https://")
     else:  # tcp / db — host stored in url, port required
         if not body.url:
             raise HTTPException(422, detail={"error": "validation_error", "message": "Host is required."})
         if body.port is None:
             raise HTTPException(422, detail={"error": "validation_error", "message": "Port is required."})
+        ssl_enabled = False
         url = body.url.strip()
         port = body.port
         expected_status = None
@@ -236,6 +246,9 @@ async def create_service(body: ServiceCreate, user: AdminUser, db: AsyncSession 
         is_public=body.is_public,
         ignore_ssl_errors=body.ignore_ssl_errors,
         consecutive_failures=0,
+        ssl_enabled=ssl_enabled,
+        ssl_warn_days=body.ssl_warn_days,
+        ssl_critical_days=body.ssl_critical_days,
     )
     db.add(service)
     await db.commit()
@@ -260,7 +273,30 @@ async def update_service(
     if body.name is not None:
         service.name = body.name
     if body.url is not None:
+        old_url = service.url or ""
+        was_https = old_url.lower().startswith("https://")
+        is_https = body.url.lower().startswith("https://")
         service.url = body.url
+        if was_https and not is_https:
+            service.ssl_enabled = False
+            service.ssl_expiry_date = None
+            service.ssl_days_remaining = None
+            service.ssl_status = None
+            service.ssl_issuer = None
+            service.ssl_last_checked = None
+            open_ssl = (
+                await db.execute(
+                    select(Alert).where(
+                        Alert.service_id == service.id,
+                        Alert.type == "ssl_expiry",
+                        Alert.state.in_(alerting.OPEN_STATES),
+                    )
+                )
+            ).scalars().all()
+            for a in open_ssl:
+                await alerting.resolve_alert(db, a, commit=False)
+        elif not was_https and is_https:
+            service.ssl_enabled = True
     if body.port is not None:
         service.port = body.port
     if body.expected_status is not None:
@@ -273,6 +309,10 @@ async def update_service(
         service.is_public = body.is_public
     if body.ignore_ssl_errors is not None:
         service.ignore_ssl_errors = body.ignore_ssl_errors
+    if body.ssl_warn_days is not None:
+        service.ssl_warn_days = body.ssl_warn_days
+    if body.ssl_critical_days is not None:
+        service.ssl_critical_days = body.ssl_critical_days
     if body.is_active is not None:
         service.is_active = body.is_active
 
