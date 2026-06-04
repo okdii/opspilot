@@ -227,42 +227,7 @@ const deviceLabel = computed(() => (ioDevices.value.length ? selectedDevice.valu
       <p v-else class="empty">No disk data.</p>
     </section>
 
-    <!-- 3. Disk Space History -->
-    <section class="card">
-      <h3>Disk Space History</h3>
-      <MetricChart type="area" unit="%" :series="spaceSeries" :height="240" />
-    </section>
-
-    <!-- 3. Disk I/O Throughput -->
-    <section class="card">
-      <div class="card-head">
-        <h3>Disk I/O Throughput<span v-if="deviceLabel" class="dev"> ({{ deviceLabel }})</span></h3>
-        <select v-if="ioDevices.length > 1" v-model="selectedDevice" class="dev-select">
-          <option v-for="d in ioDevices" :key="d" :value="d">{{ d }}</option>
-        </select>
-      </div>
-      <MetricChart type="line" unit="bytes/s" :series="throughputSeries" :height="240" />
-    </section>
-
-    <!-- 4. IOPS -->
-    <section class="card">
-      <h3>IOPS<span v-if="deviceLabel" class="dev"> ({{ deviceLabel }})</span></h3>
-      <MetricChart type="line" unit="count" :series="iopsSeries" :height="240" />
-    </section>
-
-    <!-- 5. I/O Utilisation % -->
-    <section class="card">
-      <h3>I/O Utilisation %<span v-if="deviceLabel" class="dev"> ({{ deviceLabel }})</span></h3>
-      <MetricChart type="area" unit="%" :series="ioUtilSeries" :height="240" />
-    </section>
-
-    <!-- 6. I/O Latency -->
-    <section class="card">
-      <h3>I/O Latency<span v-if="deviceLabel" class="dev"> ({{ deviceLabel }})</span></h3>
-      <MetricChart type="line" unit="ms" :series="ioAwaitSeries" :height="240" />
-    </section>
-
-    <!-- 7. Inode Usage -->
+    <!-- 2. Inode Usage -->
     <section class="card">
       <h3>Inode Usage</h3>
       <div v-if="inodeList.length" class="partition-list">
@@ -282,6 +247,41 @@ const deviceLabel = computed(() => (ioDevices.value.length ? selectedDevice.valu
         </div>
       </div>
       <p v-else class="empty">No inode data.</p>
+    </section>
+
+    <!-- 3. Disk Space History -->
+    <section class="card">
+      <h3>Disk Space History</h3>
+      <MetricChart type="area" unit="%" :series="spaceSeries" :height="240" />
+    </section>
+
+    <!-- 4. Disk I/O Throughput -->
+    <section class="card">
+      <div class="card-head">
+        <h3>Disk I/O Throughput<span v-if="deviceLabel" class="dev"> ({{ deviceLabel }})</span></h3>
+        <select v-if="ioDevices.length > 1" v-model="selectedDevice" class="dev-select">
+          <option v-for="d in ioDevices" :key="d" :value="d">{{ d }}</option>
+        </select>
+      </div>
+      <MetricChart type="line" unit="bytes/s" :series="throughputSeries" :height="240" />
+    </section>
+
+    <!-- 5. IOPS -->
+    <section class="card">
+      <h3>IOPS<span v-if="deviceLabel" class="dev"> ({{ deviceLabel }})</span></h3>
+      <MetricChart type="line" unit="count" :series="iopsSeries" :height="240" />
+    </section>
+
+    <!-- 6. I/O Utilisation % -->
+    <section class="card">
+      <h3>I/O Utilisation %<span v-if="deviceLabel" class="dev"> ({{ deviceLabel }})</span></h3>
+      <MetricChart type="area" unit="%" :series="ioUtilSeries" :height="240" />
+    </section>
+
+    <!-- 7. I/O Latency -->
+    <section class="card">
+      <h3>I/O Latency<span v-if="deviceLabel" class="dev"> ({{ deviceLabel }})</span></h3>
+      <MetricChart type="line" unit="ms" :series="ioAwaitSeries" :height="240" />
     </section>
   </div>
 </template>
