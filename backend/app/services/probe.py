@@ -20,7 +20,8 @@ import asyncio
 import logging
 import socket
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 
 import httpx
 from sqlalchemy import select, text
@@ -48,6 +49,89 @@ def _aware(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None
     return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+
+def _parse_ssl_target(url: str) -> tuple[str, int]:
+    """Return (hostname, port) from an https:// URL for TLS socket connection."""
+    parsed = urlparse(url)
+    return parsed.hostname or "", parsed.port or 443
+
+
+async def _maybe_check_ssl(service_id: str) -> None:
+    """Read the TLS cert for an HTTPS service if last check was >6 h ago.
+
+    Uses a fresh DB session so it never delays the uptime write path.
+    On socket/TLS failure sets ssl_status='unreachable' and updates ssl_last_checked.
+    Unreachable does not change alert state (preserve last known state).
+    """
+    from app.models.other import Alert
+    from app.services import alerting
+    from app.services.ssl_checker import _compute_status, _fetch_ssl_cert
+
+    async with AsyncSessionLocal() as db:
+        service = await db.get(Service, service_id)
+        if service is None or not service.ssl_enabled:
+            return
+
+        now = _now()
+        last = _aware(service.ssl_last_checked)
+        if last is not None and (now - last) < timedelta(hours=6):
+            return
+
+        hostname, port = _parse_ssl_target(service.url or "")
+        if not hostname:
+            return
+
+        try:
+            expiry, issuer = await asyncio.to_thread(_fetch_ssl_cert, hostname, port)
+            expiry = _aware(expiry)
+            days = (expiry - now).days
+            ssl_status = _compute_status(days, service.ssl_warn_days, service.ssl_critical_days)
+
+            service.ssl_expiry_date = expiry
+            service.ssl_days_remaining = days
+            service.ssl_issuer = issuer
+            service.ssl_status = ssl_status
+            service.ssl_last_checked = now
+            await db.flush()
+
+            if ssl_status in ("expiring_soon", "critical", "expired"):
+                severity = "warning" if ssl_status == "expiring_soon" else "critical"
+                msg = (
+                    f"SSL certificate for {hostname} has expired."
+                    if ssl_status == "expired"
+                    else f"SSL certificate for {hostname} expires in {days} day(s) ({expiry.date()})."
+                )
+                await alerting.fire_alert(
+                    db,
+                    type="ssl_expiry",
+                    severity=severity,
+                    message=msg,
+                    service_id=service.id,
+                    commit=False,
+                )
+            elif ssl_status == "valid":
+                open_alerts = (
+                    await db.execute(
+                        select(Alert).where(
+                            Alert.service_id == service.id,
+                            Alert.type == "ssl_expiry",
+                            Alert.state.in_(alerting.OPEN_STATES),
+                        )
+                    )
+                ).scalars().all()
+                for alert in open_alerts:
+                    await alerting.resolve_alert(db, alert, commit=False)
+
+            await db.commit()
+
+        except Exception:  # noqa: BLE001
+            logger.info(
+                "SSL check failed for service %s (%s:%s)", service_id, hostname, port, exc_info=True
+            )
+            service.ssl_status = "unreachable"
+            service.ssl_last_checked = now
+            await db.commit()
 
 
 # ── Low-level probes ────────────────────────────────────────────────────────
@@ -199,6 +283,7 @@ async def evaluate_result(
             type="service_down",
             severity="critical",
             message=f"Service '{service.name}' is down ({cause or 'unreachable'}).",
+            server_id=service.server_id,
             service_id=service.id,
             commit=False,
         )
@@ -257,15 +342,18 @@ async def probe_service(service_id: str) -> None:
     result. Skips paused services. Never raises into the scheduler."""
     async with _semaphore:
         try:
+            needs_ssl = False
             async with AsyncSessionLocal() as db:
                 service = await db.scalar(select(Service).where(Service.id == service_id))
                 if service is None or not service.is_active:
                     return
                 server = await db.get(Server, service.server_id)
                 org_id = str(server.org_id) if server else None
-
+                needs_ssl = service.type == "http" and service.ssl_enabled
                 status, rt, cause = await _run_check(service)
                 await evaluate_result(db, service, status, rt, cause, org_id)
+            if needs_ssl:
+                await _maybe_check_ssl(service_id)
         except Exception:  # noqa: BLE001
             logger.exception("probe_service failed for %s", service_id)
 

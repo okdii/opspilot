@@ -59,9 +59,18 @@ def _aware(dt: datetime | None) -> datetime | None:
 
 
 def _relevant_fk(alert_type: str, fks: dict[str, object | None]) -> tuple[str, object | None]:
-    """Return (fk_column_name, fk_value) governing dedup/cooldown for this type."""
+    """Return (fk_column_name, fk_value) governing dedup/cooldown for this type.
+
+    Special case: ssl_expiry can be keyed on ssl_cert_id (standalone SSL cert
+    objects) OR on service_id (inline SSL checks on an HTTP service).  When the
+    caller supplies service_id but not ssl_cert_id we fall through to service_id
+    so that dedup is scoped per-service rather than matching all NULL-cert rows.
+    """
     col = _FK_BY_TYPE.get(alert_type, "server_id")
-    return col, fks.get(col)
+    val = fks.get(col)
+    if val is None and alert_type == "ssl_expiry" and fks.get("service_id") is not None:
+        return "service_id", fks["service_id"]
+    return col, val
 
 
 async def _active_maintenance(db: AsyncSession, server_id: object | None) -> bool:
