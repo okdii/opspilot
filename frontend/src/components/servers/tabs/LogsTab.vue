@@ -6,6 +6,7 @@ import { wsClient } from '@/utils/ws'
 import { EmptyState } from '@/components/ui'
 import LogRow from '@/components/logs/LogRow.vue'
 import type { LogEntry, LogSeverity, LogSource, LogTimeRange } from '@/types'
+import { relativeTime } from '@/utils/time'
 
 const metrics = useMetricsStore()
 const logs = useLogStore()
@@ -107,6 +108,11 @@ function clearFilters(): void {
   reload()
 }
 
+function clickBand(sev: 'fatal' | 'error' | 'warn'): void {
+  logs.setFilter('severities', [sev])
+  reload()
+}
+
 async function reload(): Promise<void> {
   await logs.refresh()
   expanded.value = new Set()
@@ -198,6 +204,29 @@ onUnmounted(() => {
 
 <template>
   <div class="logs-tab">
+    <!-- Severity summary panels -->
+    <div class="summary-panels">
+      <div
+        v-for="band in (['fatal', 'error', 'warn'] as const)"
+        :key="band"
+        class="summary-card"
+        :class="band"
+        @click="clickBand(band)"
+      >
+        <div class="sc-header">
+          <span class="sc-dot"></span>
+          <span class="sc-label">{{ band.toUpperCase() }}</span>
+          <span class="sc-count">{{ logs.summary?.[band]?.count ?? '—' }}</span>
+        </div>
+        <template v-if="logs.summary?.[band]?.count">
+          <div class="sc-msg">{{ (logs.summary[band].latest?.message ?? '').slice(0, 80) }}</div>
+          <div class="sc-meta">{{ logs.summary[band].latest?.source }} · {{ relativeTime(logs.summary[band].latest?.time ?? null) }}</div>
+        </template>
+        <div v-else-if="logs.summary" class="sc-empty">No issues in this range</div>
+        <div v-else class="sc-empty">—</div>
+      </div>
+    </div>
+
     <!-- Filter bar -->
     <div class="filter-bar">
       <div class="fb-dd" @click.stop>
@@ -357,4 +386,71 @@ onUnmounted(() => {
 .new-banner:hover { opacity: 0.9; }
 .es-btn { background: var(--surface-2); border: 1px solid var(--border); color: var(--text); padding: 8px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; }
 .es-btn:hover { border-color: var(--accent); }
+
+.summary-panels {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.summary-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--sc-color);
+  border-radius: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.summary-card:hover {
+  background: var(--surface-2);
+  border-color: var(--sc-color);
+}
+.summary-card.fatal { --sc-color: #991b1b; }
+.summary-card.error { --sc-color: #ef4444; }
+.summary-card.warn  { --sc-color: #f59e0b; }
+
+.sc-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 6px;
+}
+.sc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sc-color);
+  flex-shrink: 0;
+}
+.sc-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--sc-color);
+}
+.sc-count {
+  margin-left: auto;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--sc-color);
+  line-height: 1;
+}
+.sc-msg {
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+.sc-meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+.sc-empty {
+  font-size: 12px;
+  color: var(--muted);
+}
 </style>
