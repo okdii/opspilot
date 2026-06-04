@@ -125,7 +125,7 @@ async def list_ssl_domains(org_id: str, user: CurrentUser, db: AsyncSession = De
     server_ids_result = await db.execute(
         select(Server.id).where(Server.org_id == org_id)
     )
-    server_ids = [str(sid) for sid in server_ids_result.scalars().all()]
+    server_ids = server_ids_result.scalars().all()
     service_ssl_rows: list[Service] = []
     if server_ids:
         service_ssl_rows = (

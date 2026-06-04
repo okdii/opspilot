@@ -115,7 +115,7 @@ class SSLCertOut(BaseModel):
 class ServiceSslOut(BaseModel):
     id: UUID
     name: str
-    url: str
+    url: str | None
     ssl_status: str | None
     ssl_expiry_date: datetime | None
     ssl_days_remaining: int | None
