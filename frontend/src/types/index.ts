@@ -204,6 +204,16 @@ export interface StartMaintenancePayload {
 export interface ProcessRow { pid: number; user?: string; name: string; cpu_pct: number; mem_pct: number }
 export interface ProcessSnapshot { reachable: boolean; collected_at: string | null; processes: ProcessRow[]; top_cpu: ProcessRow[]; top_mem: ProcessRow[] }
 
+// --- Server Services (agent-discovered process metrics) ---------------------
+
+export interface ServerServiceEntry {
+  name: string
+  status: 'running' | 'stopped' | 'not_installed'
+  cpu_pct: number | null
+  mem_mb: number | null
+  uptime_seconds: number | null
+}
+
 // --- Log Viewer (Phase 3, spec 05) -----------------------------------------
 
 export type LogSource =

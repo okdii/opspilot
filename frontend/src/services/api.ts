@@ -9,6 +9,7 @@ import type {
   ProcessSnapshot,
   RecentAlert,
   Server,
+  ServerServiceEntry,
   StartMaintenancePayload,
   LogsResponse,
   VolumeResponse,
@@ -113,6 +114,19 @@ export async function endMaintenance(serverId: string): Promise<void> {
 
 export async function getProcesses(serverId: string): Promise<ProcessSnapshot> {
   const { data } = await api.get<ProcessSnapshot>(`/api/servers/${serverId}/processes`)
+  return data
+}
+
+export async function getServerServices(
+  serverId: string,
+  includeNotInstalled = false,
+): Promise<ServerServiceEntry[]> {
+  const params: Record<string, string> = {}
+  if (includeNotInstalled) params.include_not_installed = 'true'
+  const { data } = await api.get<ServerServiceEntry[]>(
+    `/api/servers/${serverId}/services`,
+    { params },
+  )
   return data
 }
 
