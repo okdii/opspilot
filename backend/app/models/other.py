@@ -263,3 +263,4 @@ class Settings(Base):
     service_checks_retention_days: Mapped[int] = mapped_column(Integer, nullable=False, default=90)
     alerts_retention_days: Mapped[int] = mapped_column(Integer, nullable=False, default=90)
     writer_password_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    timezone: Mapped[str] = mapped_column(String(60), nullable=False, server_default="UTC")
