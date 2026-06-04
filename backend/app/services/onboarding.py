@@ -44,7 +44,7 @@ from app.services.ssh import (
 from app.ws.manager import ws_manager
 
 
-TOTAL_STEPS = 10
+TOTAL_STEPS = 11
 
 _template_env = jinja2.Environment(
     loader=jinja2.FileSystemLoader(
@@ -394,6 +394,55 @@ async def _step_verify_data_flow(db, server) -> bool:
     return False
 
 
+async def _step_deploy_opspilot_agent(db, server, ssh: SSHSession):
+    log, t0 = await _start_step(db, server.id, "deploy_opspilot_agent", 11)
+    try:
+        tmpl = _template_env.get_template("opspilot-agent.py.j2")
+        base = settings.opspilot_base_url.rstrip("/") if settings.opspilot_base_url else "http://opspilot-backend:8000"
+        script = tmpl.render(
+            base_url=base,
+            ingestion_token=str(server.ingestion_token),
+        )
+
+        # Install psutil (pip3 first, apt fallback, ignore failure)
+        await ssh.run(
+            "python3 -m pip install --quiet psutil 2>/dev/null || "
+            "apt-get install -y python3-psutil 2>/dev/null || true",
+            sudo=True, timeout=60,
+        )
+
+        # Upload agent script
+        await ssh.upload(script, "/opt/opspilot-agent.py", mode=0o755, sudo=True)
+
+        # Create systemd unit
+        unit = (
+            "[Unit]\n"
+            "Description=OpsPilot Agent\n"
+            "After=network.target\n\n"
+            "[Service]\n"
+            "ExecStart=/usr/bin/python3 /opt/opspilot-agent.py\n"
+            "Restart=always\n"
+            "RestartSec=15\n\n"
+            "[Install]\n"
+            "WantedBy=multi-user.target\n"
+        )
+        await ssh.upload(unit, "/etc/systemd/system/opspilot-agent.service", mode=0o644, sudo=True)
+
+        # Enable and start
+        r = await ssh.run(
+            "systemctl daemon-reload && systemctl enable --now opspilot-agent",
+            sudo=True, timeout=15,
+        )
+        if not r.ok:
+            await _finish_step(db, log, t0, status="skipped",
+                               message="agent service failed to start", ssh_output=r.stderr or r.stdout)
+            return
+
+        await _finish_step(db, log, t0, status="done", message="opspilot-agent running")
+    except Exception as exc:
+        await _finish_step(db, log, t0, status="skipped", message=f"agent deploy skipped: {exc}")
+
+
 # ── Orchestrator ─────────────────────────────────────────────────────────────
 
 async def _build_mysql_dsn(db, server) -> str | None:
@@ -456,6 +505,8 @@ async def run_onboarding(server_id: str, redeploy_only: bool = False) -> None:
 
                 if not redeploy_only:
                     await _step_verify_data_flow(db, server)
+
+                await _step_deploy_opspilot_agent(db, server, ssh)
 
             duration = int(perf_counter() - started_total)
             await _push(server.id, "onboarding_complete", {
