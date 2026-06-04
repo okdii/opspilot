@@ -12,6 +12,7 @@ import NetworkTab from '@/components/servers/tabs/NetworkTab.vue'
 import SystemTab from '@/components/servers/tabs/SystemTab.vue'
 import ProcessesTab from '@/components/servers/tabs/ProcessesTab.vue'
 import ServicesTab from '@/components/servers/tabs/ServicesTab.vue'
+import AlertsTab from '@/components/servers/tabs/AlertsTab.vue'
 import InfoTab from '@/components/servers/tabs/InfoTab.vue'
 import AgentStatusFooter from '@/components/servers/AgentStatusFooter.vue'
 import { getServer } from '@/services/api'
@@ -37,12 +38,12 @@ const maintenanceOpen = ref(false)
 const menuOpen = ref(false)
 
 // --- Tabs ------------------------------------------------------------------
-const TABS = ['Info', 'Overview', 'CPU', 'Memory', 'Disk', 'Network', 'System', 'Processes', 'Services'] as const
+const TABS = ['Info', 'Overview', 'CPU', 'Memory', 'Disk', 'Network', 'System', 'Processes', 'Services', 'Alerts'] as const
 type Tab = (typeof TABS)[number]
 const TAB_COMPONENTS = {
   Info: InfoTab, Overview: OverviewTab, CPU: CpuTab, Memory: MemoryTab,
   Disk: DiskTab, Network: NetworkTab, System: SystemTab, Processes: ProcessesTab,
-  Services: ServicesTab,
+  Services: ServicesTab, Alerts: AlertsTab,
 }
 const activeTab = ref<Tab>('Info')
 const RANGES: MetricRange[] = ['1h', '6h', '24h', '7d', '30d']
