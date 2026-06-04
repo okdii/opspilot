@@ -1,5 +1,5 @@
 """
-Server onboarding orchestrator — implements the 10-step flow from spec 03.
+Server onboarding orchestrator — implements the 11-step flow from spec 03.
 
 Steps:
   1. ssh_connect          (hard)   — open SSH + verify passwordless sudo
@@ -12,6 +12,7 @@ Steps:
   8. enable_mariadb_slowlog (soft) — skipped if MariaDB not present
   9. start_services       (hard)   — systemctl enable --now
  10. verify_data_flow     (soft)   — poll server_metrics, 30s timeout
+ 11. deploy_opspilot_agent (soft)  — install psutil, upload agent, start systemd service
 
 Each step:
   - writes a `running` OnboardingLog row + pushes WS step_update

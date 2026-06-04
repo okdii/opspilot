@@ -78,7 +78,7 @@ Last updated: 2026-06-02
 - ✅ Wait up to 30s for first metric row in TimescaleDB *(verified on Lima Ubuntu 24.04 VM — "first metric in 6s")*
 - ✅ Mark server active, push onboarding_complete WS event *(verified live over WS — onboarding_complete received, duration_sec 8)*
 - ✅ OnboardingLog rows written per step
-- ✅ Re-deploy agents endpoint (steps 6–10 only)
+- ✅ Re-deploy agents endpoint (steps 6–11 only)
 - ✅ WS channel: onboarding:{server_id} — progress events pushed live
 - ✅ Onboarding UI: progress steps, error display, SSH log output
 - ✅ **Smoke test: add server, watch onboarding complete, see first metric in DB** *(verified end-to-end on Lima Ubuntu 24.04 VM — all 10 steps done over WS, onboarding_complete received, server `online`, ~633 metric rows flowing. Fixed a gzip-ingestion bug found during the test: `/api/ingest/metrics` now decompresses gzip/deflate bodies, see ingest.py.)*

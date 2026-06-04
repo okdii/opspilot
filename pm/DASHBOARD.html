@@ -65,7 +65,7 @@
 <body>
 <div class="header">
   <div><h1>OpsPilot &mdash; Dev Progress</h1><p>11 phases &middot; 195 tasks &middot; Python + FastAPI + Vue 3 + TimescaleDB</p></div>
-  <div class="badge">Generated: <span>2026-06-03</span></div>
+  <div class="badge">Generated: <span>2026-06-04</span></div>
 </div>
 <div class="overall">
   <div>
@@ -146,7 +146,7 @@ const phases = [
     { text: "Wait up to 30s for first metric row in TimescaleDB *(verified on Lima Ubuntu 24.04 VM — \"first metric in 6s\")*", status: "done", smoke: false },
     { text: "Mark server active, push onboarding_complete WS event *(verified live over WS — onboarding_complete received, duration_sec 8)*", status: "done", smoke: false },
     { text: "OnboardingLog rows written per step", status: "done", smoke: false },
-    { text: "Re-deploy agents endpoint (steps 6–10 only)", status: "done", smoke: false },
+    { text: "Re-deploy agents endpoint (steps 6–11 only)", status: "done", smoke: false },
     { text: "WS channel: onboarding:{server_id} — progress events pushed live", status: "done", smoke: false },
     { text: "Onboarding UI: progress steps, error display, SSH log output", status: "done", smoke: false },
     { text: "Smoke test: add server, watch onboarding complete, see first metric in DB *(verified end-to-end on Lima Ubuntu 24.04 VM — all 10 steps done over WS, onboarding_complete received, server `online`, ~633 metric rows flowing. Fixed a gzip-ingestion bug found during the test: `/api/ingest/metrics` now decompresses gzip/deflate bodies, see ingest.py.)*", status: "done", smoke: true },
