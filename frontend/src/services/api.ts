@@ -138,6 +138,48 @@ export async function getServerMonitoring(serverId: string): Promise<MonitoringS
 
 // --- Log Viewer (Phase 3, spec 05) -----------------------------------------
 
+export interface LogIntelligenceData {
+  summary: { fatal: number; error: number; warn: number; info: number; debug: number }
+  top_errors: { message: string; count: number; source: string; last_seen: string }[]
+  http_errors: {
+    total_5xx: number
+    total_4xx: number
+    top_urls: { url: string; count: number; status: number }[]
+  } | null
+  slow_queries: {
+    total: number
+    worst_duration_ms: number
+    worst_query: string
+    server_name: string
+  } | null
+  auth_events: {
+    failed_logins: number
+    top_ips: { ip: string; count: number }[]
+  } | null
+  per_server: {
+    server_id: string
+    server_name: string
+    fatal: number
+    error: number
+    warn: number
+    sparkline: number[]
+  }[]
+  recent_fatals: {
+    id: string
+    time: string
+    server_name: string
+    source: string
+    message: string
+  }[]
+}
+
+export async function getLogIntelligence(orgId: string, range: string): Promise<LogIntelligenceData> {
+  const { data } = await api.get<LogIntelligenceData>('/api/logs/intelligence', {
+    params: { org_id: orgId, range },
+  })
+  return data
+}
+
 export async function getLogs(params: Record<string, string>): Promise<LogsResponse> {
   const { data } = await api.get<LogsResponse>('/api/logs', { params })
   return data
