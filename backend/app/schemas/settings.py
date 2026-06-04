@@ -17,6 +17,7 @@ class SettingsResponse(BaseModel):
     logs_retention_days: int
     service_checks_retention_days: int
     alerts_retention_days: int
+    timezone: str
 
 
 class SettingsPatch(BaseModel):
@@ -33,6 +34,19 @@ class SettingsPatch(BaseModel):
     logs_retention_days: int | None = Field(default=None, ge=7, le=365)
     service_checks_retention_days: int | None = Field(default=None, ge=30, le=365)
     alerts_retention_days: int | None = Field(default=None, ge=30, le=730)
+    timezone: str | None = None
+
+    @field_validator("timezone")
+    @classmethod
+    def valid_iana_tz(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        import zoneinfo
+        try:
+            zoneinfo.ZoneInfo(v)
+        except (zoneinfo.ZoneInfoNotFoundError, KeyError):
+            raise ValueError(f"'{v}' is not a valid IANA timezone name")
+        return v
 
 
 class SessionResponse(BaseModel):

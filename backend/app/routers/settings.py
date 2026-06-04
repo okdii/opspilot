@@ -45,6 +45,7 @@ def _to_response(s: Settings) -> SettingsResponse:
         logs_retention_days=s.logs_retention_days,
         service_checks_retention_days=s.service_checks_retention_days,
         alerts_retention_days=s.alerts_retention_days,
+        timezone=s.timezone,
     )
 
 
