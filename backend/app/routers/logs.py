@@ -295,6 +295,80 @@ async def log_volume(
     return {"buckets": list(buckets.values()), "bucket_seconds": bucket_seconds}
 
 
+@router.get("/summary")
+async def log_summary(
+    user: CurrentUser,
+    org_id: str | None = Query(None),
+    server_ids: str | None = Query(None),
+    sources: str | None = Query(None),
+    search: str | None = Query(None),
+    frm: str | None = Query(None, alias="from"),
+    to: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    servers = await _resolve_scope(user, db, org_id, server_ids)
+    server_map = {str(s.id): s.name for s in servers}
+    scope_ids = list(server_map.keys())
+
+    now = datetime.now(timezone.utc)
+    frm_dt = _parse_ts(frm, now - timedelta(hours=1))
+    to_dt = _parse_ts(to, now)
+    src_list = _parse_csv(sources, VALID_SOURCES)
+
+    # Build WHERE without severity filter — we query all severities for counts
+    where, params, expanding = _build_where(scope_ids, src_list, [], search, frm_dt, to_dt)
+
+    # Accurate counts for all three severity bands in one query
+    count_stmt = text(f"""
+        SELECT
+            COUNT(*) FILTER (WHERE l.severity = 'fatal') AS fatal_count,
+            COUNT(*) FILTER (WHERE l.severity = 'error') AS error_count,
+            COUNT(*) FILTER (WHERE l.severity = 'warn')  AS warn_count
+        FROM server_logs l
+        WHERE {where}
+    """).bindparams(*expanding)
+    counts_row = (await db.execute(count_stmt, params)).one()
+    fatal_count = int(counts_row[0])
+    error_count = int(counts_row[1])
+    warn_count  = int(counts_row[2])
+
+    # Latest entry per severity (one query per band — each is a LIMIT 1 index scan)
+    async def _latest(sev: str) -> dict | None:
+        stmt = text(f"""
+            SELECT l.time, l.server_id, l.source, l.severity, l.message, l.raw,
+                   {_ROW_ID_SQL} AS row_id
+            FROM server_logs l
+            WHERE {where} AND l.severity = :sev
+            ORDER BY l.time DESC
+            LIMIT 1
+        """).bindparams(*expanding)
+        row = (await db.execute(stmt, {**params, "sev": sev})).one_or_none()
+        if row is None:
+            return None
+        t, sid, source, severity, message, raw, rid = row
+        sid_str = str(sid)
+        return {
+            "id": rid,
+            "time": t.isoformat(),
+            "server_id": sid_str,
+            "server_name": server_map.get(sid_str, sid_str),
+            "source": source,
+            "severity": severity,
+            "message": message,
+            "fields": raw if isinstance(raw, dict) else {},
+        }
+
+    fatal_latest = await _latest("fatal") if fatal_count > 0 else None
+    error_latest = await _latest("error") if error_count > 0 else None
+    warn_latest  = await _latest("warn")  if warn_count  > 0 else None
+
+    return {
+        "fatal": {"count": fatal_count, "latest": fatal_latest},
+        "error": {"count": error_count, "latest": error_latest},
+        "warn":  {"count": warn_count,  "latest": warn_latest},
+    }
+
+
 @router.get("/intelligence")
 async def log_intelligence(
     user: CurrentUser,
