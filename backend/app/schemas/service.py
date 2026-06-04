@@ -2,7 +2,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 _VALID_TYPES = {"http", "tcp", "db"}
 _VALID_INTERVALS = {30, 60, 120, 300, 600}
@@ -72,6 +72,14 @@ class ServiceCreate(BaseModel):
             raise ValueError("Expected status must be 100–599")
         return v
 
+    @model_validator(mode="after")
+    def ssl_thresholds_valid(self) -> "ServiceCreate":
+        if not (1 <= self.ssl_warn_days <= 365):
+            raise ValueError("ssl_warn_days must be 1–365")
+        if not (1 <= self.ssl_critical_days < self.ssl_warn_days):
+            raise ValueError("ssl_critical_days must be ≥ 1 and less than ssl_warn_days")
+        return self
+
 
 class ServiceUpdate(BaseModel):
     name: str | None = None
@@ -131,6 +139,18 @@ class ServiceUpdate(BaseModel):
         if not (100 <= v <= 599):
             raise ValueError("Expected status must be 100–599")
         return v
+
+    @model_validator(mode="after")
+    def ssl_thresholds_valid(self) -> "ServiceUpdate":
+        warn = self.ssl_warn_days
+        crit = self.ssl_critical_days
+        if warn is not None and not (1 <= warn <= 365):
+            raise ValueError("ssl_warn_days must be 1–365")
+        if crit is not None and not (1 <= crit):
+            raise ValueError("ssl_critical_days must be ≥ 1")
+        if warn is not None and crit is not None and crit >= warn:
+            raise ValueError("ssl_critical_days must be less than ssl_warn_days")
+        return self
 
 
 class ServiceOut(BaseModel):
