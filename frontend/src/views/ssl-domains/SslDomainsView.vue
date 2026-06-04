@@ -343,11 +343,13 @@ function askDelete(r: CombinedRow) {
     }
     confirm.id = r.id
     confirm.name = r.domainName
-  } else {
+  } else if (r.type === 'ssl') {
     confirm.kind = 'ssl'
     confirm.id = r.id
     confirm.name = rowName(r)
   }
+  // service rows: no delete action
+  if (r.type === 'service') return
   confirm.open = true
 }
 
@@ -483,7 +485,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
                 <button class="kebab" aria-label="Row actions" @click="openMenuId = openMenuId === r.id ? null : r.id">⋮</button>
                 <div v-if="openMenuId === r.id" class="kebab-menu">
                   <template v-if="r.type === 'service'">
-                    <button class="kmi" @click="router.push(`/services/${r.serviceId}`)">View in Services →</button>
+                    <button class="kmi" @click="router.push({ name: 'service-detail', params: { id: r.id } })">View in Services →</button>
                   </template>
                   <template v-else>
                     <button class="kmi" @click="checkNow(r)">Check Now</button>
