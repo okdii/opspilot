@@ -219,7 +219,7 @@ onUnmounted(() => {
           <span class="sc-count">{{ logs.summary?.[band]?.count ?? '—' }}</span>
         </div>
         <template v-if="logs.summary?.[band]?.count">
-          <div class="sc-msg">{{ (logs.summary[band].latest?.message ?? '').slice(0, 80) }}</div>
+          <div class="sc-msg">{{ logs.summary[band].latest?.message ?? '' }}</div>
           <div class="sc-meta">{{ logs.summary[band].latest?.source }} · {{ relativeTime(logs.summary[band].latest?.time ?? null) }}</div>
         </template>
         <div v-else-if="logs.summary" class="sc-empty">No issues in this range</div>
@@ -443,6 +443,7 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
   margin-bottom: 4px;
 }
 .sc-meta {
