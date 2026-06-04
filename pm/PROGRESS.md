@@ -359,6 +359,30 @@ Last updated: 2026-06-04
 
 ---
 
+## Phase 14 — Service SSL on SSL & Domains Page
+*Show HTTPS service SSL certs alongside manually-tracked domains and SSL certs on /ssl-domains, eliminating duplicate domain registration*
+
+### Task 1: Backend Schema + Router
+- ✅ `ServiceSslOut` Pydantic model added to `ssl_domains.py` schema
+- ✅ `service_ssl: list[ServiceSslOut]` field added to `SSLDomainsResponse`
+- ✅ `list_ssl_domains` router extended to query HTTPS services (ssl_enabled=True) via Server→Service join
+- ✅ **Smoke test: GET /ssl-domains returns service_ssl array with HTTPS service SSL fields**
+
+### Task 2: Frontend Store
+- ✅ `ServiceSslRec` interface added to `sslDomains.ts`
+- ✅ `CombinedRow.type` and `TimelineDot.type` widened to `'domain' | 'ssl' | 'service'`
+- ✅ `serviceSsl` ref + `combinedRows` loop + `fetchAll` + `reset()` updated
+- ✅ **Smoke test: TypeScript build passes with no errors**
+
+### Task 3: Frontend View
+- ✅ `ExpiryTimeline` tooltip handles `type === 'service'` (kind: "Service SSL", shows Issuer)
+- ✅ `SslDomainsView`: SERVICE badge (purple), "Service" filter option, read-only kebab ("View in Services →")
+- ✅ `checkNow` and `askDelete` guarded against service rows
+- ✅ `router.push({ name: 'service-detail', params: { id: r.id } })` for type-safe navigation
+- ✅ **Smoke test: HTTPS services appear on /ssl-domains with purple SERVICE badge; kebab navigates to service detail**
+
+---
+
 ## Summary
 
 | Phase | Status | Tasks Done |
@@ -376,4 +400,5 @@ Last updated: 2026-06-04
 | Phase 11 — Deployment | ✅ Complete | 6 / 6 |
 | Phase 12 — Post-Launch Enhancements | ✅ Complete | 8 / 8 |
 | Phase 13 — SSL in HTTP Probes | ✅ Complete | 8 / 8 |
-| **Total** | ✅ Complete | **211 / 211** |
+| Phase 14 — Service SSL on SSL & Domains Page | ✅ Complete | 3 / 3 |
+| **Total** | ✅ Complete | **214 / 214** |

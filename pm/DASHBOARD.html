@@ -316,6 +316,11 @@ const phases = [
     { text: "ServiceDetail: SSL Certificate card with ExpiryBar, issuer, days remaining, last checked", status: "done", smoke: true },
     { text: "SslDomainsView: hint text pointing HTTPS SSL tracking to Services page", status: "done", smoke: true },
   ]},
+  { id: 14, title: "Service SSL on SSL &amp; Domains Page", subtitle: "Show HTTPS service SSL certs on /ssl-domains alongside manually-tracked domains and certs", tasks: [
+    { text: "Backend: ServiceSslOut schema + service_ssl field in SSLDomainsResponse + router queries HTTPS services", status: "done", smoke: true },
+    { text: "Frontend store: ServiceSslRec type, CombinedRow/TimelineDot widened to type:service, serviceSsl state + combinedRows loop", status: "done", smoke: false },
+    { text: "Frontend view: SERVICE badge (purple), Service filter option, read-only kebab (View in Services →), ExpiryTimeline tooltip, defensive guards", status: "done", smoke: true },
+  ]},
 ];
 
 const grid = document.getElementById('grid');
