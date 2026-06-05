@@ -36,6 +36,9 @@ export interface Service {
   ssl_status: string | null
   ssl_issuer: string | null
   ssl_last_checked: string | null
+  security_grade: string | null
+  security_score: number | null
+  last_security_scan: string | null
 }
 
 export interface ServiceCreatePayload {
@@ -78,6 +81,47 @@ export interface IncidentsPage {
   page: number
   page_size: number
   incidents: Incident[]
+}
+
+export interface SecurityTls {
+  version: string | null
+  ok: boolean | null
+  cipher_suite: string | null
+  cipher_ok: boolean | null
+  pfs: boolean | null
+  key_size: number | null
+  key_size_ok: boolean | null
+  self_signed: boolean | null
+  ocsp: boolean | null
+}
+
+export interface SecurityHeaders {
+  https_redirect: boolean | null
+  hsts: boolean | null
+  hsts_max_age: number | null
+  csp: boolean | null
+  x_frame_options: boolean | null
+  x_content_type: boolean | null
+  referrer_policy: boolean | null
+  permissions_policy: boolean | null
+  server_disclosure: boolean | null
+  x_powered_by: string | null
+}
+
+export interface SecurityFinding {
+  check: string
+  severity: string
+  passed: boolean
+  detail: string
+}
+
+export interface SecurityScan {
+  grade: string
+  score: number
+  scanned_at: string
+  tls: SecurityTls
+  headers: SecurityHeaders
+  findings: SecurityFinding[]
 }
 
 export interface UptimePoint {
@@ -224,6 +268,17 @@ export const useServiceStore = defineStore('services', () => {
     return data
   }
 
+  async function fetchSecurityScan(orgId: string, serviceId: string): Promise<SecurityScan | null> {
+    try {
+      const { data } = await api.get<SecurityScan>(
+        `/api/organizations/${orgId}/services/${serviceId}/security`
+      )
+      return data
+    } catch {
+      return null
+    }
+  }
+
   // ── Mutations (Admin) ──────────────────────────────────────────────────────
 
   async function createService(payload: ServiceCreatePayload): Promise<Service> {
@@ -332,6 +387,7 @@ export const useServiceStore = defineStore('services', () => {
     fetchResponseTime,
     fetchIncidents,
     fetchChecks,
+    fetchSecurityScan,
     createService,
     updateService,
     deleteService,

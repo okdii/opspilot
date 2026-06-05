@@ -41,6 +41,8 @@ export interface ServiceSslRec {
   ssl_last_checked: string | null
   ssl_warn_days: number
   ssl_critical_days: number
+  security_grade: string | null
+  security_score: number | null
 }
 
 interface SslDomainsResponse {
@@ -83,6 +85,8 @@ export interface CombinedRow {
   serviceId?: string       // set for type === 'service'
   // The threshold the bar/colour are measured against (warn_days).
   warnThreshold: number
+  securityGrade?: string | null
+  securityScore?: number | null
 }
 
 export interface TimelineDot {
@@ -170,6 +174,8 @@ export const useSslDomainStore = defineStore('sslDomains', () => {
         warnDays: s.ssl_warn_days,
         criticalDays: s.ssl_critical_days,
         warnThreshold: s.ssl_warn_days,
+        securityGrade: s.security_grade ?? null,
+        securityScore: s.security_score ?? null,
       })
     }
     return rows
