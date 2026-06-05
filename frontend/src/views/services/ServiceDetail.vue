@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { PageHeader, StatCard, StatusBadge } from '@/components/ui'
 import ExpiryBar from '@/components/ssl-domains/ExpiryBar.vue'
-import MetricChart from '@/components/charts/MetricChart.vue'
+import ResponseTimeChart from '@/components/services/ResponseTimeChart.vue'
 import UptimeTimeline from '@/components/services/UptimeTimeline.vue'
 import ServiceModal from '@/components/services/ServiceModal.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -85,6 +85,7 @@ const uptime30d = ref<number | null>(null)
 const incidentCount = ref(0)
 const securityScan = ref<SecurityScan | null>(null)
 const securityLoading = ref(false)
+const securityScanning = ref(false)
 
 const uptime24hStr = computed(() => fmtPct(service.value?.uptime_24h ?? null))
 const uptime7dStr = computed(() => fmtPct(service.value?.uptime_7d ?? null))
@@ -108,58 +109,30 @@ async function loadSecurity() {
   }
 }
 
+async function runSecurityScan() {
+  if (!orgStore.activeOrgId || securityScanning.value) return
+  securityScanning.value = true
+  try {
+    await store.triggerSecurityScan(orgStore.activeOrgId, serviceId.value)
+    // Poll until the scan result is newer than what we have now
+    const before = securityScan.value?.scanned_at ?? null
+    for (let i = 0; i < 30; i++) {
+      await new Promise(r => setTimeout(r, 2000))
+      const fresh = await store.fetchSecurityScan(orgStore.activeOrgId, serviceId.value)
+      if (fresh && fresh.scanned_at !== before) {
+        securityScan.value = fresh
+        break
+      }
+    }
+  } finally {
+    securityScanning.value = false
+  }
+}
+
 // ── Response time chart ──────────────────────────────────────────────────────
-const RANGES: ResponseRange[] = ['1h', '6h', '24h', '7d', '30d']
 const range = ref<ResponseRange>('24h')
 const respData = ref<ResponseTimeData | null>(null)
 const respLoading = ref(false)
-
-// Range window in ms — used to filter individual check dots to the visible window.
-const RANGE_MS: Record<ResponseRange, number> = {
-  '1h': 60 * 60 * 1000,
-  '6h': 6 * 60 * 60 * 1000,
-  '24h': 24 * 60 * 60 * 1000,
-  '7d': 7 * 24 * 60 * 60 * 1000,
-  '30d': 30 * 24 * 60 * 60 * 1000,
-}
-
-// Insert null breakpoints at incident boundaries so the line visually stops at downtime.
-function withNullBreaks(raw: [number, number | null][]): [number, number | null][] {
-  const pts: [number, number | null][] = [...raw]
-  for (const period of downPeriods.value) {
-    pts.push([period.start, null])
-    pts.push([period.end, null])
-  }
-  return pts.sort((a, b) => a[0] - b[0])
-}
-
-const respSeries = computed(() => {
-  const d = respData.value?.data ?? []
-  const series: any[] = [
-    { name: 'Avg', type: 'line', data: withNullBreaks(d.map((p) => [new Date(p.time).getTime(), p.avg_ms])) },
-    { name: 'P95', type: 'line', data: withNullBreaks(d.map((p) => [new Date(p.time).getTime(), p.p95_ms])) },
-  ]
-  // Individual check dots — only for shorter ranges where 50 checks give good coverage.
-  if (range.value === '1h' || range.value === '6h') {
-    const cutoff = Date.now() - RANGE_MS[range.value]
-    const dots = store.checkHistory
-      .filter((c) => c.status === 'up' && c.response_time_ms != null && new Date(c.time).getTime() >= cutoff)
-      .map((c) => [new Date(c.time).getTime(), c.response_time_ms])
-    if (dots.length) series.push({ name: 'Each check', type: 'scatter', data: dots })
-  }
-  return series
-})
-const hasRespData = computed(() => (respData.value?.data ?? []).some((p) => p.avg_ms != null))
-
-// Tick amount per range — 1h shows every minute, others scaled to fit.
-const RANGE_TICKS: Record<ResponseRange, number> = {
-  '1h': 60,
-  '6h': 12,
-  '24h': 24,
-  '7d': 7,
-  '30d': 15,
-}
-const tickAmount = computed(() => RANGE_TICKS[range.value])
 
 const downPeriods = computed(() =>
   store.incidents
@@ -367,7 +340,7 @@ onUnmounted(() => {
           size="sm"
         />
       </div>
-      <SecurityTab :scan="securityScan" :loading="securityLoading" />
+      <SecurityTab :scan="securityScan" :loading="securityLoading" :scanning="securityScanning" @run-scan="runSecurityScan" />
     </section>
 
     <!-- Uptime timeline -->
@@ -378,18 +351,14 @@ onUnmounted(() => {
 
     <!-- Response time -->
     <section class="card">
-      <div class="card-hd">
-        <h3>Response Time</h3>
-        <div class="ranges">
-          <button
-            v-for="r in RANGES" :key="r"
-            class="range" :class="{ active: range === r }"
-            @click="range = r"
-          >{{ r }}</button>
-        </div>
-      </div>
-      <MetricChart v-if="hasRespData" type="line" unit="ms" :series="respSeries" :height="260" :down-periods="downPeriods" :tick-amount="tickAmount" />
-      <p v-else class="placeholder">No response time data for this period.</p>
+      <h3>Response Time</h3>
+      <ResponseTimeChart
+        :data="respData"
+        :range="range"
+        :down-periods="downPeriods"
+        :loading="respLoading"
+        @range-change="(r) => (range = r)"
+      />
     </section>
 
     <!-- Incidents -->
@@ -445,9 +414,6 @@ onUnmounted(() => {
 .card h3 { font-size: 13px; color: var(--text); margin-bottom: 14px; font-weight: 600; }
 .card-hd { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
 .card-hd h3 { margin-bottom: 0; }
-.ranges { display: flex; gap: 4px; }
-.range { background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); font-size: 12px; padding: 5px 10px; border-radius: 6px; cursor: pointer; }
-.range.active { background: rgba(99,102,241,0.15); color: var(--accent-2); border-color: var(--accent); }
 .placeholder { color: var(--muted); font-size: 13px; text-align: center; padding: 30px; }
 .table { display: flex; flex-direction: column; }
 .thead, .trow { display: grid; grid-template-columns: 1fr 1fr 120px; gap: 12px; padding: 10px 4px; align-items: center; }
