@@ -15,7 +15,9 @@ import { useNotify } from '@/composables/useNotify'
 import { wsClient } from '@/utils/ws'
 import { relativeTime } from '@/utils/metrics'
 import { getApiError } from '@/services/api'
-import type { ResponseRange, ResponseTimeData, Service } from '@/stores/services'
+import SecurityGrade from '@/components/SecurityGrade.vue'
+import SecurityTab from '@/components/services/tabs/SecurityTab.vue'
+import type { ResponseRange, ResponseTimeData, SecurityScan, Service } from '@/stores/services'
 
 const route = useRoute()
 const router = useRouter()
@@ -81,6 +83,8 @@ const summary = computed(() => {
 // ── Uptime summary ───────────────────────────────────────────────────────────
 const uptime30d = ref<number | null>(null)
 const incidentCount = ref(0)
+const securityScan = ref<SecurityScan | null>(null)
+const securityLoading = ref(false)
 
 const uptime24hStr = computed(() => fmtPct(service.value?.uptime_24h ?? null))
 const uptime7dStr = computed(() => fmtPct(service.value?.uptime_7d ?? null))
@@ -90,6 +94,16 @@ const avgStr = computed(() =>
 )
 function fmtPct(v: number | null): string {
   return v != null ? `${v}%` : '—'
+}
+
+async function loadSecurity() {
+  if (!service.value?.ssl_enabled || !orgStore.activeOrgId) return
+  securityLoading.value = true
+  try {
+    securityScan.value = await store.fetchSecurityScan(orgStore.activeOrgId, serviceId.value)
+  } finally {
+    securityLoading.value = false
+  }
 }
 
 // ── Response time chart ──────────────────────────────────────────────────────
@@ -188,6 +202,7 @@ async function load() {
       loadResponse(range.value),
       store.fetchIncidents(serviceId.value),
       store.fetchChecks(serviceId.value),
+      loadSecurity(),
     ])
     // 30d uptime + incident count derived from timeline / incident list.
     const tl = store.uptimeTimeline
@@ -225,6 +240,8 @@ function bindWs() {
       }
     } else if (msg?.event === 'service_ssl_updated' && msg.data?.service_id === serviceId.value) {
       store.handleSslEvent(msg.data)
+    } else if (msg?.event === 'service_security_updated' && msg.data?.service_id === serviceId.value) {
+      void loadSecurity()
     } else if (msg?.event === 'incident_opened' && msg.data?.service_id === serviceId.value) {
       store.handleIncidentOpened(msg.data)
       void store.fetchIncidents(serviceId.value)
@@ -335,6 +352,20 @@ onUnmounted(() => {
         :warn-threshold="service.ssl_warn_days"
         :status="service.ssl_status ?? 'unreachable'"
       />
+    </section>
+
+    <!-- Security Audit Card — HTTPS services only -->
+    <section v-if="service.ssl_enabled" class="card">
+      <div class="card-hd">
+        <h3>Security Audit</h3>
+        <SecurityGrade
+          v-if="securityScan"
+          :grade="securityScan.grade"
+          :score="securityScan.score"
+          size="sm"
+        />
+      </div>
+      <SecurityTab :scan="securityScan" :loading="securityLoading" />
     </section>
 
     <!-- Uptime timeline -->
