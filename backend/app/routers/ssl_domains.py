@@ -8,7 +8,7 @@ for a single record.
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -127,6 +127,7 @@ async def list_ssl_domains(org_id: str, user: CurrentUser, db: AsyncSession = De
     )
     server_ids = server_ids_result.scalars().all()
     service_ssl_rows: list[Service] = []
+    security_by_service: dict = {}
     if server_ids:
         service_ssl_rows = (
             await db.execute(
@@ -137,10 +138,42 @@ async def list_ssl_domains(org_id: str, user: CurrentUser, db: AsyncSession = De
             )
         ).scalars().all()
 
+        if service_ssl_rows:
+            svc_ids = [str(s.id) for s in service_ssl_rows]
+            scan_rows = (
+                await db.execute(
+                    text(
+                        "SELECT DISTINCT ON (service_id) service_id, grade, score "
+                        "FROM service_security_scans "
+                        "WHERE service_id = ANY(:ids) "
+                        "ORDER BY service_id, scanned_at DESC"
+                    ),
+                    {"ids": svc_ids},
+                )
+            ).all()
+            security_by_service = {str(r.service_id): r for r in scan_rows}
+
+    def _service_ssl_out(s: Service) -> ServiceSslOut:
+        scan = security_by_service.get(str(s.id))
+        return ServiceSslOut(
+            id=s.id,
+            name=s.name,
+            url=s.url,
+            ssl_status=s.ssl_status,
+            ssl_expiry_date=s.ssl_expiry_date,
+            ssl_days_remaining=s.ssl_days_remaining,
+            ssl_issuer=s.ssl_issuer,
+            ssl_last_checked=s.ssl_last_checked,
+            ssl_warn_days=s.ssl_warn_days,
+            ssl_critical_days=s.ssl_critical_days,
+            security_grade=scan.grade if scan else None,
+            security_score=scan.score if scan else None,
+        )
+
     return SSLDomainsResponse(
         domains=[_domain_out(d) for d in domains],
         ssl_certs=[_ssl_out(c, domain_name_by_id.get(c.domain_id)) for c in ssl_certs],
-        service_ssl=[ServiceSslOut.model_validate(s) for s in service_ssl_rows],
+        service_ssl=[_service_ssl_out(s) for s in service_ssl_rows],
     )
 
 

@@ -123,6 +123,8 @@ class ServiceSslOut(BaseModel):
     ssl_last_checked: datetime | None
     ssl_warn_days: int
     ssl_critical_days: int
+    security_grade: str | None = None
+    security_score: int | None = None
 
     model_config = {"from_attributes": True}
 

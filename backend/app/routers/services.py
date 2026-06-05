@@ -17,6 +17,12 @@ from app.models.organization import Organization
 from app.models.other import Alert, Incident, Service, Settings
 from app.models.server import Server
 from app.models.user import UserOrganization
+from app.schemas.security import (
+    HeaderSummary,
+    SecurityFinding,
+    ServiceSecurityOut,
+    TLSSummary,
+)
 from app.schemas.service import ServiceCreate, ServiceOut, ServiceUpdate
 from app.services import alerting, probe
 
@@ -200,6 +206,57 @@ async def get_service(service_id: str, user: CurrentUser, db: AsyncSession = Dep
     service = await _get_accessible_service(service_id, user, db)
     server = await db.get(Server, service.server_id)
     return await _service_to_out(service, server.name if server else "", db)
+
+
+@router.get("/api/organizations/{org_id}/services/{service_id}/security", response_model=ServiceSecurityOut)
+async def get_service_security(
+    org_id: str, service_id: str, user: CurrentUser, db: AsyncSession = Depends(get_db)
+):
+    await _assert_org_access(org_id, user, db)
+    await _get_accessible_service(service_id, user, db)
+
+    from app.models.other import ServiceSecurityScan
+    scan = (
+        await db.execute(
+            select(ServiceSecurityScan)
+            .where(ServiceSecurityScan.service_id == service_id)
+            .order_by(ServiceSecurityScan.scanned_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+    if scan is None:
+        raise HTTPException(404, detail={"error": "not_found", "message": "No security scan available yet."})
+
+    return ServiceSecurityOut(
+        grade=scan.grade,
+        score=scan.score,
+        scanned_at=scan.scanned_at,
+        tls=TLSSummary(
+            version=scan.tls_version,
+            ok=scan.tls_ok,
+            cipher_suite=scan.cipher_suite,
+            cipher_ok=scan.cipher_ok,
+            pfs=scan.pfs_supported,
+            key_size=scan.key_size,
+            key_size_ok=scan.key_size_ok,
+            self_signed=scan.self_signed,
+            ocsp=scan.ocsp_stapling,
+        ),
+        headers=HeaderSummary(
+            https_redirect=scan.https_redirect,
+            hsts=scan.hsts,
+            hsts_max_age=scan.hsts_max_age,
+            csp=scan.csp,
+            x_frame_options=scan.x_frame_options,
+            x_content_type=scan.x_content_type,
+            referrer_policy=scan.referrer_policy,
+            permissions_policy=scan.permissions_policy,
+            server_disclosure=scan.server_disclosure,
+            x_powered_by=scan.x_powered_by,
+        ),
+        findings=[SecurityFinding(**f) for f in (scan.findings or [])],
+    )
 
 
 # ── Create / update / delete (Admin) ────────────────────────────────────────
