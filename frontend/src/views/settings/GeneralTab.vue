@@ -10,6 +10,34 @@ const notify = useNotify()
 // Local editable copies (so we only persist on Save).
 const instanceName = ref('')
 const baseUrl = ref('')
+const timezone = ref('UTC')
+
+const TIMEZONES = [
+  { value: 'UTC', label: 'UTC — Coordinated Universal Time' },
+  { value: 'America/New_York', label: 'America/New_York — ET (UTC-5/-4)' },
+  { value: 'America/Chicago', label: 'America/Chicago — CT (UTC-6/-5)' },
+  { value: 'America/Denver', label: 'America/Denver — MT (UTC-7/-6)' },
+  { value: 'America/Los_Angeles', label: 'America/Los_Angeles — PT (UTC-8/-7)' },
+  { value: 'America/Sao_Paulo', label: 'America/Sao_Paulo — BRT (UTC-3)' },
+  { value: 'Europe/London', label: 'Europe/London — GMT/BST (UTC+0/+1)' },
+  { value: 'Europe/Paris', label: 'Europe/Paris — CET (UTC+1/+2)' },
+  { value: 'Europe/Berlin', label: 'Europe/Berlin — CET (UTC+1/+2)' },
+  { value: 'Europe/Moscow', label: 'Europe/Moscow — MSK (UTC+3)' },
+  { value: 'Asia/Dubai', label: 'Asia/Dubai — GST (UTC+4)' },
+  { value: 'Asia/Kolkata', label: 'Asia/Kolkata — IST (UTC+5:30)' },
+  { value: 'Asia/Dhaka', label: 'Asia/Dhaka — BST (UTC+6)' },
+  { value: 'Asia/Bangkok', label: 'Asia/Bangkok — ICT (UTC+7)' },
+  { value: 'Asia/Jakarta', label: 'Asia/Jakarta — WIB (UTC+7)' },
+  { value: 'Asia/Singapore', label: 'Asia/Singapore — SGT (UTC+8)' },
+  { value: 'Asia/Kuala_Lumpur', label: 'Asia/Kuala_Lumpur — MYT (UTC+8)' },
+  { value: 'Asia/Shanghai', label: 'Asia/Shanghai — CST (UTC+8)' },
+  { value: 'Asia/Hong_Kong', label: 'Asia/Hong_Kong — HKT (UTC+8)' },
+  { value: 'Asia/Tokyo', label: 'Asia/Tokyo — JST (UTC+9)' },
+  { value: 'Asia/Seoul', label: 'Asia/Seoul — KST (UTC+9)' },
+  { value: 'Australia/Perth', label: 'Australia/Perth — AWST (UTC+8)' },
+  { value: 'Australia/Sydney', label: 'Australia/Sydney — AEST (UTC+10/+11)' },
+  { value: 'Pacific/Auckland', label: 'Pacific/Auckland — NZST (UTC+12/+13)' },
+]
 
 const smtpHost = ref('')
 const smtpPort = ref<number>(587)
@@ -32,6 +60,7 @@ async function load() {
     await settings.fetchSettings()
     instanceName.value = settings.general.instanceName
     baseUrl.value = settings.general.baseUrl
+    timezone.value = settings.general.timezone
     smtpHost.value = settings.smtp.host
     smtpPort.value = settings.smtp.port
     smtpEncryption.value = settings.smtp.encryption
@@ -54,8 +83,10 @@ async function saveIdentity() {
     await settings.saveGeneral({
       instance_name: instanceName.value.trim() || 'OpsPilot',
       base_url: baseUrl.value.trim().replace(/\/+$/, ''),
+      timezone: timezone.value,
     })
     baseUrl.value = settings.general.baseUrl
+    timezone.value = settings.general.timezone
     notify.success('Settings saved.')
   } catch (err) {
     notify.error(getApiError(err) ?? 'Unable to save settings.')
@@ -115,6 +146,13 @@ async function sendTest() {
         <label>Base URL</label>
         <input v-model="baseUrl" type="url" placeholder="https://monitor.yourdomain.com" :disabled="loading" />
         <p class="hint">Used in alert email links and cron/backup ping URLs. No trailing slash.</p>
+      </div>
+      <div class="field">
+        <label>Timezone</label>
+        <select v-model="timezone" :disabled="loading">
+          <option v-for="tz in TIMEZONES" :key="tz.value" :value="tz.value">{{ tz.label }}</option>
+        </select>
+        <p class="hint">All timestamps and daily uptime bars use this timezone.</p>
       </div>
       <div v-if="!loading && !baseUrl.trim()" class="banner amber">
         Base URL is not configured — links will use the request Host header as fallback.
