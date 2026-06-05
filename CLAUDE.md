@@ -1,5 +1,24 @@
 # OpsPilot — Development Instructions
 
+## Environment (Always Use Dev Stack)
+
+Always run OpsPilot using the **dev overlay** — never rebuild the production frontend image during active development:
+
+```bash
+# Start full dev stack
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+# Start only frontend (if already running backend/postgres)
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d frontend
+```
+
+- Frontend: Vite HMR on port 5173 (source files volume-mounted — edits hot-reload instantly)
+- Proxy: `opspilot-nginx-dev` on `http://localhost:9090` routes to Vite
+- Backend: uvicorn `--reload` on port 8765
+- **Never use `docker compose build frontend`** to verify frontend changes — just edit the file and reload the browser.
+
+---
+
 ## Development Rules (Always Follow)
 
 ### 0. Update Progress Dashboard After Every Task
