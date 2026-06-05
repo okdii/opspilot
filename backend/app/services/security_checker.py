@@ -95,7 +95,7 @@ def _audit_tls_sync(hostname: str, port: int) -> TLSAudit:
 
     if result.cipher_suite:
         upper = result.cipher_suite.upper()
-        if any(w in upper for w in ("RC4", "_DES_", "3DES", "NULL")):
+        if any(w in upper for w in ("RC4", "DES", "NULL")):
             result.cipher_ok = False
         result.pfs_supported = "ECDHE" in upper or "DHE" in upper
 
@@ -490,7 +490,8 @@ async def run_security_check(service_id: str) -> None:
             service.last_security_scan = now
             await db.flush()
 
-            await _fire_security_alerts(db, service, tls, grade, server_id)
+            if tls.error is None:
+                await _fire_security_alerts(db, service, tls, grade, server_id)
             await db.commit()
 
             if org_id:
