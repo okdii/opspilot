@@ -28,6 +28,7 @@ const props = defineProps<{
   range: ResponseRange
   downPeriods: Array<{ start: number; end: number }>
   loading?: boolean
+  title?: string
 }>()
 
 const emit = defineEmits<{
@@ -277,6 +278,7 @@ const option = computed(() => ({
 <template>
   <div class="resp-chart">
     <div class="resp-chart__header">
+      <span v-if="title" class="resp-chart__title">{{ title }}</span>
       <div class="ranges">
         <button
           v-for="r in RANGES"
@@ -303,7 +305,8 @@ const option = computed(() => ({
 
 <style scoped>
 .resp-chart { display: flex; flex-direction: column; gap: 8px; }
-.resp-chart__header { display: flex; justify-content: flex-end; }
+.resp-chart__header { display: flex; justify-content: space-between; align-items: center; }
+.resp-chart__title { font-size: 14px; font-weight: 600; color: var(--text); }
 .ranges { display: flex; gap: 4px; }
 .range {
   background: var(--surface-2);

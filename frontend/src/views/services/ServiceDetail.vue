@@ -351,8 +351,8 @@ onUnmounted(() => {
 
     <!-- Response time -->
     <section class="card">
-      <h3>Response Time</h3>
       <ResponseTimeChart
+        title="Response Time"
         :data="respData"
         :range="range"
         :down-periods="downPeriods"
