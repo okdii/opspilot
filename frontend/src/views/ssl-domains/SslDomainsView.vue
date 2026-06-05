@@ -63,14 +63,11 @@ const _statUnreachable   = computed(() => trackedRows.value.filter(r => r.status
 const insightText = computed(() => {
   if (statTotal.value === 0) return null
   const expired  = _statExpiredOnly.value
-  const critical = _statCriticalOnly.value
   const expiring = statExpiring.value
+  const critical = _statCriticalOnly.value
   const unreach  = _statUnreachable.value
-  const danger   = expired + critical
-  if (danger > 0 && expiring > 0)
-    return `${danger} critical/expired, ${expiring} expiring soon — action needed.`
-  if (expired > 0 && critical > 0)
-    return `${expired} expired, ${critical} critical — renew or investigate immediately.`
+  if (expired > 0 && expiring > 0)
+    return `${expired} expired, ${expiring} expiring soon — action needed.`
   if (expired > 0)
     return `${expired} cert(s) expired — renew immediately.`
   if (critical > 0)
@@ -142,9 +139,9 @@ const sorted = computed<CombinedRow[]>(() => {
 })
 
 const summary = computed(() => {
-  const parts = [`${store.combinedRows.length} items`]
-  if (store.criticalCount) parts.push(`${store.criticalCount} critical`)
-  if (store.expiringCount) parts.push(`${store.expiringCount} expiring`)
+  const parts = [`${statTotal.value} items`]
+  if (statCritical.value) parts.push(`${statCritical.value} critical`)
+  if (statExpiring.value) parts.push(`${statExpiring.value} expiring`)
   return parts.join(' • ')
 })
 
@@ -384,8 +381,6 @@ function askDelete(r: CombinedRow) {
     confirm.id = r.id
     confirm.name = rowName(r)
   }
-  // service rows: no delete action
-  if (r.type === 'service') return
   confirm.open = true
 }
 
@@ -399,6 +394,10 @@ async function doDelete() {
     notify.error(getApiError(err)?.message ?? 'Unable to delete.')
   }
 }
+
+const trackedTimelineDots = computed(() =>
+  store.timelineDots.filter(d => d.type !== 'service')
+)
 
 // ── Timeline dot → scroll + highlight row ─────────────────────────────────
 const highlightId = ref<string | null>(null)
@@ -442,7 +441,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 
     <!-- Empty state -->
     <EmptyState
-      v-if="!store.isLoading && store.combinedRows.length === 0"
+      v-if="!store.isLoading && trackedRows.length === 0"
       title="No domains tracked yet"
       message="Add domains to track WHOIS registration expiry and non-standard SSL certs (e.g. IMAPS:993). SSL for your HTTPS services is tracked automatically on the Services page."
     >
@@ -458,11 +457,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
           <span class="stat-value">{{ statTotal }}</span>
           <span class="stat-label">Total Tracked</span>
         </div>
-        <div class="stat-card stat-card--danger">
+        <div class="stat-card" :class="statCritical > 0 ? 'stat-card--danger' : 'stat-card--ok'">
           <span class="stat-value">{{ statCritical }}</span>
           <span class="stat-label">Critical / Expired</span>
         </div>
-        <div class="stat-card stat-card--warn">
+        <div class="stat-card" :class="statExpiring > 0 ? 'stat-card--warn' : ''">
           <span class="stat-value">{{ statExpiring }}</span>
           <span class="stat-label">Expiring Soon</span>
         </div>
@@ -478,9 +477,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
       </div>
 
       <!-- Timeline -->
-      <section v-if="store.timelineDots.length" class="panel">
+      <section v-if="trackedTimelineDots.length" class="panel">
         <h3 class="panel-title">Expiry Timeline</h3>
-        <ExpiryTimeline :dots="store.timelineDots" @dot-click="onDotClick" />
+        <ExpiryTimeline :dots="trackedTimelineDots" @dot-click="onDotClick" />
       </section>
 
       <p class="page-hint">SSL for your HTTPS services is tracked automatically — add non-HTTP certs (e.g. IMAPS, SMTPS) here.</p>
@@ -737,7 +736,6 @@ tr.highlight td { outline: 2px solid var(--amber); outline-offset: -2px; animati
 .type-badge { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 4px; }
 .type-badge.domain { background: rgba(99,102,241,0.15); color: var(--accent-2); }
 .type-badge.ssl { background: rgba(6,182,212,0.15); color: #22d3ee; }
-.type-badge.service { background: rgba(168,85,247,0.15); color: #c084fc; }
 .checking { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
 .no-match { padding: 28px; text-align: center; color: var(--muted); font-size: 13px; }
 
