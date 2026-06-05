@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { useOrgStore } from '@/stores/org'
 import { useAuthStore } from '@/stores/auth'
 import { useSslDomainStore, type CombinedRow } from '@/stores/sslDomains'
@@ -9,7 +10,9 @@ import { getApiError } from '@/services/api'
 import { PageHeader, StatusBadge, EmptyState, SlideOver } from '@/components/ui'
 import ExpiryBar from '@/components/ssl-domains/ExpiryBar.vue'
 import ExpiryTimeline from '@/components/ssl-domains/ExpiryTimeline.vue'
+import SecurityGrade from '@/components/SecurityGrade.vue'
 
+const router = useRouter()
 const orgStore = useOrgStore()
 const auth = useAuthStore()
 const store = useSslDomainStore()
@@ -28,7 +31,7 @@ watch(() => orgStore.activeOrgId, load)
 onUnmounted(() => store.reset())
 
 // ── Filters + sort ──────────────────────────────────────────────────────────
-const typeFilter = ref<'all' | 'domain' | 'ssl'>('all')
+const typeFilter = ref<'all' | 'domain' | 'ssl' | 'service'>('all')
 const statusFilter = ref<'all' | string>('all')
 const search = ref('')
 const debouncedSearch = ref('')
@@ -38,7 +41,7 @@ watch(search, (v) => {
   searchTimer = setTimeout(() => (debouncedSearch.value = v.trim().toLowerCase()), 300)
 })
 
-const sortKey = ref<'name' | 'type' | 'expiry' | 'days' | 'status'>('expiry')
+const sortKey = ref<'name' | 'type' | 'expiry' | 'days' | 'status' | 'security'>('expiry')
 const sortDir = ref<'asc' | 'desc'>('asc')
 function toggleSort(key: typeof sortKey.value) {
   if (sortKey.value === key) sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
@@ -48,9 +51,7 @@ function toggleSort(key: typeof sortKey.value) {
   }
 }
 
-const trackedRows = computed(() =>
-  store.combinedRows.filter(r => r.type !== 'service')
-)
+const trackedRows = computed(() => store.combinedRows)
 
 const statTotal          = computed(() => trackedRows.value.length)
 const statCritical       = computed(() => trackedRows.value.filter(r => r.status === 'critical' || r.status === 'expired').length)
@@ -123,6 +124,9 @@ const sorted = computed<CombinedRow[]>(() => {
       }
       case 'status':
         cmp = store.statusRank(a.status) - store.statusRank(b.status)
+        break
+      case 'security':
+        cmp = (b.securityScore ?? -1) - (a.securityScore ?? -1)
         break
       case 'expiry':
       default: {
@@ -361,7 +365,7 @@ async function submitEditSsl() {
 // ── Delete (confirm) ──────────────────────────────────────────────────────
 const confirm = reactive<{
   open: boolean
-  kind: 'domain' | 'ssl' | 'blocked'
+  kind: 'domain' | 'ssl'
   id: string
   name: string
 }>({ open: false, kind: 'domain', id: '', name: '' })
@@ -369,11 +373,7 @@ const confirm = reactive<{
 function askDelete(r: CombinedRow) {
   openMenuId.value = null
   if (r.type === 'domain') {
-    if (store.domainIdsWithCert.has(r.id)) {
-      confirm.kind = 'blocked'
-    } else {
-      confirm.kind = 'domain'
-    }
+    confirm.kind = 'domain'
     confirm.id = r.id
     confirm.name = r.domainName
   } else if (r.type === 'ssl') {
@@ -381,6 +381,7 @@ function askDelete(r: CombinedRow) {
     confirm.id = r.id
     confirm.name = rowName(r)
   }
+  if (r.type === 'service') return
   confirm.open = true
 }
 
@@ -395,9 +396,7 @@ async function doDelete() {
   }
 }
 
-const trackedTimelineDots = computed(() =>
-  store.timelineDots.filter(d => d.type !== 'service')
-)
+const trackedTimelineDots = computed(() => store.timelineDots)
 
 // ── Timeline dot → scroll + highlight row ─────────────────────────────────
 const highlightId = ref<string | null>(null)
@@ -490,6 +489,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
           <option value="all">All Types</option>
           <option value="domain">Domain</option>
           <option value="ssl">SSL</option>
+          <option value="service">Service</option>
         </select>
         <select v-model="statusFilter">
           <option value="all">All Status</option>
@@ -513,6 +513,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
               <th class="sortable num" @click="toggleSort('days')">Days Left<span v-if="sortKey === 'days'" class="caret">{{ sortDir === 'asc' ? '▲' : '▼' }}</span></th>
               <th class="bar-col">Progress</th>
               <th class="sortable" @click="toggleSort('status')">Status<span v-if="sortKey === 'status'" class="caret">{{ sortDir === 'asc' ? '▲' : '▼' }}</span></th>
+              <th class="col-security sortable" @click="toggleSort('security')">
+                Security
+                <span v-if="sortKey === 'security'" class="sort-arrow">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
+              </th>
               <th>Last Checked</th>
               <th v-if="canEdit" class="kebab-col"></th>
             </tr>
@@ -528,7 +532,17 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
               <td>
                 <span class="type-badge" :class="r.type">{{ r.type === 'ssl' ? 'SSL' : 'Domain' }}</span>
               </td>
-              <td class="mono">{{ formatDate(r.expiryDate) }}</td>
+              <td class="mono">
+                <template v-if="r.type === 'domain'">
+                  <div>{{ formatDate(r.expiryDate) }}</div>
+                  <div class="expiry-sub">
+                    <span v-if="r.sslDaysRemaining != null">SSL: {{ r.sslDaysRemaining }}d</span>
+                    <span v-else>SSL: pending</span>
+                    <span v-if="r.whoisDaysRemaining != null"> · WHOIS: {{ r.whoisDaysRemaining }}d</span>
+                  </div>
+                </template>
+                <template v-else>{{ formatDate(r.expiryDate) }}</template>
+              </td>
               <td class="num mono">{{ daysLabel(r) }}</td>
               <td class="bar-col">
                 <ExpiryBar :days-remaining="r.daysRemaining" :warn-threshold="r.warnThreshold" :status="r.status" />
@@ -539,15 +553,27 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
                 </span>
                 <StatusBadge v-else :kind="r.type" :status="r.status" />
               </td>
+              <td class="col-security">
+                <SecurityGrade
+                  v-if="r.type !== 'ssl'"
+                  :grade="r.securityGrade ?? null"
+                  :score="r.securityScore ?? null"
+                  size="sm"
+                />
+                <span v-else class="muted-dash">—</span>
+              </td>
               <td class="muted small">{{ relTime(r.lastChecked) }}</td>
               <td v-if="canEdit" class="kebab-col" @click.stop>
                 <button class="kebab" aria-label="Row actions" @click="openMenuId = openMenuId === r.id ? null : r.id">⋮</button>
                 <div v-if="openMenuId === r.id" class="kebab-menu">
                   <button class="kmi" @click="checkNow(r)">Check Now</button>
-                  <button v-if="r.type === 'domain' && !store.domainIdsWithCert.has(r.id)" class="kmi" @click="openAddSsl(r)">Add SSL Cert</button>
-                  <button class="kmi" @click="r.type === 'domain' ? openEditDomain(r) : openEditSsl(r)">Edit</button>
-                  <div class="kmi-div"></div>
-                  <button class="kmi danger" @click="askDelete(r)">Delete</button>
+                  <button v-if="r.type === 'domain'" class="kmi" @click="openAddSsl(r)">Add SSL (non-standard port)</button>
+                  <button v-if="r.type === 'domain' || r.type === 'ssl'" class="kmi" @click="r.type === 'domain' ? openEditDomain(r) : openEditSsl(r)">Edit</button>
+                  <template v-if="r.type === 'service'">
+                    <button class="kmi" @click="router.push({ name: 'service-detail', params: { id: r.id } })">View in Services →</button>
+                  </template>
+                  <div v-if="r.type !== 'service'" class="kmi-div"></div>
+                  <button v-if="r.type !== 'service'" class="kmi danger" @click="askDelete(r)">Delete</button>
                 </div>
               </td>
             </tr>
@@ -674,15 +700,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
       </template>
     </SlideOver>
 
-    <!-- Delete / blocked confirm -->
+    <!-- Delete confirm -->
     <div v-if="confirm.open" class="modal-overlay" @click.self="confirm.open = false">
       <div class="modal sm">
-        <template v-if="confirm.kind === 'blocked'">
-          <h2>Cannot Delete Domain</h2>
-          <p class="mb-msg">{{ confirm.name }} has a linked SSL certificate. Delete the SSL cert first, then delete the domain.</p>
-          <div class="actions"><button class="primary" @click="confirm.open = false">Close</button></div>
-        </template>
-        <template v-else-if="confirm.kind === 'ssl'">
+        <template v-if="confirm.kind === 'ssl'">
           <h2>Delete SSL cert for {{ confirm.name }}?</h2>
           <p class="mb-msg">This will permanently remove all SSL check history.</p>
           <div class="actions">
@@ -692,7 +713,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
         </template>
         <template v-else>
           <h2>Delete {{ confirm.name }}?</h2>
-          <p class="mb-msg">This will permanently remove the domain registration record and all linked alert history.</p>
+          <p class="mb-msg">This will permanently remove {{ confirm.name }} and its linked SSL certificate and all check history.</p>
           <div class="actions">
             <button class="ghost" @click="confirm.open = false">Cancel</button>
             <button class="danger-btn" @click="doDelete">Delete Domain</button>
@@ -800,4 +821,9 @@ input.invalid { border-color: var(--red); }
 .spinner { width: 12px; height: 12px; border: 2px solid rgba(99,102,241,0.25); border-top-color: var(--accent-2); border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
 .spinner.light { border-color: rgba(255,255,255,0.4); border-top-color: #fff; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.expiry-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.col-security { width: 100px; text-align: center; cursor: pointer; }
+.muted-dash { color: var(--muted); font-size: 13px; }
+.sort-arrow { font-size: 10px; margin-left: 2px; }
 </style>
