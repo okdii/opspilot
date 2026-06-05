@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { UptimePoint } from '@/stores/services'
+import { useDateFormat } from '@/composables/useDateFormat'
 
 const props = withDefaults(
   defineProps<{ points: UptimePoint[]; days?: number }>(),
   { days: 90 },
 )
+
+const { toTzDateKey } = useDateFormat()
 
 interface Seg {
   date: string
@@ -14,15 +17,14 @@ interface Seg {
   tone: 'up' | 'partial' | 'down' | 'none'
 }
 
-// Build a dense day strip so gaps render as grey "no data" segments.
 const segments = computed<Seg[]>(() => {
   const byDate = new Map(props.points.map((p) => [p.date, p]))
   const out: Seg[] = []
-  const today = new Date()
+  const now = new Date()
   for (let i = props.days - 1; i >= 0; i--) {
-    const d = new Date(today)
+    const d = new Date(now)
     d.setDate(d.getDate() - i)
-    const key = d.toISOString().slice(0, 10)
+    const key = toTzDateKey(d)
     const p = byDate.get(key)
     if (!p) {
       out.push({ date: key, pct: null, down: 0, tone: 'none' })

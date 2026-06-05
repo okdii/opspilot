@@ -10,6 +10,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useOrgStore } from '@/stores/org'
 import { useServerStore } from '@/stores/server'
 import { useServiceStore } from '@/stores/services'
+import { useDateFormat } from '@/composables/useDateFormat'
 import { useNotify } from '@/composables/useNotify'
 import { wsClient } from '@/utils/ws'
 import { relativeTime } from '@/utils/metrics'
@@ -23,6 +24,7 @@ const orgStore = useOrgStore()
 const serverStore = useServerStore()
 const store = useServiceStore()
 const notify = useNotify()
+const { formatDateTime } = useDateFormat()
 
 const serviceId = computed(() => route.params.id as string)
 const service = computed<Service | null>(() => store.activeService)
@@ -174,11 +176,6 @@ function durationLabel(inc: { resolved_at: string | null; duration_sec: number |
   const h = Math.floor(m / 60)
   return `${h}h ${m % 60}min`
 }
-function fmtTime(iso: string | null): string {
-  if (!iso) return '—'
-  return new Date(iso).toISOString().replace('T', ' ').slice(0, 19)
-}
-
 // ── Load + WS ────────────────────────────────────────────────────────────────
 let unbindWs: (() => void) | null = null
 let subscribedOrg: string | null = null
@@ -372,9 +369,9 @@ onUnmounted(() => {
           <span>Duration</span>
         </div>
         <div v-for="inc in store.incidents" :key="inc.id" class="trow">
-          <span class="mono">{{ fmtTime(inc.started_at) }}</span>
+          <span class="mono">{{ formatDateTime(inc.started_at) }}</span>
           <span v-if="!inc.resolved_at" class="ongoing">Ongoing</span>
-          <span v-else class="mono">{{ fmtTime(inc.resolved_at) }}</span>
+          <span v-else class="mono">{{ formatDateTime(inc.resolved_at) }}</span>
           <span class="dur" :class="{ open: !inc.resolved_at }">{{ durationLabel(inc) }}</span>
         </div>
       </div>
