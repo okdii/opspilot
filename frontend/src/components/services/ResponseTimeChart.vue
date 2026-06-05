@@ -65,20 +65,20 @@ const effectiveZoomEnd = computed(() => {
 })
 
 function aggregate(pts: Point[], bucketMs: number): Point[] {
-  const buckets = new Map<number, { sumAvg: number; sumP95: number; count: number }>()
+  const buckets = new Map<number, { sumAvg: number; sumP95: number; count: number; countP95: number }>()
   for (const [t, avg, p95] of pts) {
     const key = Math.floor(t / bucketMs) * bucketMs
-    if (!buckets.has(key)) buckets.set(key, { sumAvg: 0, sumP95: 0, count: 0 })
+    if (!buckets.has(key)) buckets.set(key, { sumAvg: 0, sumP95: 0, count: 0, countP95: 0 })
     const b = buckets.get(key)!
     if (avg != null) { b.sumAvg += avg; b.count++ }
-    if (p95 != null) b.sumP95 += p95
+    if (p95 != null) { b.sumP95 += p95; b.countP95++ }
   }
   return [...buckets.entries()]
     .sort(([a], [b]) => a - b)
     .map(([t, b]): Point => [
       t,
-      b.count ? Math.round(b.sumAvg / b.count) : null,
-      b.count ? Math.round(b.sumP95 / b.count) : null,
+      b.count ? parseFloat((b.sumAvg / b.count).toFixed(2)) : null,
+      b.countP95 ? parseFloat((b.sumP95 / b.countP95).toFixed(2)) : null,
     ])
 }
 
