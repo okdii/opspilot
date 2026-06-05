@@ -17,7 +17,7 @@ import httpx
 from sqlalchemy import select
 
 from app.database import AsyncSessionLocal
-from app.models.other import Alert, Service, ServiceSecurityScan
+from app.models.other import Alert, Domain, Service, ServiceSecurityScan, SSLCert
 from app.models.server import Server
 from app.services import alerting
 from app.ws.manager import ws_manager
@@ -510,3 +510,43 @@ async def run_security_check(service_id: str) -> None:
 
     except Exception:
         logger.exception("run_security_check failed for service %s", service_id)
+
+
+async def run_ssl_cert_security_check(ssl_cert_id: str) -> None:
+    """Run a full security audit for a domain's SSL:443 cert. Never raises.
+
+    Reuses the same TLS + HTTP header audit as run_security_check() but stores
+    results on the SSLCert record instead of creating a ServiceSecurityScan row.
+    Respects a 24-hour throttle.
+    """
+    try:
+        async with AsyncSessionLocal() as db:
+            cert = await db.get(SSLCert, ssl_cert_id)
+            if cert is None or cert.port != 443:
+                return
+            domain = await db.get(Domain, cert.domain_id)
+            if domain is None:
+                return
+
+            now = _now()
+            if (
+                cert.security_scanned_at is not None
+                and (now - _aware(cert.security_scanned_at)).total_seconds() < 86400
+            ):
+                return  # scanned within last 24 h
+
+            hostname = domain.domain
+            url = f"https://{hostname}"
+
+            tls = await asyncio.to_thread(_audit_tls_sync, hostname, 443)
+            hdr = await _audit_headers(url)
+            score, grade, findings = _compute_score(tls, hdr)
+
+            cert.security_grade = grade
+            cert.security_score = score
+            cert.security_scanned_at = now
+            cert.security_findings = findings
+            await db.commit()
+            logger.info("Security audit complete for domain %s: grade=%s score=%d", domain.domain, grade, score)
+    except Exception:
+        logger.exception("run_ssl_cert_security_check failed for cert %s", ssl_cert_id)
