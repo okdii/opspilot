@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
 import { useOrgStore } from '@/stores/org'
 import { useAuthStore } from '@/stores/auth'
 import { useSslDomainStore, type CombinedRow } from '@/stores/sslDomains'
@@ -10,9 +9,7 @@ import { getApiError } from '@/services/api'
 import { PageHeader, StatusBadge, EmptyState, SlideOver } from '@/components/ui'
 import ExpiryBar from '@/components/ssl-domains/ExpiryBar.vue'
 import ExpiryTimeline from '@/components/ssl-domains/ExpiryTimeline.vue'
-import SecurityGrade from '@/components/SecurityGrade.vue'
 
-const router = useRouter()
 const orgStore = useOrgStore()
 const auth = useAuthStore()
 const store = useSslDomainStore()
@@ -31,7 +28,7 @@ watch(() => orgStore.activeOrgId, load)
 onUnmounted(() => store.reset())
 
 // ── Filters + sort ──────────────────────────────────────────────────────────
-const typeFilter = ref<'all' | 'domain' | 'ssl' | 'service'>('all')
+const typeFilter = ref<'all' | 'domain' | 'ssl'>('all')
 const statusFilter = ref<'all' | string>('all')
 const search = ref('')
 const debouncedSearch = ref('')
@@ -41,7 +38,7 @@ watch(search, (v) => {
   searchTimer = setTimeout(() => (debouncedSearch.value = v.trim().toLowerCase()), 300)
 })
 
-const sortKey = ref<'name' | 'type' | 'expiry' | 'days' | 'status' | 'security'>('expiry')
+const sortKey = ref<'name' | 'type' | 'expiry' | 'days' | 'status'>('expiry')
 const sortDir = ref<'asc' | 'desc'>('asc')
 function toggleSort(key: typeof sortKey.value) {
   if (sortKey.value === key) sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
@@ -51,8 +48,48 @@ function toggleSort(key: typeof sortKey.value) {
   }
 }
 
+const trackedRows = computed(() =>
+  store.combinedRows.filter(r => r.type !== 'service')
+)
+
+const statTotal          = computed(() => trackedRows.value.length)
+const statCritical       = computed(() => trackedRows.value.filter(r => r.status === 'critical' || r.status === 'expired').length)
+const statExpiring       = computed(() => trackedRows.value.filter(r => r.status === 'expiring_soon').length)
+const statHealthy        = computed(() => trackedRows.value.filter(r => r.status === 'valid').length)
+const _statExpiredOnly   = computed(() => trackedRows.value.filter(r => r.status === 'expired').length)
+const _statCriticalOnly  = computed(() => trackedRows.value.filter(r => r.status === 'critical').length)
+const _statUnreachable   = computed(() => trackedRows.value.filter(r => r.status === 'unreachable').length)
+
+const insightText = computed(() => {
+  if (statTotal.value === 0) return null
+  const expired  = _statExpiredOnly.value
+  const critical = _statCriticalOnly.value
+  const expiring = statExpiring.value
+  const unreach  = _statUnreachable.value
+  const danger   = expired + critical
+  if (danger > 0 && expiring > 0)
+    return `${danger} critical/expired, ${expiring} expiring soon — action needed.`
+  if (expired > 0 && critical > 0)
+    return `${expired} expired, ${critical} critical — renew or investigate immediately.`
+  if (expired > 0)
+    return `${expired} cert(s) expired — renew immediately.`
+  if (critical > 0)
+    return `${critical} item(s) in critical state — expiring very soon.`
+  if (expiring > 0)
+    return `${expiring} item(s) expiring soon — plan renewal.`
+  if (unreach > 0)
+    return `${unreach} item(s) unreachable — check your servers.`
+  return `All ${statTotal.value} items are healthy — nothing to action.`
+})
+
+const insightTone = computed(() => {
+  if (statCritical.value > 0) return 'danger'
+  if (statExpiring.value > 0 || _statUnreachable.value > 0) return 'warn'
+  return 'ok'
+})
+
 const filtered = computed<CombinedRow[]>(() => {
-  let rows = store.combinedRows
+  let rows = trackedRows.value
   if (typeFilter.value !== 'all') rows = rows.filter((r) => r.type === typeFilter.value)
   if (statusFilter.value !== 'all') rows = rows.filter((r) => r.status === statusFilter.value)
   if (debouncedSearch.value) rows = rows.filter((r) => r.domainName.toLowerCase().includes(debouncedSearch.value))
@@ -89,9 +126,6 @@ const sorted = computed<CombinedRow[]>(() => {
       }
       case 'status':
         cmp = store.statusRank(a.status) - store.statusRank(b.status)
-        break
-      case 'security':
-        cmp = (b.securityScore ?? -1) - (a.securityScore ?? -1)
         break
       case 'expiry':
       default: {
@@ -418,6 +452,31 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
     </EmptyState>
 
     <template v-else>
+      <!-- Stat cards -->
+      <div v-if="!store.isLoading && statTotal > 0" class="stat-row">
+        <div class="stat-card">
+          <span class="stat-value">{{ statTotal }}</span>
+          <span class="stat-label">Total Tracked</span>
+        </div>
+        <div class="stat-card stat-card--danger">
+          <span class="stat-value">{{ statCritical }}</span>
+          <span class="stat-label">Critical / Expired</span>
+        </div>
+        <div class="stat-card stat-card--warn">
+          <span class="stat-value">{{ statExpiring }}</span>
+          <span class="stat-label">Expiring Soon</span>
+        </div>
+        <div class="stat-card stat-card--ok">
+          <span class="stat-value">{{ statHealthy }}</span>
+          <span class="stat-label">Healthy</span>
+        </div>
+      </div>
+
+      <!-- Insight banner -->
+      <div v-if="insightText" class="insight-banner" :class="`insight--${insightTone}`">
+        {{ insightText }}
+      </div>
+
       <!-- Timeline -->
       <section v-if="store.timelineDots.length" class="panel">
         <h3 class="panel-title">Expiry Timeline</h3>
@@ -432,7 +491,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
           <option value="all">All Types</option>
           <option value="domain">Domain</option>
           <option value="ssl">SSL</option>
-          <option value="service">Service</option>
         </select>
         <select v-model="statusFilter">
           <option value="all">All Status</option>
@@ -456,10 +514,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
               <th class="sortable num" @click="toggleSort('days')">Days Left<span v-if="sortKey === 'days'" class="caret">{{ sortDir === 'asc' ? '▲' : '▼' }}</span></th>
               <th class="bar-col">Progress</th>
               <th class="sortable" @click="toggleSort('status')">Status<span v-if="sortKey === 'status'" class="caret">{{ sortDir === 'asc' ? '▲' : '▼' }}</span></th>
-              <th class="col-security" @click="toggleSort('security')">
-                Security
-                <span v-if="sortKey === 'security'" class="sort-arrow">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
-              </th>
               <th>Last Checked</th>
               <th v-if="canEdit" class="kebab-col"></th>
             </tr>
@@ -469,11 +523,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
               v-for="r in sorted"
               :id="`row-${r.id}`"
               :key="r.id"
-              :class="{ highlight: highlightId === r.id, 'is-ssl': r.type === 'ssl' || r.type === 'service' }"
+              :class="{ highlight: highlightId === r.id, 'is-ssl': r.type === 'ssl' }"
             >
               <td class="name">{{ rowName(r) }}</td>
               <td>
-                <span class="type-badge" :class="r.type">{{ r.type === 'ssl' ? 'SSL' : r.type === 'service' ? 'Service' : 'Domain' }}</span>
+                <span class="type-badge" :class="r.type">{{ r.type === 'ssl' ? 'SSL' : 'Domain' }}</span>
               </td>
               <td class="mono">{{ formatDate(r.expiryDate) }}</td>
               <td class="num mono">{{ daysLabel(r) }}</td>
@@ -486,29 +540,15 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
                 </span>
                 <StatusBadge v-else :kind="r.type" :status="r.status" />
               </td>
-              <td class="col-security">
-                <SecurityGrade
-                  v-if="r.type === 'service'"
-                  :grade="r.securityGrade ?? null"
-                  :score="r.securityScore ?? null"
-                  size="sm"
-                />
-                <span v-else class="muted-dash">—</span>
-              </td>
               <td class="muted small">{{ relTime(r.lastChecked) }}</td>
               <td v-if="canEdit" class="kebab-col" @click.stop>
                 <button class="kebab" aria-label="Row actions" @click="openMenuId = openMenuId === r.id ? null : r.id">⋮</button>
                 <div v-if="openMenuId === r.id" class="kebab-menu">
-                  <template v-if="r.type === 'service'">
-                    <button class="kmi" @click="router.push({ name: 'service-detail', params: { id: r.id } })">View in Services →</button>
-                  </template>
-                  <template v-else>
-                    <button class="kmi" @click="checkNow(r)">Check Now</button>
-                    <button v-if="r.type === 'domain' && !store.domainIdsWithCert.has(r.id)" class="kmi" @click="openAddSsl(r)">Add SSL Cert</button>
-                    <button class="kmi" @click="r.type === 'domain' ? openEditDomain(r) : openEditSsl(r)">Edit</button>
-                    <div class="kmi-div"></div>
-                    <button class="kmi danger" @click="askDelete(r)">Delete</button>
-                  </template>
+                  <button class="kmi" @click="checkNow(r)">Check Now</button>
+                  <button v-if="r.type === 'domain' && !store.domainIdsWithCert.has(r.id)" class="kmi" @click="openAddSsl(r)">Add SSL Cert</button>
+                  <button class="kmi" @click="r.type === 'domain' ? openEditDomain(r) : openEditSsl(r)">Edit</button>
+                  <div class="kmi-div"></div>
+                  <button class="kmi danger" @click="askDelete(r)">Delete</button>
                 </div>
               </td>
             </tr>
@@ -741,9 +781,22 @@ input.invalid { border-color: var(--red); }
 .mb-msg { color: var(--muted); font-size: 13px; line-height: 1.6; margin-bottom: 20px; }
 .actions { display: flex; gap: 10px; justify-content: flex-end; }
 
-.col-security { width: 100px; text-align: center; cursor: pointer; }
-.muted-dash { color: var(--muted); font-size: 13px; }
 .sort-arrow { font-size: 10px; margin-left: 2px; }
+
+/* Stat cards row */
+.stat-row { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.stat-card { flex: 1; min-width: 120px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; display: flex; flex-direction: column; gap: 4px; }
+.stat-value { font-size: 24px; font-weight: 700; color: var(--text); font-family: ui-monospace, monospace; }
+.stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.stat-card--danger .stat-value { color: var(--red, #ef4444); }
+.stat-card--warn .stat-value { color: var(--amber, #f59e0b); }
+.stat-card--ok .stat-value { color: var(--green, #22c55e); }
+
+/* Insight banner */
+.insight-banner { font-size: 13px; padding: 10px 14px; border-radius: 8px; border-left: 3px solid; margin-bottom: 16px; }
+.insight--danger { background: rgba(239,68,68,0.08); border-color: #ef4444; color: #fca5a5; }
+.insight--warn { background: rgba(245,158,11,0.08); border-color: #f59e0b; color: #fcd34d; }
+.insight--ok { background: rgba(34,197,94,0.08); border-color: #22c55e; color: #86efac; }
 
 /* Spinner */
 .spinner { width: 12px; height: 12px; border: 2px solid rgba(99,102,241,0.25); border-top-color: var(--accent-2); border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
