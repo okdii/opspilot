@@ -135,17 +135,28 @@ function formatMs(v: number | null): string {
   return `${Math.round(v)} ms`
 }
 
+// Inject null breakpoints at down-period boundaries so ECharts shows gaps
+// instead of connecting through outages with a straight line.
+const displayPointsWithBreaks = computed<Point[]>(() => {
+  const pts: Point[] = [...displayPoints.value]
+  for (const period of props.downPeriods) {
+    pts.push([period.start, null, null])
+    pts.push([period.end, null, null])
+  }
+  return pts.sort(([a], [b]) => a - b)
+})
+
 const avgData = computed(() =>
-  displayPoints.value.map(([t, avg]): [number, number | string] => [t, avg ?? '-'])
+  displayPointsWithBreaks.value.map(([t, avg]): [number, number | string] => [t, avg ?? '-'])
 )
 const spreadData = computed(() =>
-  displayPoints.value.map(([t, avg, p95]): [number, number | string] => {
+  displayPointsWithBreaks.value.map(([t, avg, p95]): [number, number | string] => {
     if (avg == null || p95 == null) return [t, '-']
     return [t, Math.max(0, p95 - avg)]
   })
 )
 const p95Data = computed(() =>
-  displayPoints.value.map(([t, , p95]): [number, number | string] => [t, p95 ?? '-'])
+  displayPointsWithBreaks.value.map(([t, , p95]): [number, number | string] => [t, p95 ?? '-'])
 )
 
 const hasData = computed(() => displayPoints.value.some(([, avg]) => avg != null))
