@@ -318,7 +318,7 @@ def _compute_score(tls: TLSAudit, hdr: HeaderAudit) -> tuple[int, str, list[dict
     ))
 
     score = max(0, min(100, pts))
-    if score == 100:
+    if score >= 95:
         grade = "A+"
     elif score >= 90:
         grade = "A"

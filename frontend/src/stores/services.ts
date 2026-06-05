@@ -36,9 +36,6 @@ export interface Service {
   ssl_status: string | null
   ssl_issuer: string | null
   ssl_last_checked: string | null
-  security_grade: string | null
-  security_score: number | null
-  last_security_scan: string | null
 }
 
 export interface ServiceCreatePayload {

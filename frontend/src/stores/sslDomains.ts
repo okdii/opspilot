@@ -311,6 +311,7 @@ export const useSslDomainStore = defineStore('sslDomains', () => {
   return {
     domains,
     sslCerts,
+    serviceSsl,
     isLoading,
     error,
     combinedRows,

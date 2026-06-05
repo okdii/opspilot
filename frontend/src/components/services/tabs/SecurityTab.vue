@@ -19,7 +19,7 @@ const WEIGHT_MAP: Record<string, number> = {
   'Cipher Suite': 20,
   'Key Size': 5,
   'Self-Signed Certificate': 5,
-  'OCSP Stapling': 5,
+  // OCSP Stapling excluded — always 0 pts (Python stdlib limitation)
   'HSTS': 10,
   'Content-Security-Policy': 8,
   'X-Frame-Options': 4,
@@ -161,7 +161,7 @@ function fmt(d: string): string {
       <div class="sec-legend">
         <div class="sec-legend-title">Grade Legend</div>
         <div class="legend-grid">
-          <span class="lg-grade" style="color:#22c55e">A+</span><span class="lg-desc">Perfect — all checks pass including OCSP and PFS</span>
+          <span class="lg-grade" style="color:#22c55e">A+</span><span class="lg-desc">Excellent — score ≥ 95, all major checks pass</span>
           <span class="lg-grade" style="color:#22c55e">A</span><span class="lg-desc">Excellent — all critical checks pass</span>
           <span class="lg-grade" style="color:#14b8a6">B</span><span class="lg-desc">Good — minor issues only</span>
           <span class="lg-grade" style="color:#eab308">C</span><span class="lg-desc">Fair — some important headers missing</span>
