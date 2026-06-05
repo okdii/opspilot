@@ -108,6 +108,8 @@ class SSLCertOut(BaseModel):
     critical_days: int
     last_checked: datetime | None
     status: str | None
+    security_grade: str | None = None
+    security_score: int | None = None
 
     model_config = {"from_attributes": True}
 

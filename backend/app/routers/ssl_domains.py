@@ -87,6 +87,8 @@ def _ssl_out(c: SSLCert, domain_name: str | None) -> SSLCertOut:
         critical_days=c.critical_days,
         last_checked=c.last_checked,
         status=c.status,
+        security_grade=c.security_grade,
+        security_score=c.security_score,
     )
 
 

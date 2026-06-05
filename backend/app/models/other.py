@@ -89,6 +89,10 @@ class SSLCert(Base):
     critical_days: Mapped[int] = mapped_column(Integer, nullable=False, default=7)
     last_checked: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    security_grade: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    security_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    security_scanned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    security_findings: Mapped[list | None] = mapped_column(JSONB(astext_type=Text()), nullable=True)
 
     domain: Mapped["Domain"] = relationship(back_populates="ssl_certs")
     alerts: Mapped[list["Alert"]] = relationship(back_populates="ssl_cert")
