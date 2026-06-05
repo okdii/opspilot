@@ -101,6 +101,8 @@ async function loadSecurity() {
   securityLoading.value = true
   try {
     securityScan.value = await store.fetchSecurityScan(orgStore.activeOrgId, serviceId.value)
+  } catch {
+    securityScan.value = null
   } finally {
     securityLoading.value = false
   }
