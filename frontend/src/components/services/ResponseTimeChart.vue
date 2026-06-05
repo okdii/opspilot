@@ -135,13 +135,13 @@ function formatMs(v: number | null): string {
   return `${Math.round(v)} ms`
 }
 
-// Inject null breakpoints at down-period boundaries so ECharts shows gaps
-// instead of connecting through outages with a straight line.
+// Inject 0ms points at down-period boundaries so the line drops to zero
+// during outages rather than connecting across them.
 const displayPointsWithBreaks = computed<Point[]>(() => {
   const pts: Point[] = [...displayPoints.value]
   for (const period of props.downPeriods) {
-    pts.push([period.start, null, null])
-    pts.push([period.end, null, null])
+    pts.push([period.start, 0, 0])
+    pts.push([period.end, 0, 0])
   }
   return pts.sort(([a], [b]) => a - b)
 })
