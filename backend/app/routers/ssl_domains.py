@@ -206,6 +206,20 @@ async def create_domain(body: DomainCreate, user: AdminUser, db: AsyncSession = 
     await db.refresh(domain)
 
     _schedule_once(f"domain_check_once:{domain.id}", ssl_checker.check_domain_by_id, str(domain.id))
+
+    # Auto-create SSL cert for port 443 — security audit fires automatically after first check
+    ssl_cert = SSLCert(
+        domain_id=domain.id,
+        port=443,
+        warn_days=body.warn_days,
+        critical_days=body.critical_days,
+        status="checking",
+    )
+    db.add(ssl_cert)
+    await db.commit()
+    await db.refresh(ssl_cert)
+    _schedule_once(f"ssl_check_once:{ssl_cert.id}", ssl_checker.check_ssl_cert_by_id, str(ssl_cert.id))
+
     return _domain_out(domain)
 
 
@@ -230,17 +244,6 @@ async def update_domain(domain_id: str, body: DomainUpdate, user: AdminUser, db:
 @router.delete("/api/domains/{domain_id}", status_code=204)
 async def delete_domain(domain_id: str, user: AdminUser, db: AsyncSession = Depends(get_db)):
     domain = await _get_domain_for_admin(domain_id, db)
-
-    has_cert = await db.scalar(select(SSLCert.id).where(SSLCert.domain_id == domain_id).limit(1))
-    if has_cert:
-        raise HTTPException(
-            409,
-            detail={
-                "error": "ssl_cert_exists",
-                "message": f"{domain.domain} has a linked SSL certificate. Delete the SSL cert first, then delete the domain.",
-            },
-        )
-
     await db.delete(domain)
     await db.commit()
     return None

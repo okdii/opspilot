@@ -22,13 +22,15 @@ import asyncio
 import logging
 import socket
 import ssl
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
+from app.jobs.scheduler import scheduler
 from app.models.other import Alert, Domain, SSLCert
+from app.services import security_checker
 from app.services.alerting import fire_alert, resolve_alert
 
 logger = logging.getLogger(__name__)
@@ -275,8 +277,20 @@ async def _resolve_open_alerts(db: AsyncSession, alert_type: str, *, domain_id=N
 async def check_ssl_cert_by_id(ssl_cert_id: str) -> None:
     async with AsyncSessionLocal() as db:
         cert = await db.get(SSLCert, ssl_cert_id)
-        if cert is not None:
-            await check_ssl_cert(db, cert)
+        if cert is None:
+            return
+        was_first_check = cert.last_checked is None
+        await check_ssl_cert(db, cert)
+        # After the first successful check on a port-443 cert, schedule security audit
+        if was_first_check and cert.port == 443 and cert.status != "unreachable":
+            scheduler.add_job(
+                security_checker.run_ssl_cert_security_check,
+                "date",
+                run_date=_now() + timedelta(seconds=2),
+                args=[ssl_cert_id],
+                id=f"ssl_security_once:{ssl_cert_id}",
+                replace_existing=True,
+            )
 
 
 async def check_domain_by_id(domain_id: str) -> None:
