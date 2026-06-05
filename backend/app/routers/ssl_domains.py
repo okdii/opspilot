@@ -202,10 +202,7 @@ async def create_domain(body: DomainCreate, user: AdminUser, db: AsyncSession = 
         status="checking",
     )
     db.add(domain)
-    await db.commit()
-    await db.refresh(domain)
-
-    _schedule_once(f"domain_check_once:{domain.id}", ssl_checker.check_domain_by_id, str(domain.id))
+    await db.flush()  # get domain.id without committing
 
     # Auto-create SSL cert for port 443 — security audit fires automatically after first check
     ssl_cert = SSLCert(
@@ -216,8 +213,11 @@ async def create_domain(body: DomainCreate, user: AdminUser, db: AsyncSession = 
         status="checking",
     )
     db.add(ssl_cert)
-    await db.commit()
+    await db.commit()  # single commit for both domain + ssl_cert
+    await db.refresh(domain)
     await db.refresh(ssl_cert)
+
+    _schedule_once(f"domain_check_once:{domain.id}", ssl_checker.check_domain_by_id, str(domain.id))
     _schedule_once(f"ssl_check_once:{ssl_cert.id}", ssl_checker.check_ssl_cert_by_id, str(ssl_cert.id))
 
     return _domain_out(domain)
@@ -265,6 +265,15 @@ async def create_ssl_cert(body: SSLCertCreate, user: AdminUser, db: AsyncSession
     if not domain:
         raise HTTPException(404, detail={"error": "not_found", "message": "Parent domain not found."})
     await _assert_org_access(str(domain.org_id), user, db)
+
+    existing_cert = await db.scalar(
+        select(SSLCert).where(SSLCert.domain_id == body.domain_id, SSLCert.port == body.port)
+    )
+    if existing_cert:
+        raise HTTPException(
+            409,
+            detail={"error": "duplicate", "message": f"An SSL cert for port {body.port} is already tracked for this domain."},
+        )
 
     cert = SSLCert(
         domain_id=body.domain_id,
