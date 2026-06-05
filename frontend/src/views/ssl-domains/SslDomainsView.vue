@@ -280,52 +280,6 @@ async function submitEditDomain() {
 }
 
 // ── Add SSL modal ──────────────────────────────────────────────────────────
-const showSslModal = ref(false)
-const sslSubmitting = ref(false)
-const sslParent = reactive({ domainId: '', domainName: '' })
-const sslForm = reactive({ port: 443, warn_days: 30, critical_days: 7 })
-const sslErrors = reactive<Record<string, string>>({})
-
-function openAddSsl(r: CombinedRow) {
-  openMenuId.value = null
-  // r may be a domain row or a domain's empty-ssl slot row
-  sslParent.domainId = r.type === 'domain' ? r.id : r.domainId ?? ''
-  sslParent.domainName = r.domainName
-  sslForm.port = 443
-  sslForm.warn_days = 30
-  sslForm.critical_days = 7
-  Object.keys(sslErrors).forEach((k) => delete sslErrors[k])
-  showSslModal.value = true
-}
-
-function validateSsl(): boolean {
-  Object.keys(sslErrors).forEach((k) => delete sslErrors[k])
-  if (sslForm.port < 1 || sslForm.port > 65535) sslErrors.port = 'Enter a valid port number'
-  if (sslForm.warn_days < 1 || sslForm.warn_days > 365) sslErrors.warn_days = '1–365'
-  if (sslForm.critical_days < 1 || sslForm.critical_days >= sslForm.warn_days)
-    sslErrors.critical_days = 'Critical threshold must be lower than warning threshold'
-  return Object.keys(sslErrors).length === 0
-}
-
-async function submitSsl() {
-  if (!validateSsl() || !orgStore.activeOrgId || !sslParent.domainId) return
-  sslSubmitting.value = true
-  try {
-    const created = await store.addCert({
-      domain_id: sslParent.domainId,
-      port: sslForm.port,
-      warn_days: sslForm.warn_days,
-      critical_days: sslForm.critical_days,
-    })
-    showSslModal.value = false
-    notify.success(`Tracking SSL for ${sslParent.domainName}:${created.port} — checking…`)
-    void store.pollUntilChecked(orgStore.activeOrgId, 'ssl', created.id)
-  } catch (err) {
-    sslErrors._form = getApiError(err)?.message ?? 'Unable to add SSL certificate.'
-  } finally {
-    sslSubmitting.value = false
-  }
-}
 
 // ── Edit SSL modal ──────────────────────────────────────────────────────────
 const showEditSsl = ref(false)
@@ -442,7 +396,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
     <EmptyState
       v-if="!store.isLoading && trackedRows.length === 0"
       title="No domains tracked yet"
-      message="Add domains to track WHOIS registration expiry and non-standard SSL certs (e.g. IMAPS:993). SSL for your HTTPS services is tracked automatically on the Services page."
+      message="Add domains to track WHOIS registration expiry. SSL on port 443 is tracked automatically for each domain you add. For HTTPS services, SSL is tracked on the Services page."
     >
       <template #action>
         <button v-if="canEdit" class="primary" @click="openAddDomain">+ Add Your First Domain</button>
@@ -567,7 +521,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
                 <button class="kebab" aria-label="Row actions" @click="openMenuId = openMenuId === r.id ? null : r.id">⋮</button>
                 <div v-if="openMenuId === r.id" class="kebab-menu">
                   <button class="kmi" @click="checkNow(r)">Check Now</button>
-                  <button v-if="r.type === 'domain'" class="kmi" @click="openAddSsl(r)">Add SSL (non-standard port)</button>
                   <button v-if="r.type === 'domain' || r.type === 'ssl'" class="kmi" @click="r.type === 'domain' ? openEditDomain(r) : openEditSsl(r)">Edit</button>
                   <template v-if="r.type === 'service'">
                     <button class="kmi" @click="router.push({ name: 'service-detail', params: { id: r.id } })">View in Services →</button>
@@ -637,39 +590,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
       </template>
     </SlideOver>
 
-    <!-- Add SSL SlideOver -->
-    <SlideOver v-model="showSslModal" title="Add SSL Certificate" :subtitle="sslParent.domainName" width="420px">
-      <form id="ssl-form" @submit.prevent="submitSsl">
-        <label>Domain</label>
-        <input :value="sslParent.domainName" disabled />
-        <div class="form-row">
-          <div class="col">
-            <label>Port</label>
-            <input v-model.number="sslForm.port" type="number" min="1" max="65535" :class="{ invalid: sslErrors.port }" />
-            <div v-if="sslErrors.port" class="err">{{ sslErrors.port }}</div>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="col">
-            <label>Warn at (days)</label>
-            <input v-model.number="sslForm.warn_days" type="number" min="1" max="365" :class="{ invalid: sslErrors.warn_days }" />
-            <div v-if="sslErrors.warn_days" class="err">{{ sslErrors.warn_days }}</div>
-          </div>
-          <div class="col">
-            <label>Critical at (days)</label>
-            <input v-model.number="sslForm.critical_days" type="number" min="1" :class="{ invalid: sslErrors.critical_days }" />
-            <div v-if="sslErrors.critical_days" class="err">{{ sslErrors.critical_days }}</div>
-          </div>
-        </div>
-        <div v-if="sslErrors._form" class="err">{{ sslErrors._form }}</div>
-      </form>
-      <template #footer>
-        <button class="ghost" @click="showSslModal = false">Cancel</button>
-        <button class="primary" form="ssl-form" type="submit" :disabled="sslSubmitting">
-          <span v-if="sslSubmitting" class="spinner light"></span><span v-else>Add SSL Cert</span>
-        </button>
-      </template>
-    </SlideOver>
 
     <!-- Edit SSL SlideOver -->
     <SlideOver v-model="showEditSsl" title="Edit SSL Certificate" :subtitle="editSslForm.name" width="420px">

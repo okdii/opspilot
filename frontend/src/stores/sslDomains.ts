@@ -60,12 +60,6 @@ export interface CreateDomainPayload {
   critical_days: number
 }
 
-export interface CreateSslPayload {
-  domain_id: string
-  port: number
-  warn_days: number
-  critical_days: number
-}
 
 export type ThresholdPayload = { warn_days?: number; critical_days?: number; port?: number }
 
@@ -296,13 +290,7 @@ export const useSslDomainStore = defineStore('sslDomains', () => {
     return data
   }
 
-  async function addCert(payload: CreateSslPayload): Promise<SslCert> {
-    const { data } = await api.post<SslCert>('/api/ssl-certs', payload)
-    sslCerts.value.push(data)
-    return data
-  }
-
-  async function updateDomain(id: string, payload: ThresholdPayload): Promise<DomainRec> {
+async function updateDomain(id: string, payload: ThresholdPayload): Promise<DomainRec> {
     const { data } = await api.patch<DomainRec>(`/api/domains/${id}`, payload)
     const idx = domains.value.findIndex((d) => d.id === id)
     if (idx >= 0) domains.value[idx] = data
@@ -379,7 +367,6 @@ export const useSslDomainStore = defineStore('sslDomains', () => {
     statusRank,
     fetchAll,
     addDomain,
-    addCert,
     updateDomain,
     updateCert,
     deleteDomain,

@@ -23,7 +23,6 @@ from app.schemas.ssl_domains import (
     DomainOut,
     DomainUpdate,
     ServiceSslOut,
-    SSLCertCreate,
     SSLCertOut,
     SSLCertUpdate,
     SSLDomainsResponse,
@@ -258,37 +257,6 @@ async def check_domain_now(domain_id: str, user: AdminUser, db: AsyncSession = D
 
 
 # ── SSL Cert CRUD ─────────────────────────────────────────────────────────────
-
-@router.post("/api/ssl-certs", status_code=201, response_model=SSLCertOut)
-async def create_ssl_cert(body: SSLCertCreate, user: AdminUser, db: AsyncSession = Depends(get_db)):
-    domain = await db.scalar(select(Domain).where(Domain.id == body.domain_id))
-    if not domain:
-        raise HTTPException(404, detail={"error": "not_found", "message": "Parent domain not found."})
-    await _assert_org_access(str(domain.org_id), user, db)
-
-    existing_cert = await db.scalar(
-        select(SSLCert).where(SSLCert.domain_id == body.domain_id, SSLCert.port == body.port)
-    )
-    if existing_cert:
-        raise HTTPException(
-            409,
-            detail={"error": "duplicate", "message": f"An SSL cert for port {body.port} is already tracked for this domain."},
-        )
-
-    cert = SSLCert(
-        domain_id=body.domain_id,
-        port=body.port,
-        warn_days=body.warn_days,
-        critical_days=body.critical_days,
-        status="checking",
-    )
-    db.add(cert)
-    await db.commit()
-    await db.refresh(cert)
-
-    _schedule_once(f"ssl_check_once:{cert.id}", ssl_checker.check_ssl_cert_by_id, str(cert.id))
-    return _ssl_out(cert, domain.domain)
-
 
 @router.patch("/api/ssl-certs/{ssl_cert_id}", response_model=SSLCertOut)
 async def update_ssl_cert(ssl_cert_id: str, body: SSLCertUpdate, user: AdminUser, db: AsyncSession = Depends(get_db)):
