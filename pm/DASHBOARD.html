@@ -64,24 +64,24 @@
 </head>
 <body>
 <div class="header">
-  <div><h1>OpsPilot &mdash; Dev Progress</h1><p>12 phases &middot; 203 tasks &middot; Python + FastAPI + Vue 3 + TimescaleDB</p></div>
+  <div><h1>OpsPilot &mdash; Dev Progress</h1><p>13 phases &middot; 212 tasks &middot; Python + FastAPI + Vue 3 + TimescaleDB</p></div>
   <div class="badge">Updated: <span>2026-06-05</span></div>
 </div>
 <div class="overall">
   <div>
     <div class="label">Overall Progress</div>
     <div class="bar-wrap"><div class="bar" style="width:100%"></div></div>
-    <div class="sub">203 of 203 tasks completed</div>
+    <div class="sub">212 of 212 tasks completed</div>
   </div>
   <div>
     <div class="pct">100<span>%</span></div>
-    <div class="counts">203 done &middot; 0 in progress &middot; 0 pending</div>
+    <div class="counts">212 done &middot; 0 in progress &middot; 0 pending</div>
   </div>
 </div>
 <div class="stats">
-  <div class="stat"><div class="label">Phases Done</div><div class="val g">12</div><div class="sub">of 12 phases</div></div>
-  <div class="stat"><div class="label">Tasks Complete</div><div class="val a">203</div><div class="sub">of 203 total</div></div>
-  <div class="stat"><div class="label">Smoke Tests Passed</div><div class="val b">16</div><div class="sub">of 16 gates</div></div>
+  <div class="stat"><div class="label">Phases Done</div><div class="val g">13</div><div class="sub">of 13 phases</div></div>
+  <div class="stat"><div class="label">Tasks Complete</div><div class="val a">212</div><div class="sub">of 212 total</div></div>
+  <div class="stat"><div class="label">Smoke Tests Passed</div><div class="val b">17</div><div class="sub">of 17 gates</div></div>
   <div class="stat"><div class="label">In Progress</div><div class="val am">0</div><div class="sub">tasks active</div></div>
 </div>
 <div class="sec-title">Phases</div>
@@ -330,6 +330,17 @@ const phases = [
     { text: "useDateFormat composable: formatDate, formatDateTime, toTzDateKey — all timezone-aware via Intl.DateTimeFormat", status: "done", smoke: false },
     { text: "UptimeTimeline + ServiceDetail: toTzDateKey for day-key generation; formatDateTime for incident timestamps", status: "done", smoke: true },
     { text: "SslDomainsView + JobDetailSlideOver: local date formatters removed, useDateFormat composable used throughout", status: "done", smoke: true },
+  ]},
+  { id: 16, title: "HTTP Security Audit", subtitle: "TLS + HTTP header audit for HTTPS services — A+–F grading, per-service scan history, security alerts, SecurityTab in service detail, Security column on SSL & Domains page", tasks: [
+    { text: "DB migration 0009_security_scans: service_security_scans table + service.last_security_scan column; ServiceSecurityScan ORM model", status: "done", smoke: true },
+    { text: "security_checker.py: TLS audit (ssl stdlib + cryptography), HTTP header audit (httpx), A+–F scoring, alert firing, WS broadcast", status: "done", smoke: true },
+    { text: "4 security alert types registered in alerting.py; _maybe_run_security_check() added to probe.py (>24h throttle)", status: "done", smoke: true },
+    { text: "Backend schemas: security.py (ServiceSecurityOut, SecurityFinding, TLSSummary, HeaderSummary); SecuritySslOut extended with security_grade/score; GET /security endpoint; ssl_domains router LEFT JOINs latest scan", status: "done", smoke: true },
+    { text: "SecurityGrade.vue component (A+–F badge, colour-coded, score tooltip, sm/md/lg sizes); Service type + SecurityScan types in services.ts; fetchSecurityScan action; ServiceSslRec/CombinedRow extended in sslDomains.ts", status: "done", smoke: false },
+    { text: "SecurityTab.vue: grade header, TLS/Certificate/HTTP Headers/Protocol expandable sections, grade legend", status: "done", smoke: false },
+    { text: "ServiceDetail.vue: Security Audit card after SSL card (HTTPS only), loadSecurity() on mount, service_security_updated WS handler", status: "done", smoke: true },
+    { text: "SslDomainsView.vue: Security column with grade badge for service rows, dash for domain/ssl rows, sort by score, grade legend popover", status: "done", smoke: true },
+    { text: "Smoke test: live scan triggered (mphtj.gov.my → grade C, score 64), API endpoint verified in OpenAPI, ServiceSslOut schema has security_grade/score, SecurityFinding + ServiceSecurityOut schemas present", status: "done", smoke: true },
   ]},
 ];
 

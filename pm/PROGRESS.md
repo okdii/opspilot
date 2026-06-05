@@ -431,6 +431,68 @@ Last updated: 2026-06-04
 
 ---
 
+## Phase 16 — HTTP Security Audit
+*TLS + HTTP header security audit for HTTPS services — A+–F letter grade, per-service scan history, alerts for critical findings, SecurityTab in service detail, Security column on SSL & Domains page.*
+
+### Task 1: DB Migration + ORM Model
+- ✅ Migration `0009_security_scans` adds `service_security_scans` table + `service.last_security_scan` column
+- ✅ `ServiceSecurityScan` ORM model added to `models/other.py`
+- ✅ **Smoke test: migration applied, `\d service_security_scans` shows all columns including `findings jsonb`**
+
+### Task 2: Security Checker Module
+- ✅ `backend/app/services/security_checker.py` created with TLS audit (via stdlib `ssl` + `cryptography`), HTTP header audit (via `httpx`), A+–F grading, alert firing, and WS broadcast
+- ✅ **Smoke test: module loads without import errors; manual `run_security_check()` returns grade C, score 64 for mphtj.gov.my**
+
+### Task 3: Alert Types + Probe Integration
+- ✅ 4 new alert types registered in `alerting.py` `_FK_BY_TYPE`: `security_tls_deprecated`, `security_weak_cipher`, `security_self_signed`, `security_grade_f`
+- ✅ `_maybe_run_security_check()` added to `probe.py` — triggers after uptime probe if >24 h since last scan
+- ✅ **Smoke test: backend restarts with no import errors, Application startup complete**
+
+### Task 4: Backend Schemas + Security API Endpoint
+- ✅ `backend/app/schemas/security.py` created: `TLSSummary`, `HeaderSummary`, `SecurityFinding`, `ServiceSecurityOut`
+- ✅ `security_grade`, `security_score` fields added to `ServiceSslOut` in `ssl_domains.py`
+- ✅ `GET /api/organizations/{org_id}/services/{service_id}/security` endpoint added to `services.py` router
+- ✅ `ssl_domains.py` router updated: LEFT JOIN latest security scan per service via `DISTINCT ON`
+- ✅ **Smoke test: endpoint returns scan data with grade + findings; `/openapi.json` lists `/security` route**
+
+### Task 5: Frontend SecurityGrade Component + Store Types
+- ✅ `frontend/src/components/SecurityGrade.vue` created — reusable grade badge (A+–F, colour-coded, score tooltip, sm/md/lg sizes)
+- ✅ `Service` interface extended with `security_grade`, `security_score`, `last_security_scan`
+- ✅ `SecurityTls`, `SecurityHeaders`, `SecurityFinding`, `SecurityScan` types added to `services.ts`
+- ✅ `fetchSecurityScan` action added and exported from services store
+- ✅ `ServiceSslRec` extended with `security_grade`, `security_score`; `CombinedRow` extended with `securityGrade`, `securityScore`; `combinedRows` pushes both fields for service rows
+- ✅ **Smoke test: TypeScript build passes with no errors**
+
+### Task 6: Frontend SecurityTab.vue
+- ✅ `frontend/src/components/services/tabs/SecurityTab.vue` created — full security breakdown: header (grade + score), category sections (TLS Protocol, Certificate, HTTP Headers, Protocol) as expandable `<details>`, grade legend
+- ✅ **Smoke test: TypeScript build passes with no errors**
+
+### Task 7: ServiceDetail.vue Security Section
+- ✅ `SecurityGrade` and `SecurityTab` imported in `ServiceDetail.vue`
+- ✅ `securityScan` + `securityLoading` state added; `loadSecurity()` fetches on mount
+- ✅ `service_security_updated` WS event triggers `loadSecurity()` re-fetch
+- ✅ Security Audit card rendered after SSL card (HTTPS services only)
+- ✅ **Smoke test: Security Audit card visible on HTTPS service detail; scan data displayed correctly**
+
+### Task 8: SSL Domains Security Column
+- ✅ `SecurityGrade` imported in `SslDomainsView.vue`
+- ✅ `sortKey` widened to include `'security'`; `sorted` computed handles security sort by score descending
+- ✅ Security column header with `?` popover (grade legend) added to `<thead>`
+- ✅ Security cell with `SecurityGrade` badge for service rows, `—` dash for domain/ssl rows
+- ✅ Column styles added
+- ✅ **Smoke test: Security grade column visible on SSL & Domains page; service rows show badge, domain/ssl rows show dash**
+
+### Task 9: Progress Dashboard + Final Smoke Test
+- ✅ Live security scan triggered for mphtj.gov.my — grade C (64/100) stored in `service_security_scans`
+- ✅ API endpoint `/api/organizations/{org_id}/services/{service_id}/security` verified in OpenAPI
+- ✅ `ServiceSslOut` schema has `security_grade` and `security_score` fields (`True True`)
+- ✅ OpenAPI schemas include `SecurityFinding` and `ServiceSecurityOut`
+- ✅ No security alerts fired (expected — grade C, no deprecated TLS/weak ciphers/self-signed)
+- ✅ PROGRESS.md and DASHBOARD.html updated
+- ✅ **Smoke test: end-to-end security scan → storage → API → frontend verified**
+
+---
+
 ## Summary
 
 | Phase | Status | Tasks Done |
@@ -450,4 +512,5 @@ Last updated: 2026-06-04
 | Phase 13 — SSL in HTTP Probes | ✅ Complete | 8 / 8 |
 | Phase 14 — Service SSL on SSL & Domains Page | ✅ Complete | 3 / 3 |
 | Phase 15 — Global Timezone Setting | ✅ Complete | 8 / 8 |
-| **Total** | ✅ Complete | **222 / 222** |
+| Phase 16 — HTTP Security Audit | ✅ Complete | 9 / 9 |
+| **Total** | ✅ Complete | **231 / 231** |
