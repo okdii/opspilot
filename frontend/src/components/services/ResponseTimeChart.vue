@@ -52,12 +52,14 @@ const displayPoints = ref<Point[]>([])
 
 const zoomStart = ref<number | null>(null)
 const zoomEnd = ref<number | null>(null)
+// true after user explicitly clicks a range button — show full range instead of last-2h default
+const showFullRange = ref(false)
 
 const effectiveZoomStart = computed(() => {
   if (zoomStart.value !== null) return zoomStart.value
   const pts = rawPoints.value
-  const last = pts.length ? pts[pts.length - 1][0] : Date.now()
-  return last - TWO_HOURS
+  if (!pts.length) return Date.now() - TWO_HOURS
+  return showFullRange.value ? pts[0][0] : pts[pts.length - 1][0] - TWO_HOURS
 })
 const effectiveZoomEnd = computed(() => {
   if (zoomEnd.value !== null) return zoomEnd.value
@@ -98,11 +100,17 @@ function applyAggregation(spanMs: number) {
 watch(() => props.range, () => {
   zoomStart.value = null
   zoomEnd.value = null
+  showFullRange.value = true
 })
 
 watch(rawPoints, (pts) => {
   if (!pts.length) { displayPoints.value = []; return }
-  applyAggregation(TWO_HOURS)
+  // On initial load (page open): aggregate for 2h default view.
+  // After explicit range click: aggregate for full loaded span.
+  const span = showFullRange.value && pts.length > 1
+    ? pts[pts.length - 1][0] - pts[0][0]
+    : TWO_HOURS
+  applyAggregation(Math.max(span, TWO_HOURS))
 }, { immediate: true })
 
 const chartRef = ref()
