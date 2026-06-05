@@ -145,6 +145,25 @@ async def _maybe_check_ssl(service_id: str) -> None:
             await db.commit()
 
 
+async def _maybe_run_security_check(service_id: str) -> None:
+    """Trigger a security audit for an HTTPS service if >24 h since last scan."""
+    from app.services.security_checker import run_security_check
+
+    async with AsyncSessionLocal() as db:
+        service = await db.get(Service, service_id)
+        if service is None or not service.is_active or service.type != "http":
+            return
+        url = service.url or ""
+        if not url.lower().startswith("https://"):
+            return
+        now = _now()
+        last = _aware(service.last_security_scan)
+        if last is not None and (now - last) < timedelta(hours=24):
+            return
+
+    await run_security_check(service_id)
+
+
 # ── Low-level probes ────────────────────────────────────────────────────────
 # Each returns (status, response_time_ms, cause) where:
 #   status: 'up' | 'down' | 'timeout'
@@ -365,6 +384,7 @@ async def probe_service(service_id: str) -> None:
                 await evaluate_result(db, service, status, rt, cause, org_id)
             if needs_ssl:
                 await _maybe_check_ssl(service_id)
+            await _maybe_run_security_check(service_id)
         except Exception:  # noqa: BLE001
             logger.exception("probe_service failed for %s", service_id)
 

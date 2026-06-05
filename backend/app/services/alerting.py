@@ -45,6 +45,11 @@ _FK_BY_TYPE: dict[str, str] = {
     "backup_missing": "backup_job_id",
     "backup_failure": "backup_job_id",
     "backup_size_drop": "backup_job_id",
+    # Security audit alert types (all keyed on service_id)
+    "security_tls_deprecated": "service_id",
+    "security_weak_cipher": "service_id",
+    "security_self_signed": "service_id",
+    "security_grade_f": "service_id",
 }
 
 
