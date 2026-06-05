@@ -126,7 +126,7 @@ const sorted = computed<CombinedRow[]>(() => {
         cmp = store.statusRank(a.status) - store.statusRank(b.status)
         break
       case 'security':
-        cmp = (b.securityScore ?? -1) - (a.securityScore ?? -1)
+        cmp = (a.securityScore ?? -1) - (b.securityScore ?? -1)
         break
       case 'expiry':
       default: {
@@ -530,7 +530,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
             >
               <td class="name">{{ rowName(r) }}</td>
               <td>
-                <span class="type-badge" :class="r.type">{{ r.type === 'ssl' ? 'SSL' : 'Domain' }}</span>
+                <span class="type-badge" :class="r.type">{{ r.type === 'ssl' ? 'SSL' : r.type === 'service' ? 'Service' : 'Domain' }}</span>
               </td>
               <td class="mono">
                 <template v-if="r.type === 'domain'">
@@ -825,5 +825,4 @@ input.invalid { border-color: var(--red); }
 .expiry-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .col-security { width: 100px; text-align: center; cursor: pointer; }
 .muted-dash { color: var(--muted); font-size: 13px; }
-.sort-arrow { font-size: 10px; margin-left: 2px; }
 </style>
