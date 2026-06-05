@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useOrgStore } from '@/stores/org'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useAlertStore } from '@/stores/alerts'
+import { useSettingsStore } from '@/stores/settings'
 import { wsClient } from '@/utils/ws'
 import OrgSwitcher from './OrgSwitcher.vue'
 import NotificationBell from '@/components/alerts/NotificationBell.vue'
@@ -16,6 +17,7 @@ const auth = useAuthStore()
 const orgStore = useOrgStore()
 const onboarding = useOnboardingStore()
 const alertStore = useAlertStore()
+const settingsStore = useSettingsStore()
 const userMenuOpen = ref(false)
 
 const ALERT_EVENTS = ['alert_fired', 'alert_updated', 'alert_resolved'] as const
@@ -93,6 +95,7 @@ const visibleNav = computed(() => nav.filter((n) => !n.adminOnly || auth.isAdmin
 onMounted(async () => {
   if (auth.isAuthenticated) {
     await orgStore.fetchOrgs()
+    await settingsStore.fetchSettings()
     startWs()
   }
 })
@@ -102,6 +105,7 @@ onUnmounted(stopWs)
 watch(() => auth.isAuthenticated, async (v) => {
   if (v) {
     await orgStore.fetchOrgs()
+    await settingsStore.fetchSettings()
     startWs()
   } else {
     alertStore.reset()

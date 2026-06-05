@@ -4,7 +4,7 @@ import { api } from '@/services/api'
 import type { Session, TeamMember, PendingInvite, RotationServer } from '@/types'
 
 export const useSettingsStore = defineStore('settings', () => {
-  const general = ref({ instanceName: 'OpsPilot', baseUrl: '' })
+  const general = ref({ instanceName: 'OpsPilot', baseUrl: '', timezone: 'UTC' })
   const smtp = ref({
     host: '',
     port: 587,
@@ -30,7 +30,11 @@ export const useSettingsStore = defineStore('settings', () => {
 
   async function fetchSettings() {
     const { data } = await api.get('/api/settings')
-    general.value = { instanceName: data.instance_name, baseUrl: data.base_url ?? '' }
+    general.value = {
+      instanceName: data.instance_name,
+      baseUrl: data.base_url ?? '',
+      timezone: data.timezone ?? 'UTC',
+    }
     smtp.value = {
       host: data.smtp_host ?? '',
       port: data.smtp_port ?? 587,
@@ -48,7 +52,7 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
-  async function saveGeneral(p: { instance_name: string; base_url: string }) {
+  async function saveGeneral(p: { instance_name: string; base_url: string; timezone: string }) {
     await api.patch('/api/settings', p)
     await fetchSettings()
   }
