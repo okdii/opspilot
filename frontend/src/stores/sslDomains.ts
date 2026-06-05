@@ -28,6 +28,8 @@ export interface SslCert {
   critical_days: number
   last_checked: string | null
   status: string | null
+  security_grade: string | null
+  security_score: number | null
 }
 
 export interface ServiceSslRec {
@@ -87,6 +89,11 @@ export interface CombinedRow {
   warnThreshold: number
   securityGrade?: string | null
   securityScore?: number | null
+  // Subtitle data for merged domain rows (WHOIS + SSL)
+  whoisExpiry?: string | null
+  whoisDaysRemaining?: number | null
+  sslExpiry?: string | null
+  sslDaysRemaining?: number | null
 }
 
 export interface TimelineDot {
@@ -127,22 +134,69 @@ export const useSslDomainStore = defineStore('sslDomains', () => {
   /** Domains + certs merged, grouped by domain, default-sorted by expiry. */
   const combinedRows = computed<CombinedRow[]>(() => {
     const rows: CombinedRow[] = []
+
+    // Map domain_id → port-443 cert for merging into domain rows
+    const auto443: Record<string, SslCert> = {}
+    for (const c of sslCerts.value) {
+      if (c.port === 443) auto443[c.domain_id] = c
+    }
+
     for (const d of domains.value) {
+      const cert = auto443[d.id] ?? null
+
+      // Worst expiry: pick sooner-expiring date (null = unknown, sorts last)
+      const dMs = d.expiry_date ? new Date(d.expiry_date).getTime() : Infinity
+      const cMs = cert?.expiry_date ? new Date(cert.expiry_date).getTime() : Infinity
+      const expiryDate: string | null =
+        !d.expiry_date && !cert?.expiry_date ? null
+        : !d.expiry_date ? (cert?.expiry_date ?? null)
+        : !cert?.expiry_date ? d.expiry_date
+        : dMs <= cMs ? d.expiry_date : cert!.expiry_date
+
+      // Worst days remaining
+      const dDays = d.days_remaining ?? Infinity
+      const cDays = cert?.days_remaining ?? Infinity
+      const minDays = Math.min(dDays, cDays)
+      const daysRemaining = minDays === Infinity ? null : minDays
+
+      // Worst status (lowest rank = most severe)
+      const worstStatus =
+        statusRank(d.status ?? 'checking') <= statusRank(cert?.status ?? 'valid')
+          ? (d.status ?? 'checking')
+          : (cert?.status ?? 'checking')
+
+      // Last checked: most recent of the two
+      const dChecked = d.last_checked ? new Date(d.last_checked).getTime() : 0
+      const cChecked = cert?.last_checked ? new Date(cert.last_checked).getTime() : 0
+      const lastChecked = dChecked >= cChecked ? d.last_checked : (cert?.last_checked ?? d.last_checked)
+
+      // Warn threshold: sooner threshold (more sensitive)
+      const warnThreshold = Math.min(d.warn_days, cert?.warn_days ?? d.warn_days)
+
       rows.push({
         id: d.id,
         domainName: d.domain,
         type: 'domain',
-        expiryDate: d.expiry_date,
-        daysRemaining: d.days_remaining,
-        status: d.status ?? 'checking',
-        lastChecked: d.last_checked,
+        expiryDate,
+        daysRemaining,
+        status: worstStatus,
+        lastChecked,
         registrar: d.registrar,
         warnDays: d.warn_days,
         criticalDays: d.critical_days,
-        warnThreshold: d.warn_days,
+        warnThreshold,
+        securityGrade: cert?.security_grade ?? null,
+        securityScore: cert?.security_score ?? null,
+        whoisExpiry: d.expiry_date,
+        whoisDaysRemaining: d.days_remaining,
+        sslExpiry: cert?.expiry_date ?? null,
+        sslDaysRemaining: cert?.days_remaining ?? null,
       })
     }
+
+    // SSL rows: only non-443 ports (port-443 are merged into domain rows above)
     for (const c of sslCerts.value) {
+      if (c.port === 443) continue
       const name = c.domain ?? domainNameById.value[c.domain_id] ?? '—'
       rows.push({
         id: c.id,
@@ -160,6 +214,8 @@ export const useSslDomainStore = defineStore('sslDomains', () => {
         warnThreshold: c.warn_days,
       })
     }
+
+    // Service rows (read-only cross-reference)
     for (const s of serviceSsl.value) {
       rows.push({
         id: s.id,
@@ -178,6 +234,7 @@ export const useSslDomainStore = defineStore('sslDomains', () => {
         securityScore: s.security_score ?? null,
       })
     }
+
     return rows
   })
 
