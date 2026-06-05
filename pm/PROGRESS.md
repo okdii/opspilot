@@ -383,6 +383,54 @@ Last updated: 2026-06-04
 
 ---
 
+## Phase 15 — Global Timezone Setting
+*Add a global timezone setting (stored in app_settings) so uptime bars, incident timestamps, and all date displays roll over and format according to the configured timezone instead of hardcoded UTC.*
+
+### Task 1: DB Migration + Settings Model
+- ✅ Migration `0009_settings_timezone` adds `timezone VARCHAR(60) NOT NULL DEFAULT 'UTC'` to `app_settings`
+- ✅ `Settings` ORM model updated with `timezone: Mapped[str]` field
+- ✅ **Smoke test: migration applied, column verified via psql**
+
+### Task 2: Backend Schema + Settings Router
+- ✅ `SettingsResponse` extended with `timezone: str`
+- ✅ `SettingsPatch` extended with `timezone: str | None` and IANA validator
+- ✅ `_to_response` updated to include `timezone=s.timezone`
+- ✅ **Smoke test: GET /api/settings returns `"timezone": "UTC"`; PATCH accepts valid IANA names**
+
+### Task 3: Uptime Timeline Endpoint — Timezone-Aware Bucketing
+- ✅ `uptime_timeline` reads org timezone from `app_settings`
+- ✅ SQL uses `time AT TIME ZONE :tz` for timezone-aware `time_bucket` day grouping
+- ✅ **Smoke test: endpoint returns correct dates for configured timezone**
+
+### Task 4: Frontend Settings Store — Add Timezone
+- ✅ `general` ref extended with `timezone: 'UTC'`
+- ✅ `fetchSettings` populates `timezone` from API response
+- ✅ `saveGeneral` signature updated to accept `timezone`
+- ✅ `AppLayout.vue` calls `settingsStore.fetchSettings()` on mount and auth change
+
+### Task 5: Frontend Settings UI — Timezone Dropdown
+- ✅ `timezone` ref and curated IANA timezone list added to `GeneralTab.vue`
+- ✅ `load()` populates `timezone.value` from store
+- ✅ `saveIdentity()` includes `timezone` in payload and refreshes after save
+- ✅ Timezone dropdown rendered in Identity section with hint text
+- ✅ **Smoke test: dropdown appears, selection persists after Save + refresh**
+
+### Task 6: Shared Date Format Composable
+- ✅ `frontend/src/composables/useDateFormat.ts` created
+- ✅ Exports `formatDate`, `formatDateTime`, `toTzDateKey` — all timezone-aware via `Intl.DateTimeFormat`
+
+### Task 7: UptimeTimeline + ServiceDetail — Use Timezone
+- ✅ `UptimeTimeline.vue` replaced — uses `toTzDateKey` for timezone-aware day-key generation
+- ✅ `ServiceDetail.vue` — local `fmtTime` removed, `formatDateTime` from composable used instead
+
+### Task 8: Apply Timezone Formatting Across Remaining Displays
+- ✅ `SslDomainsView.vue` — local `fmtDate` removed, `formatDate` from composable used
+- ✅ `JobDetailSlideOver.vue` — local `fmtDateTime` removed, `formatDateTime` from composable used (aliased)
+- ✅ TypeScript build passes with no errors
+- ✅ **Smoke test: all timestamp displays reflect org timezone**
+
+---
+
 ## Summary
 
 | Phase | Status | Tasks Done |
@@ -401,4 +449,5 @@ Last updated: 2026-06-04
 | Phase 12 — Post-Launch Enhancements | ✅ Complete | 8 / 8 |
 | Phase 13 — SSL in HTTP Probes | ✅ Complete | 8 / 8 |
 | Phase 14 — Service SSL on SSL & Domains Page | ✅ Complete | 3 / 3 |
-| **Total** | ✅ Complete | **214 / 214** |
+| Phase 15 — Global Timezone Setting | ✅ Complete | 8 / 8 |
+| **Total** | ✅ Complete | **222 / 222** |

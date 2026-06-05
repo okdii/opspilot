@@ -5,6 +5,7 @@ import { useOrgStore } from '@/stores/org'
 import { useAuthStore } from '@/stores/auth'
 import { useSslDomainStore, type CombinedRow } from '@/stores/sslDomains'
 import { useNotify } from '@/composables/useNotify'
+import { useDateFormat } from '@/composables/useDateFormat'
 import { getApiError } from '@/services/api'
 import { PageHeader, StatusBadge, EmptyState, SlideOver } from '@/components/ui'
 import ExpiryBar from '@/components/ssl-domains/ExpiryBar.vue'
@@ -15,6 +16,7 @@ const orgStore = useOrgStore()
 const auth = useAuthStore()
 const store = useSslDomainStore()
 const notify = useNotify()
+const { formatDate } = useDateFormat()
 
 const canEdit = computed(() => auth.isAdmin)
 
@@ -112,10 +114,6 @@ const summary = computed(() => {
 const openMenuId = ref<string | null>(null)
 const checking = reactive<Record<string, boolean>>({})
 
-function fmtDate(iso: string | null): string {
-  if (!iso) return '—'
-  return iso.slice(0, 10)
-}
 function relTime(iso: string | null): string {
   if (!iso) return 'never'
   const diff = Date.now() - new Date(iso).getTime()
@@ -469,7 +467,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
               <td>
                 <span class="type-badge" :class="r.type">{{ r.type === 'ssl' ? 'SSL' : r.type === 'service' ? 'Service' : 'Domain' }}</span>
               </td>
-              <td class="mono">{{ fmtDate(r.expiryDate) }}</td>
+              <td class="mono">{{ formatDate(r.expiryDate) }}</td>
               <td class="num mono">{{ daysLabel(r) }}</td>
               <td class="bar-col">
                 <ExpiryBar :days-remaining="r.daysRemaining" :warn-threshold="r.warnThreshold" :status="r.status" />

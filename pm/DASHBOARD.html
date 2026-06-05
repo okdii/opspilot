@@ -65,7 +65,7 @@
 <body>
 <div class="header">
   <div><h1>OpsPilot &mdash; Dev Progress</h1><p>12 phases &middot; 203 tasks &middot; Python + FastAPI + Vue 3 + TimescaleDB</p></div>
-  <div class="badge">Updated: <span>2026-06-04</span></div>
+  <div class="badge">Updated: <span>2026-06-05</span></div>
 </div>
 <div class="overall">
   <div>
@@ -320,6 +320,16 @@ const phases = [
     { text: "Backend: ServiceSslOut schema + service_ssl field in SSLDomainsResponse + router queries HTTPS services", status: "done", smoke: true },
     { text: "Frontend store: ServiceSslRec type, CombinedRow/TimelineDot widened to type:service, serviceSsl state + combinedRows loop", status: "done", smoke: false },
     { text: "Frontend view: SERVICE badge (purple), Service filter option, read-only kebab (View in Services →), ExpiryTimeline tooltip, defensive guards", status: "done", smoke: true },
+  ]},
+  { id: 15, title: "Global Timezone Setting", subtitle: "Org-level timezone stored in app_settings; uptime bars, incident timestamps, and all date displays use configured timezone", tasks: [
+    { text: "DB migration 0009: add timezone VARCHAR(60) DEFAULT 'UTC' to app_settings; update Settings ORM model", status: "done", smoke: true },
+    { text: "Backend schema + router: SettingsResponse/SettingsPatch extended with timezone + IANA validator; _to_response updated", status: "done", smoke: true },
+    { text: "Uptime timeline endpoint: reads org timezone, uses time AT TIME ZONE :tz in time_bucket SQL", status: "done", smoke: true },
+    { text: "Frontend settings store: general.timezone added; fetchSettings populates it; saveGeneral accepts it; AppLayout fetches settings globally", status: "done", smoke: false },
+    { text: "Settings UI: timezone dropdown with curated IANA list in GeneralTab identity section", status: "done", smoke: true },
+    { text: "useDateFormat composable: formatDate, formatDateTime, toTzDateKey — all timezone-aware via Intl.DateTimeFormat", status: "done", smoke: false },
+    { text: "UptimeTimeline + ServiceDetail: toTzDateKey for day-key generation; formatDateTime for incident timestamps", status: "done", smoke: true },
+    { text: "SslDomainsView + JobDetailSlideOver: local date formatters removed, useDateFormat composable used throughout", status: "done", smoke: true },
   ]},
 ];
 

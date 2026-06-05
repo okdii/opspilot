@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { SlideOver, StatusBadge } from '@/components/ui'
 import MetricChart from '@/components/charts/MetricChart.vue'
 import { useNotify } from '@/composables/useNotify'
+import { useDateFormat } from '@/composables/useDateFormat'
 import { useCronBackupStore } from '@/stores/cronBackup'
 import type { CronJob, BackupJob, JobRun } from '@/stores/cronBackup'
 import { cronToLabel } from './cronLabel'
@@ -27,6 +28,7 @@ const emit = defineEmits<{
 
 const store = useCronBackupStore()
 const notify = useNotify()
+const { formatDateTime: fmtDateTime } = useDateFormat()
 
 const runs = ref<JobRun[]>([])
 const cursor = ref<string | null>(null)
@@ -59,13 +61,6 @@ const curlCommand = computed(() => {
   if (isCron.value) return `curl -s ${pingUrl.value} > /dev/null`
   return `curl -s -X POST ${pingUrl.value} \\\n  -d "status=success&size_bytes=<BYTES>&exit_code=$?"`
 })
-
-function fmtDateTime(iso: string | null): string {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-}
 
 function relativeTime(iso: string | null): string {
   if (!iso) return 'never'
