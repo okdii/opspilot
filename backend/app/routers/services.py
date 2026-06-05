@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.deps import AdminUser, CurrentUser
 from app.models.organization import Organization
-from app.models.other import Alert, Incident, Service
+from app.models.other import Alert, Incident, Service, Settings
 from app.models.server import Server
 from app.models.user import UserOrganization
 from app.schemas.service import ServiceCreate, ServiceOut, ServiceUpdate
@@ -451,17 +451,21 @@ async def uptime_timeline(
     db: AsyncSession = Depends(get_db),
 ):
     await _get_accessible_service(service_id, user, db)
+
+    settings_row = await db.scalar(select(Settings).where(Settings.id == 1))
+    tz = (settings_row.timezone if settings_row else None) or "UTC"
+
     rows = (
         await db.execute(
             text(
-                "SELECT time_bucket('1 day', time) AS day, "
+                "SELECT time_bucket('1 day', time AT TIME ZONE :tz)::date AS day, "
                 "COUNT(*) AS total, "
                 "COUNT(*) FILTER (WHERE status = 'up') AS up "
                 "FROM service_checks "
                 f"WHERE service_id = :sid AND time >= now() - INTERVAL '{days} days' "
                 "GROUP BY day ORDER BY day ASC"
             ),
-            {"sid": service_id},
+            {"sid": service_id, "tz": tz},
         )
     ).all()
 
@@ -470,10 +474,10 @@ async def uptime_timeline(
         total = r.total or 0
         up = r.up or 0
         uptime_pct = round(up / total * 100, 2) if total else 100.0
-        down_minutes = total - up  # 1 check ≈ 1 minute at default interval
+        down_minutes = total - up
         out.append(
             {
-                "date": r.day.date().isoformat(),
+                "date": r.day.isoformat(),
                 "uptime_pct": uptime_pct,
                 "down_minutes": down_minutes,
             }
