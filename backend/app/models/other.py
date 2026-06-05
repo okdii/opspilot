@@ -41,6 +41,7 @@ class Service(Base):
 
     server: Mapped["Server"] = relationship(back_populates="services")
     incidents: Mapped[list["Incident"]] = relationship(back_populates="service", cascade="all, delete-orphan")
+    security_scans: Mapped[list["ServiceSecurityScan"]] = relationship(back_populates="service", cascade="all, delete-orphan")
     alerts: Mapped[list["Alert"]] = relationship(back_populates="service")
 
 
@@ -121,6 +122,8 @@ class ServiceSecurityScan(Base):
     server_disclosure: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     x_powered_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     findings: Mapped[list] = mapped_column(JSONB(astext_type=Text()), nullable=False, default=list)
+
+    service: Mapped["Service"] = relationship(back_populates="security_scans")
 
 
 class Alert(Base):
