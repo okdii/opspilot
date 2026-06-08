@@ -95,7 +95,11 @@ function stopPolling() {
 }
 
 onMounted(load)
-onUnmounted(stopPolling)
+onMounted(() => window.addEventListener('keydown', onKey))
+onUnmounted(() => {
+  stopPolling()
+  window.removeEventListener('keydown', onKey)
+})
 
 watch(orgId, () => {
   stopPolling()
@@ -114,7 +118,6 @@ function onKey(e: KeyboardEvent) {
   const next = e.key === 'ArrowRight' ? idx + 1 : idx - 1
   if (next >= 0 && next < servers.value.length) selectServer(servers.value[next].server_id)
 }
-onMounted(() => window.addEventListener('keydown', onKey))
 
 function openAddInstance() {
   editingInstance.value = null
@@ -253,7 +256,7 @@ async function onRemove() {
 
     <!-- Remove confirmation -->
     <Teleport to="body">
-      <div v-if="confirmRemove" class="confirm-scrim" @click.self="confirmRemove = false">
+      <div v-if="confirmRemove" class="confirm-scrim" @click.self="confirmRemove = false; removingInstance = null">
         <div class="confirm" role="alertdialog" aria-modal="true">
           <h3 class="cf-title">Remove {{ removingInstance?.label }} from {{ selected?.server_name }}?</h3>
           <ul class="cf-list">
