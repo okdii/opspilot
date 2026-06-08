@@ -344,7 +344,7 @@ const connError = computed(() => props.status.last_check_ok === false)
         <StatCard label="Active Connections" :value="fmt(latest.connections_active)" accent="info" />
         <StatCard label="Transactions/sec" :value="fmt(latest.transactions_per_sec)" accent="info" />
         <StatCard label="Cache Hit Rate" :value="fmt(latest.cache_hit_rate, '%')" :accent="latest.cache_hit_rate != null && latest.cache_hit_rate < 99 ? 'danger' : 'success'" />
-        <StatCard label="Deadlocks" :value="fmt(latest.innodb_deadlocks)" accent="warning" />
+        <StatCard label="Deadlocks" :value="fmt(latest.deadlocks)" accent="warning" />
       </div>
       <div class="cards-sub">
         <span>Nearing max_connections means new app connections will be rejected.</span>

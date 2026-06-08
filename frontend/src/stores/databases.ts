@@ -41,6 +41,7 @@ export interface DbMetricsLatest {
   table_locks_waited: number | null
   aborted_connections: number | null
   // PostgreSQL-specific (null for MySQL servers)
+  deadlocks: number | null
   transactions_per_sec: number | null
   cache_hit_rate: number | null
   tuple_ops_per_sec: number | null
@@ -106,6 +107,7 @@ const EMPTY_LATEST: DbMetricsLatest = {
   replication_running: null,
   table_locks_waited: null,
   aborted_connections: null,
+  deadlocks: null,
   transactions_per_sec: null,
   cache_hit_rate: null,
   tuple_ops_per_sec: null,
