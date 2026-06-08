@@ -28,7 +28,7 @@ import {
   cpuTotal, humanBytes, humanRate, labeledList, maxLabeled, pickLabel,
   realMounts, relativeTime, scalarValue, usageColor,
 } from '@/utils/metrics'
-import type { MetricRange, Server } from '@/types'
+import type { Server } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -57,12 +57,6 @@ onMounted(() => {
     activeTab.value = tab as Tab
   }
 })
-const RANGES: MetricRange[] = ['1h', '6h', '24h', '7d', '30d']
-const currentRange = computed(() => metrics.rangeFor(activeTab.value))
-function setRange(r: MetricRange) {
-  metrics.setRange(activeTab.value, r)
-}
-
 // --- Header / status -------------------------------------------------------
 const displayStatus = computed(() =>
   metrics.maintenance.active ? 'maintenance' : (server.value?.status ?? 'pending'),
@@ -239,16 +233,9 @@ watch(() => orgStore.activeOrgId, (newId) => {
           @click="activeTab = t"
         >{{ t }}</button>
       </div>
-      <div class="ranges">
-        <button
-          v-for="r in RANGES" :key="r"
-          class="range" :class="{ active: currentRange === r }"
-          @click="setRange(r)"
-        >{{ r }}</button>
-      </div>
     </div>
 
-    <component :is="TAB_COMPONENTS[activeTab]" :range="currentRange" />
+    <component :is="TAB_COMPONENTS[activeTab]" />
 
     <AgentStatusFooter />
 
@@ -285,7 +272,4 @@ watch(() => orgStore.activeOrgId, (newId) => {
 .tab { background: none; border: none; color: var(--muted); font-size: 13px; padding: 10px 14px; cursor: pointer; border-bottom: 2px solid transparent; }
 .tab:hover { color: var(--text); }
 .tab.active { color: var(--accent-2); border-bottom-color: var(--accent-2); }
-.ranges { display: flex; gap: 4px; }
-.range { background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); font-size: 12px; padding: 5px 10px; border-radius: 6px; cursor: pointer; }
-.range.active { background: rgba(99,102,241,0.15); color: var(--accent-2); border-color: var(--accent); }
 </style>
