@@ -247,6 +247,7 @@ class BackupJob(Base):
     last_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     last_status_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     previous_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    last_files_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
 
@@ -263,6 +264,7 @@ class BackupRun(Base):
     ran_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    files_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     outcome: Mapped[str] = mapped_column(String(20), nullable=False)  # 'success' | 'missed' | 'failed'
 
     backup_job: Mapped["BackupJob"] = relationship(back_populates="runs")
