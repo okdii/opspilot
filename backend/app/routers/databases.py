@@ -158,19 +158,27 @@ async def _last_check(
 ) -> tuple[bool | None, datetime | None]:
     """Best-effort connection health filtered by instance label.
     Falls back to unlabelled metrics for backward compat with pre-migration data."""
-    prefix = "postgresql" if db_type == "postgres" else "mysql"
+    if db_type == "postgres":
+        metric_filter = "metric_name LIKE 'postgresql.%'"
+        params: dict = {"sid": str(server_id), "label": label}
+    else:
+        # MariaDB replication metrics land under 'mariadb.*'; include both prefixes
+        # so a MariaDB replica with only replication metrics isn't seen as offline.
+        metric_filter = "(metric_name LIKE 'mysql.%' OR metric_name LIKE 'mariadb.%')"
+        params = {"sid": str(server_id), "label": label}
+
     row = (
         await db.execute(
             text(
-                """
+                f"""
                 SELECT MAX(time) AS last_t
                 FROM server_metrics
                 WHERE server_id = :sid
-                  AND metric_name LIKE :prefix
+                  AND {metric_filter}
                   AND (labels->>'db_label' = :label OR labels->>'db_label' IS NULL)
                 """
             ),
-            {"sid": str(server_id), "prefix": f"{prefix}.%", "label": label},
+            params,
         )
     ).first()
     last_t = row.last_t if row else None
