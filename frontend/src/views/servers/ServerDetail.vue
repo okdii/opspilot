@@ -16,6 +16,7 @@ import AlertsTab from '@/components/servers/tabs/AlertsTab.vue'
 import InfoTab from '@/components/servers/tabs/InfoTab.vue'
 import LogsTab from '@/components/servers/tabs/LogsTab.vue'
 import MonitoringTab from '@/components/servers/tabs/MonitoringTab.vue'
+import BackupTab from '@/components/servers/tabs/BackupTab.vue'
 import AgentStatusFooter from '@/components/servers/AgentStatusFooter.vue'
 import { getServer } from '@/services/api'
 import { useMetricsStore } from '@/stores/metrics'
@@ -40,12 +41,13 @@ const maintenanceOpen = ref(false)
 const menuOpen = ref(false)
 
 // --- Tabs ------------------------------------------------------------------
-const TABS = ['Info', 'Overview', 'CPU', 'Memory', 'Disk', 'Network', 'System', 'Processes', 'Services', 'Monitoring', 'Alerts', 'Logs'] as const
+const TABS = ['Info', 'Overview', 'CPU', 'Memory', 'Disk', 'Network', 'System', 'Processes', 'Services', 'Monitoring', 'Alerts', 'Logs', 'Backup'] as const
 type Tab = (typeof TABS)[number]
 const TAB_COMPONENTS = {
   Info: InfoTab, Overview: OverviewTab, CPU: CpuTab, Memory: MemoryTab,
   Disk: DiskTab, Network: NetworkTab, System: SystemTab, Processes: ProcessesTab,
   Services: ServicesTab, Monitoring: MonitoringTab, Alerts: AlertsTab, Logs: LogsTab,
+  Backup: BackupTab,
 }
 const activeTab = ref<Tab>('Info')
 onMounted(() => {
