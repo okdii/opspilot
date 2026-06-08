@@ -39,8 +39,8 @@ watch(dbType, (t) => {
 watch(
   () => props.modelValue,
   (open) => {
-    if (!open) return
     saving.value = false
+    if (!open) return
     Object.keys(errors).forEach((k) => delete errors[k])
     const e = props.existing
     isEdit.value = !!e
@@ -83,11 +83,6 @@ function submit() {
   if (form.password) payload.password = form.password
   emit('save', payload, props.existing?.credential_id ?? null)
 }
-
-watch(
-  () => props.modelValue,
-  (open) => { if (!open) saving.value = false },
-)
 
 const showPassword = ref(false)
 </script>
