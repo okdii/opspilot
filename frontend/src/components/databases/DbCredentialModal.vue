@@ -31,7 +31,7 @@ const isEdit = ref(false)
 
 // Update port/username defaults when db_type changes (create mode only).
 watch(dbType, (t) => {
-  if (props.existing) return
+  if (props.existing?.has_credentials) return
   form.port = t === 'postgres' ? 5432 : 3306
   if (!form.username || form.username === 'opspilot_monitor' || form.username === 'opspilot') {
     form.username = t === 'postgres' ? 'opspilot' : 'opspilot_monitor'
@@ -112,18 +112,18 @@ const showPassword = ref(false)
             type="button"
             class="type-pill"
             :class="{ active: dbType === 'mysql' }"
-            :disabled="!!existing"
+            :disabled="!!existing?.has_credentials"
             @click="dbType = 'mysql'"
           >MySQL / MariaDB</button>
           <button
             type="button"
             class="type-pill"
             :class="{ active: dbType === 'postgres' }"
-            :disabled="!!existing"
+            :disabled="!!existing?.has_credentials"
             @click="dbType = 'postgres'"
           >PostgreSQL</button>
         </div>
-        <p v-if="existing" class="field-hint">Database type cannot be changed after setup.</p>
+        <p v-if="existing?.has_credentials" class="field-hint">Database type cannot be changed after setup.</p>
       </div>
 
       <div class="row two">
