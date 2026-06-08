@@ -451,22 +451,29 @@ async def get_db_metrics_latest(
     }
 
 
-async def _rate_latest(db: AsyncSession, server_id: str, stored: str, *, per: str) -> float | None:
-    """Per-second (per='sec') or per-minute (per='min') rate from the two most
-    recent counter samples. None when fewer than two samples or on a reset."""
+async def _rate_latest(
+    db: AsyncSession, server_id: str, stored: str, *, per: str, db_label: str = ""
+) -> float | None:
+    """Per-second or per-minute rate from the two most recent counter samples.
+    db_label filters to a specific instance; empty string matches all (including unlabelled)."""
+    label_clause = (
+        "AND (labels->>'db_label' = :label OR labels->>'db_label' IS NULL)"
+        if db_label else ""
+    )
     rows = (
         await db.execute(
             text(
-                """
+                f"""
                 SELECT value, time
                 FROM server_metrics
                 WHERE server_id = :sid AND metric_name = :m
                   AND time >= now() - INTERVAL '10 minutes'
+                  {label_clause}
                 ORDER BY time DESC
                 LIMIT 2
                 """
             ),
-            {"sid": str(server_id), "m": stored},
+            {"sid": str(server_id), "m": stored, "label": db_label},
         )
     ).all()
     if len(rows) < 2:
@@ -479,17 +486,17 @@ async def _rate_latest(db: AsyncSession, server_id: str, stored: str, *, per: st
     if dt <= 0:
         return None
     delta = float(cur_v) - float(prev_v)
-    if delta < 0:  # counter reset
+    if delta < 0:
         return None
     rate_per_sec = delta / dt
     return round(rate_per_sec * (60 if per == "min" else 1), 2)
 
 
-async def _pg_tuple_ops_rate(db: AsyncSession, server_id: str) -> float | None:
+async def _pg_tuple_ops_rate(db: AsyncSession, server_id: str, db_label: str = "") -> float | None:
     """Sum of insert+update+delete rates (per sec) for PostgreSQL tuple operations."""
-    ins = await _rate_latest(db, server_id, "postgresql.tup_inserted", per="sec")
-    upd = await _rate_latest(db, server_id, "postgresql.tup_updated", per="sec")
-    dlt = await _rate_latest(db, server_id, "postgresql.tup_deleted", per="sec")
+    ins = await _rate_latest(db, server_id, "postgresql.tup_inserted", per="sec", db_label=db_label)
+    upd = await _rate_latest(db, server_id, "postgresql.tup_updated", per="sec", db_label=db_label)
+    dlt = await _rate_latest(db, server_id, "postgresql.tup_deleted", per="sec", db_label=db_label)
     parts = [v for v in [ins, upd, dlt] if v is not None]
     return round(sum(parts), 2) if parts else None
 
@@ -546,7 +553,13 @@ async def _series(
     timecol: str,
     interval: str,
     is_rate: bool,
+    *,
+    db_label: str = "",
 ) -> list[dict]:
+    label_clause = (
+        "AND (labels->>'db_label' = :label OR labels->>'db_label' IS NULL)"
+        if db_label else ""
+    )
     rows = (
         await db.execute(
             text(
@@ -555,10 +568,11 @@ async def _series(
                 FROM {source}
                 WHERE server_id = :sid AND metric_name = :m
                   AND {timecol} >= now() - INTERVAL '{interval}'
+                  {label_clause}
                 ORDER BY {timecol} ASC
                 """
             ),
-            {"sid": str(server_id), "m": stored},
+            {"sid": str(server_id), "m": stored, "label": db_label},
         )
     ).all()
     pts = [{"time": t, "value": float(v) if v is not None else None, "_t": t} for t, v in rows]
@@ -571,7 +585,7 @@ async def _series(
             if dt <= 0:
                 continue
             delta = cur["value"] - prev["value"]
-            if delta < 0:  # counter reset
+            if delta < 0:
                 continue
             out.append({"time": cur["_t"].isoformat(), "value": round(delta / dt, 4)})
         return out
