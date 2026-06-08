@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { PageHeader, EmptyState } from '@/components/ui'
 import { useOrgStore } from '@/stores/org'
 import { useNotify } from '@/composables/useNotify'
 import { useDatabaseStore } from '@/stores/databases'
-import type { DbCredentialPayload, DbCredentialStatus } from '@/stores/databases'
+import type { DbCredentialPayload, DbInstanceStatus } from '@/stores/databases'
 import DbNoCredentials from '@/components/databases/DbNoCredentials.vue'
 import DbCredentialModal from '@/components/databases/DbCredentialModal.vue'
 import DbHealthDashboard from '@/components/databases/DbHealthDashboard.vue'
@@ -17,79 +17,153 @@ const orgId = computed(() => orgStore.activeOrgId)
 const canEdit = computed(() => orgStore.canEdit)
 
 const selectedId = ref<string | null>(null)
+const selectedInstanceId = ref<string | null>(null)
 const modalOpen = ref(false)
+const editingInstance = ref<DbInstanceStatus | null>(null)
 const confirmRemove = ref(false)
+const removingInstance = ref<DbInstanceStatus | null>(null)
 
-const servers = computed(() => store.credentials)
-const selected = computed<DbCredentialStatus | null>(
-  () => servers.value.find((s) => s.server_id === selectedId.value) ?? null,
+const servers = computed(() => store.servers)
+const selected = computed(() => servers.value.find((s) => s.server_id === selectedId.value) ?? null)
+const selectedInstance = computed(
+  () => selected.value?.instances.find((i) => i.credential_id === selectedInstanceId.value) ?? null,
 )
 
 const DB_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>`
 
-function badge(s: DbCredentialStatus): { glyph: string; tone: string; title: string } {
-  if (!s.has_credentials) return { glyph: '—', tone: 'muted', title: 'No credentials configured' }
-  if (s.last_check_ok === false) return { glyph: '⚠', tone: 'warn', title: 'Connection error' }
-  if (s.last_check_ok == null) return { glyph: '◐', tone: 'pending', title: 'Deploying / awaiting first check' }
+function serverBadge(s: typeof servers.value[0]) {
+  if (!s.instances.length) return { glyph: '—', tone: 'muted', title: 'No credentials configured' }
+  if (s.instances.some((i) => i.last_check_ok === false)) return { glyph: '⚠', tone: 'warn', title: 'Connection error' }
+  if (s.instances.every((i) => i.last_check_ok == null)) return { glyph: '◐', tone: 'pending', title: 'Deploying / awaiting first check' }
   return { glyph: '✓', tone: 'ok', title: 'Connected' }
+}
+
+function instanceDot(inst: DbInstanceStatus): string {
+  if (inst.last_check_ok === false) return '⚠'
+  if (inst.last_check_ok == null) return '◐'
+  return '●'
+}
+
+function instanceDotClass(inst: DbInstanceStatus): string {
+  if (inst.last_check_ok === false) return 'warn'
+  if (inst.last_check_ok == null) return 'pending'
+  return 'ok'
+}
+
+function selectInstance(credentialId: string) {
+  selectedInstanceId.value = credentialId
+}
+
+function selectServer(id: string) {
+  selectedId.value = id
+  const srv = servers.value.find((s) => s.server_id === id)
+  if (!srv || !srv.instances.length) { selectedInstanceId.value = null; return }
+  // prefer connected → pending → first
+  const connected = srv.instances.find((i) => i.last_check_ok === true)
+  const pending = srv.instances.find((i) => i.last_check_ok == null)
+  selectedInstanceId.value = (connected ?? pending ?? srv.instances[0]).credential_id
 }
 
 async function load() {
   if (!orgId.value) return
   await store.fetchCredentials(orgId.value)
-  // Select first server with credentials, else first server.
-  const withCreds = servers.value.find((s) => s.has_credentials)
-  selectedId.value = withCreds?.server_id ?? servers.value[0]?.server_id ?? null
+  // Auto-select first server with instances, else first server
+  const withCreds = servers.value.find((s) => s.instances.length > 0)
+  const target = withCreds ?? servers.value[0]
+  if (target) selectServer(target.server_id)
+  if (hasPending()) startPolling()
+}
+
+// Poll while any instance is awaiting first check
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+function hasPending(): boolean {
+  return servers.value.some((s) => s.instances.some((i) => i.last_check_ok == null))
+}
+
+function startPolling() {
+  if (pollTimer) return
+  pollTimer = setInterval(async () => {
+    if (!orgId.value) return
+    await store.fetchCredentials(orgId.value)
+    if (!hasPending()) stopPolling()
+  }, 10_000)
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
 }
 
 onMounted(load)
+onUnmounted(stopPolling)
+
 watch(orgId, () => {
+  stopPolling()
   store.reset()
   selectedId.value = null
+  selectedInstanceId.value = null
   void load()
 })
 
-function selectServer(id: string) {
-  selectedId.value = id
-}
-
-// Keyboard: ← / → between tabs.
+// Keyboard: ← / → between server tabs
 function onKey(e: KeyboardEvent) {
   if (modalOpen.value || confirmRemove.value) return
   if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
   const idx = servers.value.findIndex((s) => s.server_id === selectedId.value)
   if (idx < 0) return
   const next = e.key === 'ArrowRight' ? idx + 1 : idx - 1
-  if (next >= 0 && next < servers.value.length) selectedId.value = servers.value[next].server_id
+  if (next >= 0 && next < servers.value.length) selectServer(servers.value[next].server_id)
 }
 onMounted(() => window.addEventListener('keydown', onKey))
 
-function openSetup() {
+function openAddInstance() {
+  editingInstance.value = null
   modalOpen.value = true
 }
 
-async function onSave(payload: DbCredentialPayload, edit: boolean) {
+function openEditInstance(inst: DbInstanceStatus) {
+  editingInstance.value = inst
+  modalOpen.value = true
+}
+
+async function onSave(payload: DbCredentialPayload, credentialId: string | null) {
   if (!selectedId.value) return
   try {
-    await store.saveCredentials(selectedId.value, payload, edit)
+    await store.saveCredentials(selectedId.value, payload, credentialId)
     modalOpen.value = false
-    notify.success('Credentials saved. Re-deploying Telegraf config…')
-    // Refresh status so the badge reflects the new state.
+    notify.success(credentialId ? 'Credentials updated.' : 'DB instance added. Re-deploying Telegraf…')
     if (orgId.value) await store.fetchCredentials(orgId.value)
+    if (hasPending()) startPolling()
+    // select the newly added instance (last one on server)
+    if (!credentialId) {
+      const srv = servers.value.find((s) => s.server_id === selectedId.value)
+      if (srv?.instances.length) {
+        selectedInstanceId.value = srv.instances[srv.instances.length - 1].credential_id
+      }
+    }
   } catch (err) {
     notify.error(err as Error, { title: 'Could not save credentials' })
   }
 }
 
+function promptRemove(inst: DbInstanceStatus) {
+  removingInstance.value = inst
+  confirmRemove.value = true
+}
+
 async function onRemove() {
-  if (!selectedId.value) return
+  if (!selectedId.value || !removingInstance.value) return
   try {
-    await store.deleteCredentials(selectedId.value)
+    await store.deleteCredentials(selectedId.value, removingInstance.value.credential_id)
     confirmRemove.value = false
-    notify.success('DB monitoring removed. Re-deploying Telegraf config…')
+    removingInstance.value = null
+    notify.success('DB instance removed. Re-deploying Telegraf…')
     if (orgId.value) await store.fetchCredentials(orgId.value)
+    // re-select first instance on server
+    const srv = servers.value.find((s) => s.server_id === selectedId.value)
+    selectedInstanceId.value = srv?.instances[0]?.credential_id ?? null
   } catch (err) {
-    notify.error(err as Error, { title: 'Could not remove credentials' })
+    notify.error(err as Error, { title: 'Could not remove instance' })
   }
 }
 </script>
@@ -98,7 +172,6 @@ async function onRemove() {
   <div class="page">
     <PageHeader title="Database Monitoring" subtitle="MariaDB & PostgreSQL health metrics per server" />
 
-    <!-- No servers in org -->
     <EmptyState
       v-if="!store.loadingCredentials && !servers.length"
       :icon="DB_ICON"
@@ -120,29 +193,52 @@ async function onRemove() {
           type="button" @click="selectServer(s.server_id)"
         >
           <span class="srv-name">{{ s.server_name }}</span>
-          <span class="srv-badge" :class="badge(s).tone" :title="badge(s).title">{{ badge(s).glyph }}</span>
+          <span class="srv-badge" :class="serverBadge(s).tone" :title="serverBadge(s).title">
+            {{ serverBadge(s).glyph }}
+          </span>
         </button>
       </div>
 
       <div class="content" v-if="selected">
+        <!-- Instance pill bar (only when at least one instance exists) -->
+        <div v-if="selected.instances.length" class="inst-bar">
+          <button
+            v-for="inst in selected.instances" :key="inst.credential_id"
+            class="inst-pill"
+            :class="{ active: inst.credential_id === selectedInstanceId }"
+            type="button"
+            @click="selectInstance(inst.credential_id)"
+          >
+            <span class="inst-dot" :class="instanceDotClass(inst)">{{ instanceDot(inst) }}</span>
+            {{ inst.label }}
+          </button>
+          <button v-if="canEdit" class="inst-pill add-pill" type="button" @click="openAddInstance">
+            + Add Instance
+          </button>
+        </div>
+
+        <!-- No credentials yet -->
         <DbNoCredentials
-          v-if="!selected.has_credentials"
+          v-if="!selected.instances.length"
           :key="`nc-${selected.server_id}`"
           :server-name="selected.server_name"
           :can-edit="canEdit"
-          :db-type="selected.db_type ?? 'mysql'"
-          @setup="openSetup"
+          db-type="mysql"
+          @setup="openAddInstance"
         />
+
+        <!-- Health dashboard for selected instance -->
         <DbHealthDashboard
-          v-else
-          :key="`hd-${selected.server_id}`"
+          v-else-if="selectedInstance"
+          :key="`hd-${selectedInstance.credential_id}`"
           :server-id="selected.server_id"
           :server-name="selected.server_name"
-          :status="selected"
+          :status="selectedInstance"
           :can-edit="canEdit"
-          :db-type="selected.db_type ?? 'mysql'"
-          @edit="modalOpen = true"
-          @remove="confirmRemove = true"
+          :db-type="selectedInstance.db_type"
+          :credential-id="selectedInstance.credential_id"
+          @edit="openEditInstance(selectedInstance)"
+          @remove="promptRemove(selectedInstance)"
         />
       </div>
     </template>
@@ -151,7 +247,7 @@ async function onRemove() {
     <DbCredentialModal
       v-model="modalOpen"
       :server-name="selected?.server_name ?? ''"
-      :existing="selected"
+      :existing="editingInstance"
       @save="onSave"
     />
 
@@ -159,11 +255,11 @@ async function onRemove() {
     <Teleport to="body">
       <div v-if="confirmRemove" class="confirm-scrim" @click.self="confirmRemove = false">
         <div class="confirm" role="alertdialog" aria-modal="true">
-          <h3 class="cf-title">Remove DB monitoring for {{ selected?.server_name }}?</h3>
+          <h3 class="cf-title">Remove {{ removingInstance?.label }} from {{ selected?.server_name }}?</h3>
           <ul class="cf-list">
-            <li>Remove stored credentials</li>
-            <li>Remove inputs.mysql from Telegraf config (re-deploy required)</li>
-            <li>Stop collecting DB metrics (existing history is retained)</li>
+            <li>Remove stored credentials for this instance</li>
+            <li>Remove this input block from Telegraf config (re-deploy required)</li>
+            <li>Stop collecting metrics for this instance (history retained)</li>
           </ul>
           <div class="cf-actions">
             <button class="btn ghost" type="button" @click="confirmRemove = false">Cancel</button>
@@ -220,4 +316,21 @@ async function onRemove() {
 .btn.ghost:hover { border-color: var(--accent); }
 .btn.danger { background: var(--red); color: #fff; }
 .btn.danger:hover { opacity: 0.92; }
+
+.inst-bar {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; align-items: center;
+}
+.inst-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--muted);
+  font-size: 12px; font-weight: 500; padding: 5px 12px; border-radius: 20px; cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.inst-pill:hover { border-color: var(--accent); color: var(--text); }
+.inst-pill.active { background: rgba(99,102,241,0.15); border-color: var(--accent); color: #fff; }
+.inst-pill.add-pill { border-style: dashed; }
+.inst-dot { font-size: 10px; }
+.inst-dot.ok { color: var(--green); }
+.inst-dot.warn { color: var(--amber); }
+.inst-dot.pending { color: var(--accent-2); }
 </style>
