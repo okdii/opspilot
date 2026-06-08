@@ -9,7 +9,7 @@ import logging
 import re
 import socket
 import ssl
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 

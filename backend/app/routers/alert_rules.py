@@ -1,6 +1,5 @@
 """Alert-rule CRUD (metric + log) and default-rule auto-creation (spec 10 §9, §14)."""
 from datetime import datetime
-from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.crypto import decrypt, encrypt
+from app.core.crypto import encrypt
 from app.database import get_db
 from app.deps import AdminUser, CurrentUser
 from app.models.organization import Organization
@@ -147,8 +147,6 @@ async def update_server(server_id: str, body: ServerUpdate, user: AdminUser, db:
     if not server:
         raise HTTPException(404, detail={"error": "not_found", "message": "Server not found."})
 
-    creds_changed = False
-
     if body.name is not None:
         server.name = body.name
     if body.host is not None:
@@ -162,11 +160,9 @@ async def update_server(server_id: str, body: ServerUpdate, user: AdminUser, db:
     if body.ssh_key is not None:
         server.ssh_key_encrypted = encrypt(body.ssh_key)
         server.ssh_password_encrypted = None
-        creds_changed = True
     if body.ssh_password is not None:
         server.ssh_password_encrypted = encrypt(body.ssh_password)
         server.ssh_key_encrypted = None
-        creds_changed = True
     if body.tags is not None:
         server.tags = body.tags
 
@@ -234,8 +230,8 @@ async def get_onboarding(server_id: str, user: CurrentUser, db: AsyncSession = D
         raise HTTPException(404, detail={"error": "no_onboarding", "message": "No onboarding has run for this server."})
 
     # Determine outcome
-    failed = [l for l in logs if l.status == "failed"]
-    running = [l for l in logs if l.status == "running"]
+    failed = [log for log in logs if log.status == "failed"]
+    running = [log for log in logs if log.status == "running"]
     last = logs[-1]
     if failed:
         outcome = "failed"
@@ -254,7 +250,7 @@ async def get_onboarding(server_id: str, user: CurrentUser, db: AsyncSession = D
         started_at=started_at,
         completed_at=completed_at,
         outcome=outcome,
-        steps=[OnboardingStepOut.model_validate(l) for l in logs],
+        steps=[OnboardingStepOut.model_validate(log) for log in logs],
     )
 
 

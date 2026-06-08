@@ -21,7 +21,6 @@ Each step:
 """
 
 import asyncio
-import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from time import perf_counter
@@ -253,7 +252,7 @@ async def _step_install(db, server, ssh: SSHSession, os_info: OSInfo, package: s
         cmd = f"yum install -y {package}"
     r = await ssh.run(cmd, sudo=True, timeout=300)
     if not r.ok:
-        await _finish_step(db, log, t0, status="failed", message=f"package install failed", ssh_output=r.stderr or r.stdout)
+        await _finish_step(db, log, t0, status="failed", message="package install failed", ssh_output=r.stderr or r.stdout)
         raise SSHError(f"{package} install failed")
     await _finish_step(db, log, t0, status="done", ssh_output=r.stdout[-2000:])
 

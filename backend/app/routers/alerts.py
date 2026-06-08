@@ -19,12 +19,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, model_validator
-from sqlalchemy import and_, func, or_, select, text
+from sqlalchemy import and_, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.deps import CurrentUser
-from app.models.other import Alert, Domain, Service, SSLCert
+from app.models.other import Alert, Domain, Service
 from app.models.server import Server
 from app.models.user import User
 from app.routers.servers import _assert_org_access

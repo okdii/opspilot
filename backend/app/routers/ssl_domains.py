@@ -15,7 +15,7 @@ from app.database import get_db
 from app.deps import AdminUser, CurrentUser
 from app.jobs.scheduler import scheduler
 from app.models.organization import Organization
-from app.models.other import Alert, Domain, Service, SSLCert
+from app.models.other import Domain, Service, SSLCert
 from app.models.server import Server
 from app.models.user import UserOrganization
 from app.schemas.ssl_domains import (

@@ -1,4 +1,3 @@
-import hmac
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -10,7 +9,7 @@ from app.core.auth import create_token
 from app.core.rate_limit import limiter
 from app.core.security import hash_password, verify_password
 from app.database import get_db
-from app.deps import AdminUser, CurrentUser
+from app.deps import CurrentUser
 from app.models.session import Session
 from app.models.user import User, UserOrganization
 from app.models.organization import Organization

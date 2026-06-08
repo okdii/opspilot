@@ -1,0 +1,6 @@
+[lint]
+# F821: SQLAlchemy relationship forward references (Mapped["ModelName"]) are
+#       resolved at runtime — ruff cannot trace them statically.
+# E712: SQLAlchemy .where() expressions require == True for column comparisons;
+#       Python truth-check syntax produces a different query.
+ignore = ["F821", "E712"]
