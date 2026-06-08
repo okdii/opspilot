@@ -5,8 +5,8 @@ import { useMetricsStore } from '@/stores/metrics'
 import { getServer } from '@/services/api'
 import { formatUptime, humanBytes, scalarValue, toApexSeries } from '@/utils/metrics'
 import type { MetricRange, Server } from '@/types'
+import RangePicker from './RangePicker.vue'
 
-const props = defineProps<{ range: MetricRange }>()
 const metrics = useMetricsStore()
 
 const KEY = {
@@ -26,7 +26,7 @@ async function loadAll(range: MetricRange) {
 }
 
 onMounted(async () => {
-  loadAll(props.range)
+  loadAll(metrics.rangeFor('System'))
   const id = metrics.activeServerId
   if (id) {
     try {
@@ -36,7 +36,7 @@ onMounted(async () => {
     }
   }
 })
-watch(() => props.range, (r) => loadAll(r))
+watch(() => metrics.rangeFor('System'), (r) => loadAll(r))
 
 const loadSeries = computed(() =>
   toApexSeries(metrics.chartData[KEY.load]?.series ?? [], {
@@ -68,6 +68,7 @@ const info = computed(() => ({
 
 <template>
   <div class="sys">
+    <RangePicker tab-key="System" />
     <section class="card">
       <h3>Load Average</h3>
       <MetricChart

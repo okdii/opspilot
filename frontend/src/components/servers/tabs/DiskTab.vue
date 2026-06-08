@@ -5,8 +5,8 @@ import MetricBar from '@/components/ui/MetricBar.vue'
 import { useMetricsStore } from '@/stores/metrics'
 import { humanBytes, labeledList, realMounts, toApexSeries } from '@/utils/metrics'
 import type { LatestLabeled, MetricRange } from '@/types'
+import RangePicker from './RangePicker.vue'
 
-const props = defineProps<{ range: MetricRange }>()
 const metrics = useMetricsStore()
 
 const KEY = {
@@ -32,8 +32,8 @@ async function loadAll(range: MetricRange) {
   ])
 }
 
-onMounted(() => loadAll(props.range))
-watch(() => props.range, (r) => loadAll(r))
+onMounted(() => loadAll(metrics.rangeFor('Disk')))
+watch(() => metrics.rangeFor('Disk'), (r) => loadAll(r))
 
 // ── 1. Disk Space — Current (donut) ─────────────────────────────────────────
 const mounts = computed<LatestLabeled[]>(() =>
@@ -214,6 +214,7 @@ const deviceLabel = computed(() => (ioDevices.value.length ? selectedDevice.valu
 
 <template>
   <div class="disk">
+    <RangePicker tab-key="Disk" />
     <!-- 1+2. Disk Space + Inode Usage — side by side -->
     <div class="disk-top-row">
       <section class="card">

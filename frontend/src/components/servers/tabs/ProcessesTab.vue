@@ -6,8 +6,8 @@ import { getProcesses } from '@/services/api'
 import { useMetricsStore } from '@/stores/metrics'
 import { toApexSeries } from '@/utils/metrics'
 import type { MetricRange, ProcessSnapshot } from '@/types'
+import RangePicker from './RangePicker.vue'
 
-const props = defineProps<{ range: MetricRange }>()
 const metrics = useMetricsStore()
 
 const TREND_KEY = 'proc.trend'
@@ -93,7 +93,7 @@ function ariaSort(key: SortKey): 'ascending' | 'descending' | 'none' {
 
 onMounted(() => {
   void poll()
-  void loadTrend(props.range)
+  void loadTrend(metrics.rangeFor('Processes'))
   pollTimer = setInterval(() => void poll(), POLL_MS)
   tickTimer = setInterval(() => {
     if (lastUpdated.value != null) ago.value = Math.round((Date.now() - lastUpdated.value) / 1000)
@@ -105,11 +105,12 @@ onUnmounted(() => {
   if (tickTimer) clearInterval(tickTimer)
 })
 
-watch(() => props.range, (r) => void loadTrend(r))
+watch(() => metrics.rangeFor('Processes'), (r) => void loadTrend(r))
 </script>
 
 <template>
   <div class="proc">
+    <RangePicker tab-key="Processes" />
     <!-- Header -->
     <div class="proc-head">
       <h3>Top Processes by CPU</h3>

@@ -6,8 +6,8 @@ import { getServerMonitoring } from '@/services/api'
 import { useMetricsStore } from '@/stores/metrics'
 import { labeledList, realMounts, toApexSeries } from '@/utils/metrics'
 import type { MetricRange, MonitoringService } from '@/types'
+import RangePicker from './RangePicker.vue'
 
-const props = defineProps<{ range: MetricRange }>()
 const metrics = useMetricsStore()
 
 const monitoringChecks = ref<MonitoringService[]>([])
@@ -41,8 +41,8 @@ async function loadAll(range: MetricRange) {
   ])
 }
 
-onMounted(() => { loadMonitoring(); loadAll(props.range) })
-watch(() => props.range, (r) => loadAll(r))
+onMounted(() => { loadMonitoring(); loadAll(metrics.rangeFor('Overview')) })
+watch(() => metrics.rangeFor('Overview'), (r) => loadAll(r))
 
 const cpuSeries = computed(() =>
   toApexSeries(metrics.chartData[KEY.cpu]?.series ?? [], {
@@ -71,6 +71,7 @@ const disks = computed(() => realMounts(labeledList(metrics.latestValues, 'disk.
 
 <template>
   <div class="ov">
+    <RangePicker tab-key="Overview" />
     <section v-if="monitoringLoaded" class="card mon-card">
       <h3>Monitoring Checks</h3>
       <p v-if="!monitoringChecks.length" class="empty">No monitoring checks registered for this server.</p>

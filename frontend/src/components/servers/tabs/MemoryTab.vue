@@ -3,9 +3,11 @@ import { computed, onMounted, watch } from 'vue'
 import MetricChart from '@/components/charts/MetricChart.vue'
 import { useMetricsStore } from '@/stores/metrics'
 import { humanBytes, scalarValue, toApexSeries } from '@/utils/metrics'
-import type { MetricRange } from '@/types'
 
-const props = defineProps<{ range: MetricRange }>()
+function fmtPct(v: number | null) { return v == null ? '—' : v.toFixed(1) + '%' }
+import type { MetricRange } from '@/types'
+import RangePicker from './RangePicker.vue'
+
 const metrics = useMetricsStore()
 
 const KEY = {
@@ -20,8 +22,8 @@ async function loadAll(range: MetricRange) {
   ])
 }
 
-onMounted(() => loadAll(props.range))
-watch(() => props.range, (r) => loadAll(r))
+onMounted(() => loadAll(metrics.rangeFor('Memory')))
+watch(() => metrics.rangeFor('Memory'), (r) => loadAll(r))
 
 const usageSeries = computed(() =>
   toApexSeries(metrics.chartData[KEY.usage]?.series ?? [], { name: () => 'Used' }),
@@ -36,6 +38,18 @@ const GB = 1024 ** 3
 function toGB(bytes: number | null): number {
   return bytes == null ? 0 : bytes / GB
 }
+
+// Stat cards
+const stats = computed(() => {
+  const latest = metrics.latestValues
+  return {
+    usedPct:      scalarValue(latest, 'mem.used_percent'),
+    availablePct: scalarValue(latest, 'mem.available_percent'),
+    used:         scalarValue(latest, 'mem.used'),
+    free:         scalarValue(latest, 'mem.free'),
+    total:        scalarValue(latest, 'mem.total'),
+  }
+})
 
 const breakdown = computed(() => {
   const latest = metrics.latestValues
@@ -103,6 +117,32 @@ const breakdownHeight = computed(() => hasSwap.value ? 140 : 100)
 
 <template>
   <div class="mem">
+    <RangePicker tab-key="Memory" />
+
+    <!-- Stat cards -->
+    <div class="stat-row">
+      <div class="stat-card available">
+        <span class="stat-label">Available</span>
+        <span class="stat-value">{{ fmtPct(stats.availablePct) }}</span>
+      </div>
+      <div class="stat-card used">
+        <span class="stat-label">Used</span>
+        <span class="stat-value">{{ fmtPct(stats.usedPct) }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Used</span>
+        <span class="stat-value sm">{{ humanBytes(stats.used) }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Free</span>
+        <span class="stat-value sm">{{ humanBytes(stats.free) }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Total</span>
+        <span class="stat-value sm">{{ humanBytes(stats.total) }}</span>
+      </div>
+    </div>
+
     <section class="card">
       <h3>RAM Usage History</h3>
       <MetricChart type="area" unit="%" :series="usageSeries" :height="240" />
@@ -142,6 +182,39 @@ const breakdownHeight = computed(() => hasSwap.value ? 140 : 100)
 
 <style scoped>
 .mem { display: flex; flex-direction: column; gap: 16px; }
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.stat-card.available { border-color: rgba(34,197,94,0.3); }
+.stat-card.used      { border-color: rgba(239,68,68,0.25); }
+.stat-label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.stat-value.sm { font-size: 18px; }
+.stat-card.available .stat-value { color: var(--green); }
+.stat-card.used      .stat-value { color: var(--red); }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
 .card h3 { font-size: 13px; color: var(--text); margin-bottom: 12px; font-weight: 600; }
 .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 6px; font-size: 12px; color: var(--muted); }

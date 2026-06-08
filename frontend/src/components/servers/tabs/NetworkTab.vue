@@ -4,8 +4,8 @@ import MetricChart from '@/components/charts/MetricChart.vue'
 import { useMetricsStore } from '@/stores/metrics'
 import { labeledList, toApexSeries } from '@/utils/metrics'
 import type { MetricRange, MetricSeries } from '@/types'
+import RangePicker from './RangePicker.vue'
 
-const props = defineProps<{ range: MetricRange }>()
 const metrics = useMetricsStore()
 
 const KEY = {
@@ -26,8 +26,8 @@ async function loadAll(range: MetricRange) {
   ])
 }
 
-onMounted(() => loadAll(props.range))
-watch(() => props.range, (r) => loadAll(r))
+onMounted(() => loadAll(metrics.rangeFor('Network')))
+watch(() => metrics.rangeFor('Network'), (r) => loadAll(r))
 
 // Distinct interface names come from the always-labeled latest values, so the
 // selector works regardless of range (24h/7d/30d collapse chart-series labels).
@@ -89,6 +89,7 @@ const errorsSeries = computed(() =>
 
 <template>
   <div class="net">
+    <RangePicker tab-key="Network" />
     <section class="card iface-bar">
       <span class="iface-label">Interface</span>
       <select v-if="interfaces.length > 1" v-model="selected" class="iface-select">
