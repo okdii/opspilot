@@ -259,5 +259,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Destructive — data cannot be cleanly split back.
-    pass
+    raise NotImplementedError("0016_unified_job is destructive — downgrade is not supported.")
