@@ -128,12 +128,6 @@ async def _assert_org_access(org_id: str, user, db: AsyncSession) -> None:
             raise HTTPException(403, detail={"error": "forbidden", "message": "Access denied."})
 
 
-async def _get_credential(server_id: str, db: AsyncSession) -> DBCredential | None:
-    return await db.scalar(
-        select(DBCredential).where(DBCredential.server_id == server_id).limit(1)
-    )
-
-
 async def _get_credential_by_id(credential_id: str, server_id: str, db: AsyncSession) -> DBCredential:
     cred = await db.scalar(
         select(DBCredential).where(
