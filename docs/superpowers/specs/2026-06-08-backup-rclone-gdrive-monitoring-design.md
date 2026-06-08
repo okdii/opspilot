@@ -203,7 +203,86 @@ No changes. Adding files_count as a secondary axis would clutter the chart. Defe
 
 ---
 
-## 5. Edge Cases
+## 5. Server Detail — Backup Tab
+
+### 5.1 Overview
+
+A new **Backup** tab is added to the server detail page (`/servers/:id`). It shows backup jobs registered for that specific server, using the same components already built for `/cron-backup`. No component logic is duplicated.
+
+### 5.2 Reuse Strategy
+
+| Need | Solution |
+|---|---|
+| Job list rows | Reuse `JobRow.vue` as-is — already accepts `:job` and `:type="'backup'"` |
+| Job detail slide-over | Reuse `JobDetailSlideOver.vue` as-is — already accepts `:job`, `:type`, `:can-edit` |
+| Add/Edit modal | **Extract** `BackupJobModal.vue` from `CronBackupView.vue` — new shared component |
+| Job data | `useCronBackupStore` already has `backupJobsByServer(server_id)` getter |
+
+### 5.3 BackupJobModal.vue (New Shared Component)
+
+Extracted from the backup-branch of the Add/Edit modal in `CronBackupView.vue`. Props:
+
+```ts
+props: {
+  serverId: string          // pre-fills and locks the server dropdown
+  job: BackupJob | null     // null = create mode, non-null = edit mode
+  canEdit: boolean
+}
+emits: ['saved', 'close']
+```
+
+- Server dropdown is **locked** (disabled, shows current server name) when `serverId` is provided — no server switching when adding from the server detail tab
+- Same validation, same store actions (`createBackupJob`, `updateBackupJob`)
+- `CronBackupView.vue` is refactored to import and use `BackupJobModal.vue` instead of its inline backup modal template — no behaviour change, just code moved
+
+### 5.4 BackupTab.vue (New Tab Component)
+
+`frontend/src/components/servers/tabs/BackupTab.vue`
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  Backup Jobs                              [+ Add Backup] │
+│                                                          │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │  ✓ gdrive-nightly   Every day at 2:00am  Healthy  │  │
+│  │    Last: 6h ago · 4.2 GB · 1,234 files    [⋮]    │  │
+│  ├────────────────────────────────────────────────────┤  │
+│  │  ✕ gdrive-db        Every day at 3:00am  Missing  │  │
+│  │    Last: 2d ago · 1.1 GB · 890 files      [⋮]    │  │
+│  └────────────────────────────────────────────────────┘  │
+│                                                          │
+│  (empty state if no backup jobs for this server)        │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Behaviour:**
+- On mount: checks if `store.backupJobs` is already loaded (populated from the `/cron-backup` page or another server detail visit). If empty, triggers `store.fetchBackupJobs(orgId)`.
+- Filters jobs client-side: `store.backupJobsByServer(props.serverId)` (existing getter).
+- `[+ Add Backup]` button opens `BackupJobModal.vue` with `serverId` pre-filled.
+- `[⋮] → View Detail` opens `JobDetailSlideOver.vue`.
+- `[⋮] → Edit` opens `BackupJobModal.vue` in edit mode.
+- `[⋮] → Delete` calls `store.deleteBackupJob(id)` with confirmation.
+- Empty state: "No backup jobs for this server — add one to start monitoring your rclone backups." with `[+ Add Backup Job]` CTA.
+
+### 5.5 ServerDetail.vue Changes
+
+```ts
+// Add to TABS array
+const TABS = ['Info', 'Overview', 'CPU', 'Memory', 'Disk', 'Network',
+               'System', 'Processes', 'Services', 'Monitoring', 'Alerts',
+               'Logs', 'Backup'] as const
+
+// Add to TAB_COMPONENTS
+import BackupTab from '@/components/servers/tabs/BackupTab.vue'
+// ...
+Backup: BackupTab,
+```
+
+`BackupTab` receives the current server via a prop. `ServerDetail.vue` passes `:server-id="server.id"` and `:org-id="server.org_id"` to the tab component.
+
+---
+
+## 6. Edge Cases
 
 | Case | Behaviour |
 |---|---|
@@ -219,18 +298,20 @@ No changes. Adding files_count as a secondary axis would clutter the chart. Defe
 
 ---
 
-## 6. What Is NOT Changed
+## 7. What Is NOT Changed
 
-- `BackupJob` creation form — no new fields
+- `BackupJob` creation form fields — no new fields added
 - Watchdog logic — no changes
 - Alert types and thresholds — no changes
-- Cron Jobs tab — no changes
+- Cron Jobs tab on `/cron-backup` — no changes
 - Calendar heatmap — no changes
 - `GET /ping/{token}` (used by some tools) — no changes
+- `JobRow.vue` internal logic — used as-is in both locations
+- `JobDetailSlideOver.vue` internal logic — used as-is in both locations
 
 ---
 
-## 7. Files Changed
+## 8. Files Changed
 
 | File | Change |
 |---|---|
@@ -241,3 +322,7 @@ No changes. Adding files_count as a secondary axis would clutter the chart. Defe
 | `frontend/src/stores/cronBackup.ts` | Add `files_count` / `last_files_count` to types |
 | `frontend/src/components/cron-backup/JobDetailSlideOver.vue` | Replace ping URL block with rclone snippet generator tabs |
 | `frontend/src/components/cron-backup/JobRow.vue` | Show `files_count` alongside size in job row |
+| `frontend/src/components/cron-backup/BackupJobModal.vue` | **New** — extracted from CronBackupView inline modal; accepts `serverId` prop |
+| `frontend/src/views/cron-backup/CronBackupView.vue` | Refactor to use `BackupJobModal.vue` (backup modal extracted, no behaviour change) |
+| `frontend/src/components/servers/tabs/BackupTab.vue` | **New** — Backup tab for server detail; wraps JobRow + JobDetailSlideOver + BackupJobModal |
+| `frontend/src/views/servers/ServerDetail.vue` | Add `'Backup'` to TABS, import and register `BackupTab` |
