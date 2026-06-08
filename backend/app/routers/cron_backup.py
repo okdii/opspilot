@@ -1,10 +1,11 @@
-"""Phase 7 — Cron & Backup Job Monitoring (spec 09).
+"""Phase 9 — Unified Job Monitoring (spec §6).
 
-Public heartbeat ping endpoints (token-based, no auth) + authed CRUD for cron
-and backup jobs. Status transitions are owned by the watchdog
+Public heartbeat ping endpoints (token-based, no auth) + authed CRUD for
+monitored jobs. Status transitions are owned by the watchdog
 (app/services/cron_watchdog.py); this router owns ingest (pings) and management.
 """
 import base64
+import uuid as _uuid
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -17,31 +18,27 @@ from app.database import get_db
 from app.deps import AdminUser, CurrentUser
 from app.models.other import (
     Alert,
-    BackupJob,
-    BackupRun,
-    CronJob,
-    CronJobRun,
+    JobRun,
+    MonitoredJob,
     Settings,
 )
 from app.models.server import Server
 from app.models.user import UserOrganization
-from app.schemas.cron_backup import (
-    BackupJobCreate,
-    BackupJobOut,
-    BackupJobUpdate,
-    BackupRunOut,
-    CronJobCreate,
-    CronJobOut,
-    CronJobUpdate,
-    CronRunOut,
+from app.schemas.job import (
+    JobCreate,
+    JobOut,
+    JobRunOut,
+    JobUpdate,
 )
-from app.services.alerting import OPEN_STATES, resolve_alert
+from app.services.alerting import OPEN_STATES, fire_alert, resolve_alert
 from app.services.cron_schedule import next_fire_after
 
 router = APIRouter(tags=["cron-backup"])
 
 _PAGE_SIZE = 20
 
+
+# ── time helpers ───────────────────────────────────────────────────────────
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -53,7 +50,7 @@ def _aware(dt: datetime | None) -> datetime | None:
     return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
 
 
-# ── helpers ────────────────────────────────────────────────────────────────
+# ── misc helpers ───────────────────────────────────────────────────────────
 
 def _format_bytes(n: int | None) -> str | None:
     if n is None:
@@ -126,14 +123,8 @@ def _encode_cursor(dt: datetime) -> str:
     return base64.urlsafe_b64encode(_aware(dt).isoformat().encode()).decode()
 
 
-async def _resolve_open_alerts(db: AsyncSession, *, cron_job_id=None, backup_job_id=None, types=None) -> None:
-    conds = [Alert.state.in_(OPEN_STATES)]
-    if cron_job_id is not None:
-        conds.append(Alert.cron_job_id == cron_job_id)
-    if backup_job_id is not None:
-        conds.append(Alert.backup_job_id == backup_job_id)
-    if types:
-        conds.append(Alert.type.in_(types))
+async def _resolve_job_alerts(db: AsyncSession, job_id) -> None:
+    conds = [Alert.state.in_(OPEN_STATES), Alert.job_id == job_id]
     rows = (await db.execute(select(Alert).where(*conds))).scalars().all()
     for alert in rows:
         await resolve_alert(db, alert, send_email=False, commit=False)
@@ -141,46 +132,26 @@ async def _resolve_open_alerts(db: AsyncSession, *, cron_job_id=None, backup_job
 
 # ── serialization ──────────────────────────────────────────────────────────
 
-def _cron_out(job: CronJob, server_name: str, base: str) -> CronJobOut:
+def _job_out(job: MonitoredJob, server_name: str, base: str) -> JobOut:
     last = _aware(job.last_ping_at)
     nxt = next_fire_after(job.schedule, last) if last else next_fire_after(job.schedule, _now())
-    return CronJobOut(
-        id=str(job.id),
-        server_id=str(job.server_id),
-        server_name=server_name,
-        name=job.name,
-        schedule=job.schedule,
-        grace_period_min=job.grace_period_min,
-        ping_url=_ping_url(base, job.ping_token),
-        last_ping_at=last,
-        start_ping_at=_aware(job.start_ping_at),
-        last_duration_sec=job.last_duration_sec,
-        status=job.status,
-        next_expected_at=nxt,
-    )
-
-
-def _backup_out(job: BackupJob, server_name: str, base: str) -> BackupJobOut:
-    from datetime import timedelta
-
-    last = _aware(job.last_ping_at)
-    anchor = last or _aware(job.created_at) or _now()
-    nxt = anchor + timedelta(hours=job.expected_interval_hours)
-    return BackupJobOut(
+    return JobOut(
         id=str(job.id),
         server_id=str(job.server_id),
         server_name=server_name,
         name=job.name,
         description=job.description,
-        expected_interval_hours=job.expected_interval_hours,
+        schedule=job.schedule,
+        grace_period_min=job.grace_period_min,
         ping_url=_ping_url(base, job.ping_token),
-        last_ping_at=last,
-        last_size_bytes=job.last_size_bytes,
-        last_size_formatted=_format_bytes(job.last_size_bytes),
-        last_status_text=job.last_status_text,
-        previous_size_bytes=job.previous_size_bytes,
-        last_files_count=job.last_files_count,
         status=job.status,
+        last_ping_at=last,
+        start_ping_at=_aware(job.start_ping_at),
+        last_duration_sec=job.last_duration_sec,
+        last_size_bytes=job.last_size_bytes,
+        last_size_formatted=job.last_size_formatted,
+        last_files_count=job.last_files_count,
+        last_exit_code=job.last_exit_code,
         next_expected_at=nxt,
     )
 
@@ -192,84 +163,19 @@ def _backup_out(job: BackupJob, server_name: str, base: str) -> BackupJobOut:
 @router.get("/ping/{token}")
 async def ping_get(
     token: str,
-    request: Request,
     event: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    """Cron heartbeat (GET). Also accepted for backup jobs (some tools use GET)."""
+    """Heartbeat GET ping. Supports ?event=start for start/end timing."""
     try:
         token_uuid = UUID(token)
     except ValueError:
         raise HTTPException(404, detail={"error": "unknown token"})
 
-    cron = await db.scalar(select(CronJob).where(CronJob.ping_token == token_uuid))
-    if cron is not None:
-        return await _handle_cron_ping(db, cron, event)
-
-    backup = await db.scalar(select(BackupJob).where(BackupJob.ping_token == token_uuid))
-    if backup is not None:
-        # GET on a backup token → zero-value payload (spec §9.2 note).
-        return await _handle_backup_ping(db, backup, size_bytes=0, exit_code=0, status="success", files_count=None)
-
-    raise HTTPException(404, detail={"error": "unknown token"})
-
-
-@router.post("/ping/{token}")
-async def ping_post(
-    token: str,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-):
-    """Backup heartbeat (POST form body). Falls back to cron if token is a cron job."""
-    try:
-        token_uuid = UUID(token)
-    except ValueError:
+    job = await db.scalar(select(MonitoredJob).where(MonitoredJob.ping_token == token_uuid))
+    if job is None:
         raise HTTPException(404, detail={"error": "unknown token"})
 
-    form = {}
-    try:
-        form = dict(await request.form())
-    except Exception:
-        form = {}
-
-    def _as_int(key: str, default: int) -> int:
-        val = form.get(key)
-        if val is None or val == "":
-            return default
-        try:
-            return int(val)
-        except (TypeError, ValueError):
-            return default
-
-    def _as_optional_int(key: str) -> int | None:
-        val = form.get(key)
-        if val is None or val == "":
-            return None
-        try:
-            return int(val)
-        except (TypeError, ValueError):
-            return None
-
-    backup = await db.scalar(select(BackupJob).where(BackupJob.ping_token == token_uuid))
-    if backup is not None:
-        files_count = _as_optional_int("files_count")
-        return await _handle_backup_ping(
-            db,
-            backup,
-            size_bytes=_as_int("size_bytes", 0),
-            exit_code=_as_int("exit_code", 0),
-            status=str(form.get("status") or "success"),
-            files_count=files_count,
-        )
-
-    cron = await db.scalar(select(CronJob).where(CronJob.ping_token == token_uuid))
-    if cron is not None:
-        return await _handle_cron_ping(db, cron, str(form.get("event") or "") or None)
-
-    raise HTTPException(404, detail={"error": "unknown token"})
-
-
-async def _handle_cron_ping(db: AsyncSession, job: CronJob, event: str | None):
     now = _now()
 
     if event == "start":
@@ -277,7 +183,7 @@ async def _handle_cron_ping(db: AsyncSession, job: CronJob, event: str | None):
         await db.commit()
         return {"ok": True}
 
-    # Plain ping or ?event=end → record a successful run.
+    # Plain end ping or ?event=end → record successful run.
     duration = None
     start = _aware(job.start_ping_at)
     if start is not None:
@@ -288,86 +194,140 @@ async def _handle_cron_ping(db: AsyncSession, job: CronJob, event: str | None):
     job.start_ping_at = None
     job.status = "healthy"
     db.add(
-        CronJobRun(
-            cron_job_id=job.id,
+        JobRun(
+            job_id=job.id,
             ran_at=now,
-            duration_sec=duration,
             outcome="success",
+            duration_sec=duration,
         )
     )
     await db.flush()
-    await _resolve_open_alerts(db, cron_job_id=job.id, types=["cron_missing"])
+    await _resolve_job_alerts(db, job.id)
     await db.commit()
     return {"ok": True}
 
 
-async def _handle_backup_ping(db: AsyncSession, job: BackupJob, *, size_bytes: int, exit_code: int, status: str, files_count: int | None):
-    from app.services.alerting import fire_alert
+@router.post("/ping/{token}")
+async def ping_post(
+    token: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Heartbeat POST ping. Accepts optional form fields: size_bytes, exit_code,
+    files_count, event. All optional — only fields present are applied."""
+    try:
+        token_uuid = UUID(token)
+    except ValueError:
+        raise HTTPException(404, detail={"error": "unknown token"})
+
+    job = await db.scalar(select(MonitoredJob).where(MonitoredJob.ping_token == token_uuid))
+    if job is None:
+        raise HTTPException(404, detail={"error": "unknown token"})
+
+    # Parse optional form fields — None when absent.
+    form: dict = {}
+    try:
+        form = dict(await request.form())
+    except Exception:
+        form = {}
+
+    def _as_optional_int(key: str) -> int | None:
+        val = form.get(key)
+        if val is None or val == "":
+            return None
+        try:
+            return int(val)
+        except (TypeError, ValueError):
+            return None
+
+    event: str | None = form.get("event") or None
+    size_bytes: int | None = _as_optional_int("size_bytes")
+    exit_code: int | None = _as_optional_int("exit_code")
+    files_count: int | None = _as_optional_int("files_count")
 
     now = _now()
+
+    if event == "start":
+        job.start_ping_at = now
+        await db.commit()
+        return {"ok": True}
+
+    # End ping (no event or event=end).
     prev = job.previous_size_bytes
 
-    # Determine outcome — exit_code is authoritative (spec §9.2 / §12).
+    # Determine outcome.
     outcome = "success"
     fire_failure = False
     fire_size_drop = False
 
-    if exit_code != 0:
+    if exit_code is not None and exit_code != 0:
         outcome = "failed"
         fire_failure = True
-    elif size_bytes == 0:
+    elif size_bytes is not None and size_bytes == 0:
         outcome = "failed"
-        fire_size_drop = True  # size is zero
-    elif prev is not None and size_bytes < prev * 0.80:
+        fire_size_drop = True
+    elif size_bytes is not None and prev is not None and size_bytes < prev * 0.80:
         outcome = "success"  # run completed but suspicious shrink
         fire_size_drop = True
 
+    # Compute duration from start_ping_at if available.
+    duration = None
+    start = _aware(job.start_ping_at)
+    if start is not None:
+        duration = max(0, int((now - start).total_seconds()))
+
+    # Update job fields — only touch fields when present in form.
     job.last_ping_at = now
-    job.last_size_bytes = size_bytes
+    job.start_ping_at = None
+    if size_bytes is not None:
+        job.last_size_bytes = size_bytes
+        job.last_size_formatted = _format_bytes(size_bytes)
     if files_count is not None:
         job.last_files_count = files_count
-    job.last_status_text = status
+    if exit_code is not None:
+        job.last_exit_code = exit_code
+    if outcome == "success" and size_bytes is not None:
+        job.previous_size_bytes = size_bytes  # baseline advances only on success
     job.status = "healthy"
-    if outcome == "success":
-        job.previous_size_bytes = size_bytes  # baseline only advances on success
 
     db.add(
-        BackupRun(
-            backup_job_id=job.id,
+        JobRun(
+            job_id=job.id,
             ran_at=now,
-            size_bytes=size_bytes,
-            exit_code=exit_code,
             outcome=outcome,
+            duration_sec=duration,
+            size_bytes=size_bytes,
             files_count=files_count,
+            exit_code=exit_code,
         )
     )
     await db.flush()
 
-    # A ping arrived → clear any open "missing" alert regardless of outcome.
-    await _resolve_open_alerts(db, backup_job_id=job.id, types=["backup_missing"])
+    # Resolve any open job_missing alerts — a ping arrived regardless of outcome.
+    await _resolve_job_alerts(db, job.id)
 
     if fire_failure:
         await fire_alert(
             db,
-            type="backup_failure",
+            type="job_failure",
             severity="critical",
-            message=f"Backup job '{job.name}' failed (exit code {exit_code}).",
+            message=f"Job '{job.name}' failed (exit code {exit_code}).",
             server_id=job.server_id,
-            backup_job_id=job.id,
+            job_id=job.id,
             commit=False,
         )
     if fire_size_drop:
         if size_bytes == 0:
-            msg = f"Backup job '{job.name}' produced a zero-byte backup."
+            msg = f"Job '{job.name}' produced a zero-byte backup."
         else:
-            msg = f"Backup job '{job.name}' size dropped >20% (was {prev}, now {size_bytes} bytes)."
+            msg = f"Job '{job.name}' size dropped >20% (was {prev}, now {size_bytes} bytes)."
         await fire_alert(
             db,
-            type="backup_size_drop",
+            type="job_size_drop",
             severity="warning",
             message=msg,
             server_id=job.server_id,
-            backup_job_id=job.id,
+            job_id=job.id,
             commit=False,
         )
 
@@ -376,46 +336,63 @@ async def _handle_backup_ping(db: AsyncSession, job: BackupJob, *, size_bytes: i
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# AUTHED CRUD — CRON JOBS
+# AUTHED CRUD — JOBS
 # ════════════════════════════════════════════════════════════════════════════
 
-@router.get("/api/organizations/{org_id}/cron-jobs", response_model=list[CronJobOut])
-async def list_cron_jobs(org_id: str, request: Request, user: CurrentUser, db: AsyncSession = Depends(get_db)):
+@router.get("/api/organizations/{org_id}/jobs", response_model=list[JobOut])
+async def list_jobs(
+    org_id: str,
+    request: Request,
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
     await _assert_org_access(org_id, user, db)
     base = await _base_url(request, db)
     rows = (
         await db.execute(
-            select(CronJob, Server.name)
-            .join(Server, Server.id == CronJob.server_id)
+            select(MonitoredJob, Server.name)
+            .join(Server, Server.id == MonitoredJob.server_id)
             .where(Server.org_id == org_id, Server.is_active == True)
-            .order_by(CronJob.name)
+            .order_by(Server.name, MonitoredJob.name)
         )
     ).all()
-    return [_cron_out(job, name, base) for job, name in rows]
+    return [_job_out(job, name, base) for job, name in rows]
 
 
-@router.post("/api/cron-jobs", response_model=CronJobOut, status_code=201)
-async def create_cron_job(body: CronJobCreate, request: Request, user: AdminUser, db: AsyncSession = Depends(get_db)):
+@router.post("/api/jobs", response_model=JobOut, status_code=201)
+async def create_job(
+    body: JobCreate,
+    request: Request,
+    user: AdminUser,
+    db: AsyncSession = Depends(get_db),
+):
     server = await _get_server_for_access(body.server_id, user, db)
-    job = CronJob(
+    job = MonitoredJob(
         server_id=server.id,
         name=body.name,
         schedule=body.schedule,
         grace_period_min=body.grace_period_min,
+        description=body.description,
         status="healthy",
     )
     db.add(job)
     await db.commit()
     await db.refresh(job)
     base = await _base_url(request, db)
-    return _cron_out(job, server.name, base)
+    return _job_out(job, server.name, base)
 
 
-@router.patch("/api/cron-jobs/{job_id}", response_model=CronJobOut)
-async def update_cron_job(job_id: str, body: CronJobUpdate, request: Request, user: AdminUser, db: AsyncSession = Depends(get_db)):
-    job = await db.scalar(select(CronJob).where(CronJob.id == job_id))
+@router.patch("/api/jobs/{job_id}", response_model=JobOut)
+async def update_job(
+    job_id: str,
+    body: JobUpdate,
+    request: Request,
+    user: AdminUser,
+    db: AsyncSession = Depends(get_db),
+):
+    job = await db.scalar(select(MonitoredJob).where(MonitoredJob.id == job_id))
     if not job:
-        raise HTTPException(404, detail={"error": "not_found", "message": "Cron job not found."})
+        raise HTTPException(404, detail={"error": "not_found", "message": "Job not found."})
     server = await _get_server_for_access(job.server_id, user, db)
 
     if body.name is not None:
@@ -424,166 +401,49 @@ async def update_cron_job(job_id: str, body: CronJobUpdate, request: Request, us
         job.schedule = body.schedule
     if body.grace_period_min is not None:
         job.grace_period_min = body.grace_period_min
-
-    await db.commit()
-    await db.refresh(job)
-    base = await _base_url(request, db)
-    return _cron_out(job, server.name, base)
-
-
-@router.delete("/api/cron-jobs/{job_id}", status_code=204)
-async def delete_cron_job(job_id: str, user: AdminUser, db: AsyncSession = Depends(get_db)):
-    job = await db.scalar(select(CronJob).where(CronJob.id == job_id))
-    if not job:
-        raise HTTPException(404, detail={"error": "not_found", "message": "Cron job not found."})
-    await _get_server_for_access(job.server_id, user, db)
-
-    await _resolve_open_alerts(db, cron_job_id=job.id)
-    await db.delete(job)
-    await db.commit()
-    return None
-
-
-@router.get("/api/cron-jobs/{job_id}/runs")
-async def list_cron_runs(
-    job_id: str,
-    user: CurrentUser,
-    cursor: str | None = Query(default=None),
-    db: AsyncSession = Depends(get_db),
-):
-    job = await db.scalar(select(CronJob).where(CronJob.id == job_id))
-    if not job:
-        raise HTTPException(404, detail={"error": "not_found", "message": "Cron job not found."})
-    await _get_server_for_access(job.server_id, user, db)
-
-    before = _decode_cursor(cursor)
-    q = select(CronJobRun).where(CronJobRun.cron_job_id == job_id)
-    if before is not None:
-        q = q.where(CronJobRun.ran_at < before)
-    q = q.order_by(CronJobRun.ran_at.desc()).limit(_PAGE_SIZE + 1)
-    rows = (await db.execute(q)).scalars().all()
-
-    next_cursor = None
-    if len(rows) > _PAGE_SIZE:
-        rows = rows[:_PAGE_SIZE]
-        next_cursor = _encode_cursor(rows[-1].ran_at)
-
-    return {
-        "runs": [
-            CronRunOut(
-                id=str(r.id),
-                ran_at=_aware(r.ran_at),
-                duration_sec=r.duration_sec,
-                outcome=r.outcome,
-            )
-            for r in rows
-        ],
-        "next_cursor": next_cursor,
-    }
-
-
-@router.post("/api/cron-jobs/{job_id}/regenerate-token", response_model=CronJobOut)
-async def regenerate_cron_token(job_id: str, request: Request, user: AdminUser, db: AsyncSession = Depends(get_db)):
-    import uuid as _uuid
-
-    job = await db.scalar(select(CronJob).where(CronJob.id == job_id))
-    if not job:
-        raise HTTPException(404, detail={"error": "not_found", "message": "Cron job not found."})
-    server = await _get_server_for_access(job.server_id, user, db)
-
-    job.ping_token = _uuid.uuid4()
-    await db.commit()
-    await db.refresh(job)
-    base = await _base_url(request, db)
-    return _cron_out(job, server.name, base)
-
-
-# ════════════════════════════════════════════════════════════════════════════
-# AUTHED CRUD — BACKUP JOBS
-# ════════════════════════════════════════════════════════════════════════════
-
-@router.get("/api/organizations/{org_id}/backup-jobs", response_model=list[BackupJobOut])
-async def list_backup_jobs(org_id: str, request: Request, user: CurrentUser, db: AsyncSession = Depends(get_db)):
-    await _assert_org_access(org_id, user, db)
-    base = await _base_url(request, db)
-    rows = (
-        await db.execute(
-            select(BackupJob, Server.name)
-            .join(Server, Server.id == BackupJob.server_id)
-            .where(Server.org_id == org_id, Server.is_active == True)
-            .order_by(BackupJob.name)
-        )
-    ).all()
-    return [_backup_out(job, name, base) for job, name in rows]
-
-
-@router.post("/api/backup-jobs", response_model=BackupJobOut, status_code=201)
-async def create_backup_job(body: BackupJobCreate, request: Request, user: AdminUser, db: AsyncSession = Depends(get_db)):
-    server = await _get_server_for_access(body.server_id, user, db)
-    job = BackupJob(
-        server_id=server.id,
-        name=body.name,
-        description=body.description,
-        expected_interval_hours=body.expected_interval_hours,
-        status="healthy",
-    )
-    db.add(job)
-    await db.commit()
-    await db.refresh(job)
-    base = await _base_url(request, db)
-    return _backup_out(job, server.name, base)
-
-
-@router.patch("/api/backup-jobs/{job_id}", response_model=BackupJobOut)
-async def update_backup_job(job_id: str, body: BackupJobUpdate, request: Request, user: AdminUser, db: AsyncSession = Depends(get_db)):
-    job = await db.scalar(select(BackupJob).where(BackupJob.id == job_id))
-    if not job:
-        raise HTTPException(404, detail={"error": "not_found", "message": "Backup job not found."})
-    server = await _get_server_for_access(job.server_id, user, db)
-
-    if body.name is not None:
-        job.name = body.name
     if body.description is not None:
         job.description = body.description
-    if body.expected_interval_hours is not None:
-        job.expected_interval_hours = body.expected_interval_hours
 
     await db.commit()
     await db.refresh(job)
     base = await _base_url(request, db)
-    return _backup_out(job, server.name, base)
+    return _job_out(job, server.name, base)
 
 
-@router.delete("/api/backup-jobs/{job_id}", status_code=204)
-async def delete_backup_job(job_id: str, user: AdminUser, db: AsyncSession = Depends(get_db)):
-    job = await db.scalar(select(BackupJob).where(BackupJob.id == job_id))
+@router.delete("/api/jobs/{job_id}", status_code=204)
+async def delete_job(
+    job_id: str,
+    user: AdminUser,
+    db: AsyncSession = Depends(get_db),
+):
+    job = await db.scalar(select(MonitoredJob).where(MonitoredJob.id == job_id))
     if not job:
-        raise HTTPException(404, detail={"error": "not_found", "message": "Backup job not found."})
+        raise HTTPException(404, detail={"error": "not_found", "message": "Job not found."})
     await _get_server_for_access(job.server_id, user, db)
 
-    await _resolve_open_alerts(db, backup_job_id=job.id)
+    await _resolve_job_alerts(db, job.id)
     await db.delete(job)
     await db.commit()
     return None
 
 
-@router.get("/api/backup-jobs/{job_id}/runs")
-async def list_backup_runs(
+@router.get("/api/jobs/{job_id}/runs")
+async def list_job_runs(
     job_id: str,
     user: CurrentUser,
     cursor: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    job = await db.scalar(select(BackupJob).where(BackupJob.id == job_id))
+    job = await db.scalar(select(MonitoredJob).where(MonitoredJob.id == job_id))
     if not job:
-        raise HTTPException(404, detail={"error": "not_found", "message": "Backup job not found."})
+        raise HTTPException(404, detail={"error": "not_found", "message": "Job not found."})
     await _get_server_for_access(job.server_id, user, db)
 
     before = _decode_cursor(cursor)
-    q = select(BackupRun).where(BackupRun.backup_job_id == job_id)
+    q = select(JobRun).where(JobRun.job_id == job_id)
     if before is not None:
-        q = q.where(BackupRun.ran_at < before)
-    q = q.order_by(BackupRun.ran_at.desc()).limit(_PAGE_SIZE + 1)
+        q = q.where(JobRun.ran_at < before)
+    q = q.order_by(JobRun.ran_at.desc()).limit(_PAGE_SIZE + 1)
     rows = (await db.execute(q)).scalars().all()
 
     next_cursor = None
@@ -593,14 +453,15 @@ async def list_backup_runs(
 
     return {
         "runs": [
-            BackupRunOut(
+            JobRunOut(
                 id=str(r.id),
                 ran_at=_aware(r.ran_at),
+                outcome=r.outcome,
+                duration_sec=r.duration_sec,
                 size_bytes=r.size_bytes,
                 size_formatted=_format_bytes(r.size_bytes),
-                exit_code=r.exit_code,
-                outcome=r.outcome,
                 files_count=r.files_count,
+                exit_code=r.exit_code,
             )
             for r in rows
         ],
@@ -608,17 +469,20 @@ async def list_backup_runs(
     }
 
 
-@router.post("/api/backup-jobs/{job_id}/regenerate-token", response_model=BackupJobOut)
-async def regenerate_backup_token(job_id: str, request: Request, user: AdminUser, db: AsyncSession = Depends(get_db)):
-    import uuid as _uuid
-
-    job = await db.scalar(select(BackupJob).where(BackupJob.id == job_id))
+@router.post("/api/jobs/{job_id}/regenerate-token", response_model=JobOut)
+async def regenerate_token(
+    job_id: str,
+    request: Request,
+    user: AdminUser,
+    db: AsyncSession = Depends(get_db),
+):
+    job = await db.scalar(select(MonitoredJob).where(MonitoredJob.id == job_id))
     if not job:
-        raise HTTPException(404, detail={"error": "not_found", "message": "Backup job not found."})
+        raise HTTPException(404, detail={"error": "not_found", "message": "Job not found."})
     server = await _get_server_for_access(job.server_id, user, db)
 
     job.ping_token = _uuid.uuid4()
     await db.commit()
     await db.refresh(job)
     base = await _base_url(request, db)
-    return _backup_out(job, server.name, base)
+    return _job_out(job, server.name, base)
