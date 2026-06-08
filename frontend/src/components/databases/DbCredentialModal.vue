@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
 import { SlideOver } from '@/components/ui'
-import type { DbCredentialPayload, DbCredentialStatus } from '@/stores/databases'
+import type { DbCredentialPayload, DbCredentialStatus, DbType } from '@/stores/databases'
 
 const props = defineProps<{
   modelValue: boolean
@@ -14,17 +14,29 @@ const emit = defineEmits<{
   (e: 'save', payload: DbCredentialPayload, edit: boolean): void
 }>()
 
+const dbType = ref<DbType>('mysql')
+
 const form = reactive<DbCredentialPayload>({
   host: '127.0.0.1',
   port: 3306,
   username: 'opspilot_monitor',
   password: '',
   is_replica: false,
+  db_type: 'mysql',
 })
 const saving = ref(false)
 const errors = reactive<Record<string, string>>({})
 
 const isEdit = ref(false)
+
+// Update port/username defaults when db_type changes (create mode only).
+watch(dbType, (t) => {
+  if (props.existing) return
+  form.port = t === 'postgres' ? 5432 : 3306
+  if (!form.username || form.username === 'opspilot_monitor' || form.username === 'opspilot') {
+    form.username = t === 'postgres' ? 'opspilot' : 'opspilot_monitor'
+  }
+})
 
 // Re-seed form whenever the modal opens.
 watch(
@@ -35,9 +47,10 @@ watch(
     Object.keys(errors).forEach((k) => delete errors[k])
     const e = props.existing
     isEdit.value = !!e?.has_credentials
+    dbType.value = e?.db_type ?? 'mysql'
     form.host = e?.host ?? '127.0.0.1'
-    form.port = e?.port ?? 3306
-    form.username = e?.username ?? 'opspilot_monitor'
+    form.port = e?.port ?? (dbType.value === 'postgres' ? 5432 : 3306)
+    form.username = e?.username ?? (dbType.value === 'postgres' ? 'opspilot' : 'opspilot_monitor')
     form.password = ''
     form.is_replica = e?.is_replica ?? false
   },
@@ -64,6 +77,7 @@ function submit() {
     port: Number(form.port),
     username: form.username.trim(),
     is_replica: form.is_replica,
+    db_type: dbType.value,
   }
   // On edit, omit blank password to preserve existing encrypted value.
   if (form.password) payload.password = form.password
@@ -90,6 +104,28 @@ const showPassword = ref(false)
     @update:model-value="emit('update:modelValue', $event)"
   >
     <form class="dbc-form" @submit.prevent="submit">
+      <!-- DB type selector -->
+      <div class="field">
+        <label class="label lbl">Database Type</label>
+        <div class="type-pills">
+          <button
+            type="button"
+            class="type-pill"
+            :class="{ active: dbType === 'mysql' }"
+            :disabled="!!existing"
+            @click="dbType = 'mysql'"
+          >MySQL / MariaDB</button>
+          <button
+            type="button"
+            class="type-pill"
+            :class="{ active: dbType === 'postgres' }"
+            :disabled="!!existing"
+            @click="dbType = 'postgres'"
+          >PostgreSQL</button>
+        </div>
+        <p v-if="existing" class="field-hint">Database type cannot be changed after setup.</p>
+      </div>
+
       <div class="row two">
         <label class="field">
           <span class="lbl">Host <i class="req">*</i></span>
@@ -192,4 +228,14 @@ const showPassword = ref(false)
 .btn.primary { background: var(--accent); color: #fff; }
 .btn.primary:hover:not(:disabled) { opacity: 0.92; }
 .btn.primary:disabled { opacity: 0.5; cursor: default; }
+.type-pills { display: flex; gap: 8px; }
+.type-pill {
+  flex: 1; padding: 8px 16px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface-2);
+  color: var(--muted); font-size: 13px; font-weight: 500; cursor: pointer;
+  transition: all 0.15s;
+}
+.type-pill.active { background: rgba(99,102,241,0.15); border-color: var(--accent); color: var(--accent-2); }
+.type-pill:disabled { opacity: 0.6; cursor: not-allowed; }
+.field-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
 </style>
