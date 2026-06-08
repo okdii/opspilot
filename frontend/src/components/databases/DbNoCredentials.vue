@@ -1,25 +1,28 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useNotify } from '@/composables/useNotify'
 
 const props = defineProps<{
   serverName: string
   canEdit: boolean
+  dbType?: 'mysql' | 'postgres'
 }>()
 const emit = defineEmits<{ (e: 'setup'): void }>()
 
 const notify = useNotify()
 
-const SQL = `CREATE USER 'opspilot_monitor'@'%'
-  IDENTIFIED BY '<password>';
-GRANT PROCESS, REPLICATION CLIENT,
-  SELECT ON *.* TO 'opspilot_monitor'@'%';
-FLUSH PRIVILEGES;`
+const setupSql = computed(() =>
+  props.dbType === 'postgres'
+    ? `CREATE USER opspilot WITH PASSWORD '<password>';\nGRANT pg_monitor TO opspilot;`
+    : `CREATE USER 'opspilot_monitor'@'%' IDENTIFIED BY '<password>';\nGRANT PROCESS, REPLICATION CLIENT,\n  SELECT ON *.* TO 'opspilot_monitor'@'%';\nFLUSH PRIVILEGES;`
+)
+
+const dbLabel = computed(() => props.dbType === 'postgres' ? 'PostgreSQL' : 'MariaDB')
 
 const copied = ref(false)
 async function copySql() {
   try {
-    await navigator.clipboard.writeText(SQL)
+    await navigator.clipboard.writeText(setupSql.value)
     copied.value = true
     notify.success('SQL copied to clipboard')
     setTimeout(() => (copied.value = false), 2000)
@@ -39,16 +42,16 @@ async function copySql() {
       </svg>
     </div>
 
-    <h2 class="nc-title">MariaDB monitoring is not configured for {{ serverName }}</h2>
+    <h2 class="nc-title">{{ dbLabel }} monitoring is not configured for {{ serverName }}</h2>
     <p class="nc-msg">
-      To enable deep database metrics, create a read-only MariaDB monitoring user on this
+      To enable deep database metrics, create a read-only {{ dbLabel }} monitoring user on this
       server, then enter the credentials in OpsPilot.
     </p>
 
     <div class="nc-step">
       <span class="step-label">Step 1 — Run on {{ serverName }}</span>
       <div class="sql-card">
-        <pre class="sql"><code>{{ SQL }}</code></pre>
+        <pre class="sql"><code>{{ setupSql }}</code></pre>
         <button class="copy-btn" type="button" @click="copySql">
           {{ copied ? 'Copied' : 'Copy SQL' }}
         </button>
