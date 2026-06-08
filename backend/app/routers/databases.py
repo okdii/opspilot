@@ -70,6 +70,17 @@ _METRIC_MAP: dict[str, tuple[str, bool]] = {
     "aborted_connections": ("mysql.aborted_connects", True),
 }
 
+_PG_METRIC_MAP: dict[str, tuple[str, bool]] = {
+    "connections_active":   ("postgresql.numbackends",       False),
+    "transactions_per_sec": ("postgresql.xact_commit",       True),
+    "cache_hit_rate":       ("postgresql.blks_hit_rate",     False),
+    "deadlocks":            ("postgresql.deadlocks",         True),
+    "tuple_ops_per_sec":    ("postgresql.tup_inserted",      True),
+    "temp_files_per_min":   ("postgresql.temp_files",        True),
+    "checkpoints_per_min":  ("postgresql.checkpoints_timed", True),
+    "replication_lag_sec":  ("postgresql.replication_delay", False),
+}
+
 # Stored metric name carrying the connection ceiling, for the connections chart.
 _MAX_CONNECTIONS_METRIC = "mysql.max_connections"
 
@@ -85,6 +96,7 @@ class DBCredentialIn(BaseModel):
     username: str = Field(default="opspilot_monitor", min_length=1, max_length=80)
     password: str = Field(min_length=1, max_length=255)
     is_replica: bool = False
+    db_type: str = Field(default="mysql", pattern="^(mysql|postgres)$")
 
 
 class DBCredentialPatch(BaseModel):
@@ -94,6 +106,7 @@ class DBCredentialPatch(BaseModel):
     # Omit/blank to preserve existing encrypted password (spec §4.3 / §12.2).
     password: str | None = Field(default=None, max_length=255)
     is_replica: bool | None = None
+    db_type: str | None = Field(default=None, pattern="^(mysql|postgres)$")
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -176,6 +189,7 @@ async def list_db_credentials(org_id: str, user: CurrentUser, db: AsyncSession =
                     "server_id": str(s.id),
                     "server_name": s.name,
                     "has_credentials": False,
+                    "db_type": "mysql",
                 }
             )
             continue
@@ -189,6 +203,7 @@ async def list_db_credentials(org_id: str, user: CurrentUser, db: AsyncSession =
                 "port": cred.port,
                 "username": cred.username,
                 "is_replica": cred.is_replica,
+                "db_type": cred.db_type,
                 "last_check_ok": last_ok,
                 "last_checked": last_checked.isoformat() if last_checked else None,
             }
@@ -222,6 +237,7 @@ async def create_db_credentials(
         username=body.username,
         password_encrypted=encrypt(body.password),
         is_replica=body.is_replica,
+        db_type=body.db_type,
     )
     db.add(cred)
     await db.commit()
@@ -271,6 +287,9 @@ async def update_db_credentials(
         config_changed = True
     if body.is_replica is not None and body.is_replica != cred.is_replica:
         cred.is_replica = body.is_replica
+        config_changed = True
+    if body.db_type is not None and body.db_type != cred.db_type:
+        cred.db_type = body.db_type
         config_changed = True
     if body.password:  # non-empty → rotate password
         cred.password_encrypted = encrypt(body.password)
@@ -328,6 +347,9 @@ async def get_db_metrics_latest(
     Returns null-valued fields gracefully when no DB metrics are flowing yet."""
     await _assert_server_access(server_id, user, db)
 
+    cred = await _get_credential(server_id, db)
+    is_pg = cred and cred.db_type == "postgres"
+
     # Latest single sample per metric within a short lookback (10 min).
     rows = (
         await db.execute(
@@ -336,7 +358,7 @@ async def get_db_metrics_latest(
                 SELECT DISTINCT ON (metric_name) metric_name, value, time
                 FROM server_metrics
                 WHERE server_id = :sid
-                  AND (metric_name LIKE 'mysql.%' OR metric_name LIKE 'mariadb.%')
+                  AND (metric_name LIKE 'mysql.%' OR metric_name LIKE 'mariadb.%' OR metric_name LIKE 'postgresql.%')
                   AND time >= now() - INTERVAL '10 minutes'
                 ORDER BY metric_name, time DESC
                 """
@@ -351,6 +373,21 @@ async def get_db_metrics_latest(
         v = latest.get(stored)
         return v if v is not None else None
 
+    if is_pg:
+        return {
+            "connections_active":   _val("postgresql.numbackends"),
+            "transactions_per_sec": await _rate_latest(db, server_id, "postgresql.xact_commit", per="sec"),
+            "cache_hit_rate":       _val("postgresql.blks_hit_rate"),
+            "deadlocks":            await _rate_latest(db, server_id, "postgresql.deadlocks", per="sec"),
+            "tuple_ops_per_sec":    await _pg_tuple_ops_rate(db, server_id),
+            "temp_files_per_min":   await _rate_latest(db, server_id, "postgresql.temp_files", per="min"),
+            "checkpoints_per_min":  await _rate_latest(db, server_id, "postgresql.checkpoints_timed", per="min"),
+            "replication_lag_sec":  _val("postgresql.replication_delay") if (cred and cred.is_replica) else None,
+            "replication_running":  None,
+            "mariadb_version":      None,
+            "last_collected_at":    last_t.isoformat() if last_t else None,
+        }
+
     # Rate-based fields (per second / per minute) are derived from the last two
     # raw counter samples.
     qps = await _rate_latest(db, server_id, "mysql.queries", per="sec")
@@ -359,7 +396,6 @@ async def get_db_metrics_latest(
     # mariadb version arrives as a string field; we don't store strings in
     # server_metrics (numeric only), so version is surfaced as null here and
     # read from the metric labels by the frontend if available.
-    cred = await _get_credential(server_id, db)
     is_replica = bool(cred.is_replica) if cred else False
 
     return {
@@ -416,6 +452,15 @@ async def _rate_latest(db: AsyncSession, server_id: str, stored: str, *, per: st
     return round(rate_per_sec * (60 if per == "min" else 1), 2)
 
 
+async def _pg_tuple_ops_rate(db: AsyncSession, server_id: str) -> float | None:
+    """Sum of insert+update+delete rates (per sec) for PostgreSQL tuple operations."""
+    ins = await _rate_latest(db, server_id, "postgresql.tup_inserted", per="sec")
+    upd = await _rate_latest(db, server_id, "postgresql.tup_updated", per="sec")
+    dlt = await _rate_latest(db, server_id, "postgresql.tup_deleted", per="sec")
+    parts = [v for v in [ins, upd, dlt] if v is not None]
+    return round(sum(parts), 2) if parts else None
+
+
 @router.get("/api/servers/{server_id}/db-metrics")
 async def get_db_metrics(
     server_id: str,
@@ -429,7 +474,10 @@ async def get_db_metrics(
     gracefully when no samples exist."""
     await _assert_server_access(server_id, user, db)
 
-    if metric not in _METRIC_MAP:
+    cred = await _get_credential(server_id, db)
+    metric_map = _PG_METRIC_MAP if (cred and cred.db_type == "postgres") else _METRIC_MAP
+
+    if metric not in metric_map:
         raise HTTPException(
             400, detail={"error": "invalid_metric", "message": f"Unsupported metric: {metric}"}
         )
@@ -438,7 +486,7 @@ async def get_db_metrics(
             400, detail={"error": "invalid_range", "message": f"Invalid range: {range}"}
         )
 
-    stored, is_rate = _METRIC_MAP[metric]
+    stored, is_rate = metric_map[metric]
     source, valcol, timecol, resolution = RANGE_SOURCE[range]
     interval = RANGE_INTERVAL[range]
 
@@ -446,7 +494,7 @@ async def get_db_metrics(
 
     result: dict = {"metric": metric, "range": range, "resolution": resolution, "data": pts}
 
-    if metric == "connections_active":
+    if metric == "connections_active" and not (cred and cred.db_type == "postgres"):
         max_pts = await _series(
             db, server_id, _MAX_CONNECTIONS_METRIC, source, valcol, timecol, interval, False
         )
