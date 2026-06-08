@@ -492,7 +492,7 @@ async def _rate_latest(
     return round(rate_per_sec * (60 if per == "min" else 1), 2)
 
 
-async def _pg_tuple_ops_rate(db: AsyncSession, server_id: str, db_label: str = "") -> float | None:
+async def _pg_tuple_ops_rate(db: AsyncSession, server_id: str, *, db_label: str = "") -> float | None:
     """Sum of insert+update+delete rates (per sec) for PostgreSQL tuple operations."""
     ins = await _rate_latest(db, server_id, "postgresql.tup_inserted", per="sec", db_label=db_label)
     upd = await _rate_latest(db, server_id, "postgresql.tup_updated", per="sec", db_label=db_label)
