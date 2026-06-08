@@ -11,20 +11,22 @@ import type { MetricRange } from '@/types'
 
 export type DbType = 'mysql' | 'postgres'
 
-/** One row from GET /api/organizations/:org_id/db-credentials.
- *  Fields beyond has_credentials are only present when has_credentials = true. */
-export interface DbCredentialStatus {
-  server_id: string
-  server_name: string
-  has_credentials: boolean
-  host?: string
-  port?: number
+export interface DbInstanceStatus {
+  credential_id: string
+  label: string
+  host: string
+  port: number
   username?: string
   is_replica?: boolean
   db_type: DbType
-  /** null = no successful check yet (e.g. re-deploy just queued). */
-  last_check_ok?: boolean | null
-  last_checked?: string | null
+  last_check_ok: boolean | null
+  last_checked: string | null
+}
+
+export interface DbServerStatus {
+  server_id: string
+  server_name: string
+  instances: DbInstanceStatus[]
 }
 
 /** Latest DB metric snapshot (GET …/db-metrics/latest). All numbers are null
@@ -74,6 +76,7 @@ export interface DbCredentialPayload {
   password?: string
   is_replica: boolean
   db_type: DbType
+  label?: string
 }
 
 export type DbMetricName =
@@ -118,21 +121,18 @@ const EMPTY_LATEST: DbMetricsLatest = {
 }
 
 export const useDatabaseStore = defineStore('databases', () => {
-  // server_id → credential status (null while not yet loaded for that server)
-  const credentials = ref<DbCredentialStatus[]>([])
-  // server_id → latest snapshot
+  const servers = ref<DbServerStatus[]>([])
   const latest = ref<Record<string, DbMetricsLatest>>({})
   const loadingCredentials = ref(false)
   const loadingLatest = ref(false)
   const error = ref<string | null>(null)
 
-  // --- Getters (function-style for arg passing) ----------------------------
-  function statusFor(serverId: string): DbCredentialStatus | null {
-    return credentials.value.find((c) => c.server_id === serverId) ?? null
+  function serverFor(serverId: string): DbServerStatus | null {
+    return servers.value.find((s) => s.server_id === serverId) ?? null
   }
 
-  function hasCredentials(serverId: string): boolean {
-    return statusFor(serverId)?.has_credentials ?? false
+  function instanceFor(serverId: string, credentialId: string): DbInstanceStatus | null {
+    return serverFor(serverId)?.instances.find((i) => i.credential_id === credentialId) ?? null
   }
 
   function latestFor(serverId: string): DbMetricsLatest {
@@ -145,19 +145,16 @@ export const useDatabaseStore = defineStore('databases', () => {
     return Math.round((l.connections_active / l.connections_max) * 100)
   }
 
-  function isReplicationEnabled(serverId: string): boolean {
-    return statusFor(serverId)?.is_replica ?? false
-  }
+  // --- Actions ---------------------------------------------------------------
 
-  // --- Actions -------------------------------------------------------------
   async function fetchCredentials(orgId: string): Promise<void> {
     loadingCredentials.value = true
     error.value = null
     try {
-      const { data } = await api.get<DbCredentialStatus[]>(
+      const { data } = await api.get<DbServerStatus[]>(
         `/api/organizations/${orgId}/db-credentials`,
       )
-      credentials.value = data
+      servers.value = data
     } catch {
       error.value = 'Could not load database credential status.'
     } finally {
@@ -168,40 +165,31 @@ export const useDatabaseStore = defineStore('databases', () => {
   async function saveCredentials(
     serverId: string,
     payload: DbCredentialPayload,
-    edit: boolean,
+    credentialId: string | null,
   ): Promise<void> {
-    const url = `/api/servers/${serverId}/db-credentials`
-    if (edit) await api.patch(url, payload)
-    else await api.post(url, payload)
-    // Reflect optimistically; the badge will show "deploying" until re-check.
-    const existing = statusFor(serverId)
-    if (existing) {
-      existing.has_credentials = true
-      existing.host = payload.host
-      existing.port = payload.port
-      existing.username = payload.username
-      existing.is_replica = payload.is_replica
-      existing.last_check_ok = null
-      existing.last_checked = null
+    const base = `/api/servers/${serverId}/db-credentials`
+    if (credentialId) {
+      await api.patch(`${base}/${credentialId}`, payload)
+    } else {
+      await api.post(base, payload)
     }
   }
 
-  async function deleteCredentials(serverId: string): Promise<void> {
-    await api.delete(`/api/servers/${serverId}/db-credentials`)
-    const existing = statusFor(serverId)
-    if (existing) {
-      existing.has_credentials = false
-      existing.last_check_ok = undefined
-      existing.last_checked = undefined
+  async function deleteCredentials(serverId: string, credentialId: string): Promise<void> {
+    await api.delete(`/api/servers/${serverId}/db-credentials/${credentialId}`)
+    const server = serverFor(serverId)
+    if (server) {
+      server.instances = server.instances.filter((i) => i.credential_id !== credentialId)
     }
-    delete latest.value[serverId]
+    delete latest.value[`${serverId}:${credentialId}`]
   }
 
-  async function fetchLatest(serverId: string): Promise<void> {
+  async function fetchLatest(serverId: string, credentialId: string): Promise<void> {
     loadingLatest.value = true
     try {
       const { data } = await api.get<DbMetricsLatest>(
         `/api/servers/${serverId}/db-metrics/latest`,
+        { params: { credential_id: credentialId } },
       )
       latest.value = { ...latest.value, [serverId]: data }
     } catch {
@@ -215,16 +203,24 @@ export const useDatabaseStore = defineStore('databases', () => {
     serverId: string,
     metric: DbMetricName,
     range: MetricRange,
+    credentialId: string,
   ): Promise<DbSeriesResponse> {
     const { data } = await api.get<DbSeriesResponse>(
       `/api/servers/${serverId}/db-metrics`,
-      { params: { metric, range } },
+      { params: { metric, range, credential_id: credentialId } },
     )
     return data
   }
 
+  async function fetchPassword(serverId: string, credentialId: string): Promise<string> {
+    const { data } = await api.get<{ password: string }>(
+      `/api/servers/${serverId}/db-credentials/${credentialId}/password`,
+    )
+    return data.password
+  }
+
   function reset(): void {
-    credentials.value = []
+    servers.value = []
     latest.value = {}
     loadingCredentials.value = false
     loadingLatest.value = false
@@ -232,21 +228,23 @@ export const useDatabaseStore = defineStore('databases', () => {
   }
 
   return {
-    credentials,
+    servers,
+    // legacy alias so DatabasesView can use store.credentials until fully migrated
+    credentials: servers,
     latest,
     loadingCredentials,
     loadingLatest,
     error,
-    statusFor,
-    hasCredentials,
+    serverFor,
+    instanceFor,
     latestFor,
     connectionPct,
-    isReplicationEnabled,
     fetchCredentials,
     saveCredentials,
     deleteCredentials,
     fetchLatest,
     fetchSeries,
+    fetchPassword,
     reset,
   }
 })
