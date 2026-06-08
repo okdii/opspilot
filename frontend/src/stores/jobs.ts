@@ -33,6 +33,24 @@ export interface JobRun {
   size_formatted: string | null
   files_count: number | null
   exit_code: number | null
+  label: string | null
+  started_at: string | null
+}
+
+export interface TodayRun {
+  id: string
+  ran_at: string
+  started_at: string | null
+  outcome: string
+  duration_sec: number | null
+  size_bytes: number | null
+  size_formatted: string | null
+  files_count: number | null
+  exit_code: number | null
+  label: string | null
+  job_id: string
+  job_name: string
+  server_name: string
 }
 
 export interface JobPayload {
@@ -64,6 +82,7 @@ export const useJobsStore = defineStore('jobs', () => {
   const isLoadingList = ref(false)
   const isLoadingDetail = ref(false)
   const error = ref<string | null>(null)
+  const todayRuns = ref<TodayRun[]>([])
 
   // ── Getters ──────────────────────────────────────────────────────────────
   const sortedJobs = computed(() => [...jobs.value].sort(bySeverityThenName))
@@ -85,6 +104,15 @@ export const useJobsStore = defineStore('jobs', () => {
       error.value = 'Could not load jobs.'
     } finally {
       isLoadingList.value = false
+    }
+  }
+
+  async function fetchTodayRuns(orgId: string): Promise<void> {
+    try {
+      const { data } = await api.get<TodayRun[]>(`/api/organizations/${orgId}/runs/today`)
+      todayRuns.value = data
+    } catch {
+      todayRuns.value = []
     }
   }
 
@@ -127,6 +155,7 @@ export const useJobsStore = defineStore('jobs', () => {
 
   function reset(): void {
     jobs.value = []
+    todayRuns.value = []
     error.value = null
   }
 
@@ -135,10 +164,12 @@ export const useJobsStore = defineStore('jobs', () => {
     isLoadingList,
     isLoadingDetail,
     error,
+    todayRuns,
     sortedJobs,
     jobsByServer,
     missingCount,
     fetchJobs,
+    fetchTodayRuns,
     createJob,
     updateJob,
     deleteJob,

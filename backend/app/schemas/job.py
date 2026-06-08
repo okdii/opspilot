@@ -126,3 +126,11 @@ class JobRunOut(BaseModel):
     size_formatted: str | None
     files_count: int | None
     exit_code: int | None
+    label: str | None = None
+    started_at: datetime | None = None
+
+
+class TodayRunOut(JobRunOut):
+    job_id: str
+    job_name: str
+    server_name: str

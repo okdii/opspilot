@@ -29,6 +29,7 @@ from app.schemas.job import (
     JobOut,
     JobRunOut,
     JobUpdate,
+    TodayRunOut,
 )
 from app.services.alerting import OPEN_STATES, fire_alert, resolve_alert
 from app.services.cron_schedule import next_fire_after
@@ -189,6 +190,7 @@ async def ping_get(
     if start is not None:
         duration = max(0, int((now - start).total_seconds()))
 
+    started_at_value = _aware(job.start_ping_at)
     job.last_ping_at = now
     job.last_duration_sec = duration
     job.start_ping_at = None
@@ -199,6 +201,7 @@ async def ping_get(
             ran_at=now,
             outcome="success",
             duration_sec=duration,
+            started_at=started_at_value,
         )
     )
     await db.flush()
@@ -244,6 +247,7 @@ async def ping_post(
     size_bytes: int | None = _as_optional_int("size_bytes")
     exit_code: int | None = _as_optional_int("exit_code")
     files_count: int | None = _as_optional_int("files_count")
+    label: str | None = form.get("label") or None
 
     now = _now()
 
@@ -277,6 +281,7 @@ async def ping_post(
         duration = max(0, int((now - start).total_seconds()))
 
     # Update job fields — only touch fields when present in form.
+    started_at_value = _aware(job.start_ping_at)
     job.last_ping_at = now
     job.last_duration_sec = duration
     job.start_ping_at = None
@@ -300,6 +305,8 @@ async def ping_post(
             size_bytes=size_bytes,
             files_count=files_count,
             exit_code=exit_code,
+            label=label,
+            started_at=started_at_value,
         )
     )
     await db.flush()
@@ -463,11 +470,57 @@ async def list_job_runs(
                 size_formatted=_format_bytes(r.size_bytes),
                 files_count=r.files_count,
                 exit_code=r.exit_code,
+                label=r.label,
+                started_at=_aware(r.started_at),
             )
             for r in rows
         ],
         "next_cursor": next_cursor,
     }
+
+
+@router.get("/api/organizations/{org_id}/runs/today")
+async def list_today_runs(
+    org_id: str,
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return all job runs recorded today (UTC) for the given organisation."""
+    await _assert_org_access(org_id, user, db)
+    today_utc = datetime.now(timezone.utc).date()
+    today_start = datetime(today_utc.year, today_utc.month, today_utc.day, tzinfo=timezone.utc)
+    now = _now()
+    rows = (
+        await db.execute(
+            select(JobRun, MonitoredJob.name.label("job_name"), Server.name.label("server_name"))
+            .join(MonitoredJob, MonitoredJob.id == JobRun.job_id)
+            .join(Server, Server.id == MonitoredJob.server_id)
+            .where(
+                Server.org_id == org_id,
+                JobRun.ran_at >= today_start,
+                JobRun.ran_at <= now,
+            )
+            .order_by(JobRun.ran_at.desc())
+        )
+    ).all()
+    return [
+        TodayRunOut(
+            id=str(r.id),
+            ran_at=_aware(r.ran_at),
+            started_at=_aware(r.started_at),
+            outcome=r.outcome,
+            duration_sec=r.duration_sec,
+            size_bytes=r.size_bytes,
+            size_formatted=_format_bytes(r.size_bytes),
+            files_count=r.files_count,
+            exit_code=r.exit_code,
+            label=r.label,
+            job_id=str(r.job_id),
+            job_name=job_name,
+            server_name=server_name,
+        )
+        for r, job_name, server_name in rows
+    ]
 
 
 @router.post("/api/jobs/{job_id}/regenerate-token", response_model=JobOut)

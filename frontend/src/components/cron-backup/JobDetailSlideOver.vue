@@ -176,8 +176,10 @@ const rcloneSnippet = computed(() => {
     "FILES_COUNT=$(echo \"$JSON\" | grep -o '\"count\":[0-9]*' | grep -o '[0-9]*$')",
     '',
     '# Ping OpsPilot — exit_code != 0 fires a backup_failure alert + email',
+    'BACKUP_FILE="${REMOTE}"          # ← set to output archive path if writing a file',
+    '',
     `curl -s -X POST "${url}" \\`,
-    '  -d "status=success&size_bytes=${SIZE_BYTES:-0}&exit_code=${EXIT_CODE}&files_count=${FILES_COUNT:-0}" \\',
+    '  -d "status=success&size_bytes=${SIZE_BYTES:-0}&exit_code=${EXIT_CODE}&files_count=${FILES_COUNT:-0}&label=$(basename ${BACKUP_FILE})" \\',
     '  > /dev/null',
     '',
     'exit $EXIT_CODE',
@@ -193,8 +195,10 @@ const curlOnlySnippet = computed(() => {
     'JSON=$(rclone size "YOUR_REMOTE:YOUR_PATH" --json 2>/dev/null)',
     "SIZE_BYTES=$(echo \"$JSON\" | grep -o '\"bytes\":[0-9]*' | grep -o '[0-9]*$')",
     "FILES_COUNT=$(echo \"$JSON\" | grep -o '\"count\":[0-9]*' | grep -o '[0-9]*$')",
+    '# Optional: pass the backup filename for display in OpsPilot',
+    'label="$(basename /path/to/your_backup.tar.gz)"',
     `curl -s -X POST "${url}" \\`,
-    '  -d "status=success&size_bytes=${SIZE_BYTES:-0}&exit_code=${EXIT_CODE}&files_count=${FILES_COUNT:-0}" \\',
+    '  -d "exit_code=$EXIT_CODE&size_bytes=${SIZE_BYTES:-0}&files_count=${FILES_COUNT:-0}&label=$label" \\',
     '  > /dev/null',
   ].join('\n')
 })
@@ -223,6 +227,11 @@ function fmtDuration(d: number | null | undefined): string {
   const m = Math.floor(d / 60)
   const s = d % 60
   return s ? `${m}m ${s}s` : `${m}m`
+}
+
+function fmtTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 }
 </script>
 
@@ -307,8 +316,10 @@ function fmtDuration(d: number | null | undefined): string {
         <table v-if="runs.length" class="runs">
           <thead>
             <tr>
-              <th>Time</th>
-              <th>Outcome</th>
+              <th></th>
+              <th>File</th>
+              <th>Started</th>
+              <th>Ended</th>
               <th>Duration</th>
               <th>Size</th>
               <th>Files</th>
@@ -317,11 +328,14 @@ function fmtDuration(d: number | null | undefined): string {
           </thead>
           <tbody>
             <tr v-for="r in runs" :key="r.id">
-              <td class="mono">{{ fmtDateTime(r.ran_at) }}</td>
-              <td>
-                <StatusBadge kind="alert" :status="r.outcome === 'success' ? 'resolved' : 'firing'" />
-                <span class="outcome-text">{{ r.outcome }}</span>
+              <td class="icon-col">
+                <span :class="r.outcome === 'success' ? 'run-ok' : 'run-fail'">
+                  {{ r.outcome === 'success' ? '✓' : '✗' }}
+                </span>
               </td>
+              <td class="mono run-label">{{ r.label ?? '—' }}</td>
+              <td class="mono">{{ fmtTime(r.started_at) }}</td>
+              <td class="mono">{{ fmtTime(r.ran_at) }}</td>
               <td>{{ fmtDuration(r.duration_sec) }}</td>
               <td>{{ r.size_formatted ?? '—' }}</td>
               <td class="num">{{ r.files_count != null ? r.files_count.toLocaleString() : '—' }}</td>
@@ -386,6 +400,10 @@ function fmtDuration(d: number | null | undefined): string {
 .mono { font-family: ui-monospace, monospace; font-variant-numeric: tabular-nums; }
 .outcome-text { margin-left: 8px; color: var(--muted); text-transform: capitalize; }
 .load-more { margin-top: 12px; }
+.icon-col { width: 24px; padding-right: 4px; }
+.run-ok { color: var(--green, #4ade80); font-weight: 700; font-size: 13px; }
+.run-fail { color: #f87171; font-weight: 700; font-size: 13px; }
+.run-label { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 
 .btn { padding: 8px 16px; border-radius: 8px; font-size: 12px; cursor: pointer; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); }
 .btn.sm { padding: 6px 12px; font-size: 11px; }

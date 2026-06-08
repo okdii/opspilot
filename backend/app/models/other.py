@@ -238,6 +238,8 @@ class JobRun(Base):
     size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     files_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     job: Mapped["MonitoredJob"] = relationship(back_populates="runs")
 
