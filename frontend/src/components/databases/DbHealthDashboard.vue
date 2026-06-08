@@ -115,7 +115,7 @@ async function reload() {
 onMounted(reload)
 watch(() => props.serverId, reload)
 watch(range, loadSeries)
-watch(() => props.credentialId, reload)
+// credentialId changes are handled by :key="hd-${credentialId}" in DatabasesView (full remount)
 
 // --- Stat-card derived values ---------------------------------------------
 const connCardAccent = computed<'success' | 'warning' | 'danger'>(() => {
