@@ -76,27 +76,31 @@
   commands = [
     "sh -c \"top -bn2 -d0.3 -w512 | awk 'BEGIN{b=\\\"\\\"} /^[[:space:]]*PID/{b=\\\"\\\";next} {b=b $0 \\\"\\n\\\"} END{printf \\\"%s\\\",b}' | awk 'NF>=12 && $1 ~ /^[0-9]+$/ {name=$12; gsub(/[ ,=]/,\\\"_\\\",name); print $9\\\" \\\"$10\\\" \\\"$1\\\" \\\"name}' | sort -k1 -rn | head -10 | awk '{printf \\\"proctop,by=cpu,pid=%s,name=%s cpu_pct=%s,mem_pct=%s\\n\\\",$3,$4,$1,$2}'; top -bn2 -d0.3 -w512 | awk 'BEGIN{b=\\\"\\\"} /^[[:space:]]*PID/{b=\\\"\\\";next} {b=b $0 \\\"\\n\\\"} END{printf \\\"%s\\\",b}' | awk 'NF>=12 && $1 ~ /^[0-9]+$/ {name=$12; gsub(/[ ,=]/,\\\"_\\\",name); print $10\\\" \\\"$9\\\" \\\"$1\\\" \\\"name}' | sort -k1 -rn | head -10 | awk '{printf \\\"proctop,by=mem,pid=%s,name=%s cpu_pct=%s,mem_pct=%s\\n\\\",$3,$4,$2,$1}'\""
   ]
-{% if mysql_dsn %}
-
-# ── MySQL/MariaDB input (DBCredential present at onboarding time) ────────────
+{% for inst in db_instances %}
+{% if inst.db_type == 'mysql' %}
+# ── MySQL input: {{ inst.label }} ────────────────────────────────────────────
 [[inputs.mysql]]
-  servers = ["{{ mysql_dsn }}"]
+  servers = ["{{ inst.dsn }}"]
   perf_events_statements_digest_text_limit = 120
-  perf_events_statements_limit = 250
-  perf_events_statements_time_limit = 86400
-  table_schema_databases = []
-  gather_table_schema = false
-  gather_process_list = true
-  gather_slave_status = true
-  gather_innodb_metrics = true
-  gather_event_waits = false
-  gather_table_io_waits = false
-  gather_index_io_waits = false
-{% endif %}
-{% if pg_dsn %}
+  perf_events_statements_limit            = 250
+  perf_events_statements_time_limit       = 86400
+  table_schema_databases                  = []
+  gather_slave_status                     = true
+  gather_table_io_waits                   = false
+  gather_table_lock_waits                 = false
+  gather_index_io_waits                   = false
+  gather_event_waits                      = false
+  gather_file_events_stats                = false
+  gather_perf_events_statements           = false
+  [inputs.mysql.tags]
+    db_label = "{{ inst.label }}"
 
-# ── PostgreSQL input (DBCredential db_type=postgres present at onboarding time) ─
+{% elif inst.db_type == 'postgres' %}
+# ── PostgreSQL input: {{ inst.label }} ─────────────────────────────────────
 [[inputs.postgresql]]
-  address = "{{ pg_dsn }}"
-  ignored_databases = ["template0", "template1"]
+  address = "{{ inst.dsn }}"
+  [inputs.postgresql.tags]
+    db_label = "{{ inst.label }}"
+
 {% endif %}
+{% endfor %}

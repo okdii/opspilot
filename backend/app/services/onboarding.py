@@ -257,7 +257,7 @@ async def _step_install(db, server, ssh: SSHSession, os_info: OSInfo, package: s
     await _finish_step(db, log, t0, status="done", ssh_output=r.stdout[-2000:])
 
 
-async def _step_configure_telegraf(db, server, ssh: SSHSession, mysql_dsn: str | None, pg_dsn: str | None = None):
+async def _step_configure_telegraf(db, server, ssh: SSHSession, db_instances: list[dict]):
     log, t0 = await _start_step(db, server.id, "configure_telegraf", 6)
     tmpl = _template_env.get_template("telegraf.conf.j2")
     conf = tmpl.render(
@@ -265,8 +265,7 @@ async def _step_configure_telegraf(db, server, ssh: SSHSession, mysql_dsn: str |
         server_name=server.name,
         ingest_url=settings.opspilot_base_url.rstrip("/") if settings.opspilot_base_url else "http://opspilot-backend:8000",
         ingestion_token=str(server.ingestion_token),
-        mysql_dsn=mysql_dsn,
-        pg_dsn=pg_dsn,
+        db_instances=db_instances,
     )
     try:
         await ssh.upload(conf, "/etc/telegraf/telegraf.conf", mode=0o644, sudo=True)
@@ -447,22 +446,22 @@ async def _step_deploy_opspilot_agent(db, server, ssh: SSHSession):
 
 # ── Orchestrator ─────────────────────────────────────────────────────────────
 
-async def _build_mysql_dsn(db, server) -> str | None:
-    cred = await db.scalar(select(DBCredential).where(DBCredential.server_id == server.id).limit(1))
-    if not cred:
-        return None
+async def _build_db_instances(db, server) -> list[dict]:
+    """Return [{label, dsn, db_type}] for every DBCredential on this server."""
     from app.core.crypto import decrypt
-    password = decrypt(cred.password_encrypted)
-    return f"{cred.username}:{password}@tcp({cred.host}:{cred.port})/?tls=false"
-
-
-async def _build_pg_dsn(db, server) -> str | None:
-    cred = await db.scalar(select(DBCredential).where(DBCredential.server_id == server.id).limit(1))
-    if not cred or cred.db_type != "postgres":
-        return None
-    from app.core.crypto import decrypt
-    password = decrypt(cred.password_encrypted)
-    return f"postgres://{cred.username}:{password}@{cred.host}:{cred.port}/postgres?sslmode=disable"
+    creds = (
+        await db.execute(select(DBCredential).where(DBCredential.server_id == server.id))
+    ).scalars().all()
+    instances = []
+    for cred in creds:
+        label = cred.label or f"{cred.db_type}:{cred.port}"
+        password = decrypt(cred.password_encrypted)
+        if cred.db_type == "postgres":
+            dsn = f"postgres://{cred.username}:{password}@{cred.host}:{cred.port}/postgres?sslmode=disable"
+        else:
+            dsn = f"{cred.username}:{password}@tcp({cred.host}:{cred.port})/?tls=false"
+        instances.append({"label": label, "dsn": dsn, "db_type": cred.db_type})
+    return instances
 
 
 async def run_onboarding(server_id: str, redeploy_only: bool = False) -> None:
@@ -502,10 +501,8 @@ async def run_onboarding(server_id: str, redeploy_only: bool = False) -> None:
                     if not os_info:
                         raise SSHError("OS no longer detectable")
 
-                mysql_dsn = await _build_mysql_dsn(db, server)
-                pg_dsn = await _build_pg_dsn(db, server)
-
-                await _step_configure_telegraf(db, server, ssh, mysql_dsn, pg_dsn)
+                db_instances = await _build_db_instances(db, server)
+                await _step_configure_telegraf(db, server, ssh, db_instances)
                 await _step_configure_fluent_bit(db, server, ssh, os_info)
                 await _step_enable_mariadb_slowlog(db, server, ssh, os_info)
                 await _step_start_services(db, server, ssh)
