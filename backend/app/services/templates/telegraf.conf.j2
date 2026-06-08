@@ -93,3 +93,10 @@
   gather_table_io_waits = false
   gather_index_io_waits = false
 {% endif %}
+{% if pg_dsn %}
+
+# ── PostgreSQL input (DBCredential db_type=postgres present at onboarding time) ─
+[[inputs.postgresql]]
+  address = "{{ pg_dsn }}"
+  ignored_databases = ["template0", "template1"]
+{% endif %}
