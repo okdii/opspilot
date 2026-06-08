@@ -181,7 +181,7 @@ export const useDatabaseStore = defineStore('databases', () => {
     if (server) {
       server.instances = server.instances.filter((i) => i.credential_id !== credentialId)
     }
-    delete latest.value[`${serverId}:${credentialId}`]
+    delete latest.value[serverId]
   }
 
   async function fetchLatest(serverId: string, credentialId: string): Promise<void> {
