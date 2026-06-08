@@ -25,6 +25,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from time import perf_counter
+from urllib.parse import quote as _url_quote
 from uuid import UUID
 
 import jinja2
@@ -456,10 +457,11 @@ async def _build_db_instances(db, server) -> list[dict]:
     for cred in creds:
         label = cred.label or f"{cred.db_type}:{cred.port}"
         password = decrypt(cred.password_encrypted)
+        enc_pw = _url_quote(password, safe="")
         if cred.db_type == "postgres":
-            dsn = f"postgres://{cred.username}:{password}@{cred.host}:{cred.port}/postgres?sslmode=disable"
+            dsn = f"postgres://{cred.username}:{enc_pw}@{cred.host}:{cred.port}/postgres?sslmode=disable"
         else:
-            dsn = f"{cred.username}:{password}@tcp({cred.host}:{cred.port})/?tls=false"
+            dsn = f"{cred.username}:{enc_pw}@tcp({cred.host}:{cred.port})/?tls=false"
         instances.append({"label": label, "dsn": dsn, "db_type": cred.db_type})
     return instances
 

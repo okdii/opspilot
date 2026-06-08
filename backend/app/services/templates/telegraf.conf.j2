@@ -99,6 +99,7 @@
 # ── PostgreSQL input: {{ inst.label }} ─────────────────────────────────────
 [[inputs.postgresql]]
   address = "{{ inst.dsn }}"
+  ignored_databases = ["template0", "template1"]
   [inputs.postgresql.tags]
     db_label = "{{ inst.label }}"
 
