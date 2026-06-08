@@ -32,6 +32,7 @@ export interface BackupJob {
   last_size_formatted: string | null
   last_status_text: string | null
   previous_size_bytes: number | null
+  last_files_count: number | null
   status: string
   next_expected_at: string | null
 }
@@ -45,6 +46,7 @@ export interface JobRun {
   size_bytes?: number | null
   size_formatted?: string | null
   exit_code?: number | null
+  files_count?: number | null
 }
 
 interface RunsResponse {
