@@ -3,11 +3,12 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useOrgStore } from '@/stores/org'
 import { useServerStore } from '@/stores/server'
 import { useCronBackupStore } from '@/stores/cronBackup'
-import type { CronJob, BackupJob, CronJobPayload, BackupJobPayload } from '@/stores/cronBackup'
+import type { CronJob, BackupJob, CronJobPayload } from '@/stores/cronBackup'
 import { useNotify } from '@/composables/useNotify'
 import { PageHeader, EmptyState } from '@/components/ui'
 import JobRow from '@/components/cron-backup/JobRow.vue'
 import JobDetailSlideOver from '@/components/cron-backup/JobDetailSlideOver.vue'
+import BackupJobModal from '@/components/cron-backup/BackupJobModal.vue'
 import { cronToLabel } from '@/components/cron-backup/cronLabel'
 
 const orgStore = useOrgStore()
@@ -78,15 +79,12 @@ const submitting = ref(false)
 const errors = ref<Record<string, string>>({})
 
 const GRACE_OPTIONS = [5, 10, 15, 30, 60, 120, 240]
-const INTERVAL_OPTIONS = [1, 6, 12, 24, 48, 168, 720]
 
 const form = ref({
   server_id: '',
   name: '',
   schedule: '0 * * * *',
   grace_period_min: 10,
-  expected_interval_hours: 24,
-  description: '',
 })
 
 const schedulePreview = computed(() => cronToLabel(form.value.schedule))
@@ -95,10 +93,8 @@ function resetForm(): void {
   form.value = {
     server_id: serverStore.servers[0]?.id ?? '',
     name: '',
-    schedule: tab.value === 'cron' ? '0 * * * *' : '0 2 * * *',
-    grace_period_min: tab.value === 'cron' ? 10 : 30,
-    expected_interval_hours: 24,
-    description: '',
+    schedule: '0 * * * *',
+    grace_period_min: 10,
   }
   errors.value = {}
 }
@@ -122,22 +118,18 @@ function openEdit(job: CronJob | BackupJob): void {
       name: j.name,
       schedule: j.schedule,
       grace_period_min: j.grace_period_min,
-      expected_interval_hours: 24,
-      description: '',
     }
+    showModal.value = true
   } else {
-    const j = job as BackupJob
-    form.value = {
-      server_id: j.server_id,
-      name: j.name,
-      schedule: '0 2 * * *',
-      grace_period_min: 30,
-      expected_interval_hours: j.expected_interval_hours,
-      description: j.description ?? '',
-    }
+    // BackupJobModal handles its own state
+    showModal.value = true
   }
-  showModal.value = true
 }
+
+const editingBackupJob = computed<BackupJob | null>(() => {
+  if (tab.value !== 'backup' || !editingId.value) return null
+  return store.backupJobs.find((j) => j.id === editingId.value) ?? null
+})
 
 function validate(): boolean {
   errors.value = {}
@@ -152,34 +144,18 @@ async function submit(): Promise<void> {
   if (!validate()) return
   submitting.value = true
   try {
-    if (tab.value === 'cron') {
-      const payload: CronJobPayload = {
-        server_id: form.value.server_id,
-        name: form.value.name.trim(),
-        schedule: form.value.schedule.trim(),
-        grace_period_min: form.value.grace_period_min,
-      }
-      if (editMode.value && editingId.value) {
-        await store.updateCronJob(editingId.value, payload)
-        notify.success('Cron job updated')
-      } else {
-        await store.createCronJob(payload)
-        notify.success('Cron job created')
-      }
+    const payload: CronJobPayload = {
+      server_id: form.value.server_id,
+      name: form.value.name.trim(),
+      schedule: form.value.schedule.trim(),
+      grace_period_min: form.value.grace_period_min,
+    }
+    if (editMode.value && editingId.value) {
+      await store.updateCronJob(editingId.value, payload)
+      notify.success('Cron job updated')
     } else {
-      const payload: BackupJobPayload = {
-        server_id: form.value.server_id,
-        name: form.value.name.trim(),
-        expected_interval_hours: form.value.expected_interval_hours,
-        description: form.value.description.trim() || null,
-      }
-      if (editMode.value && editingId.value) {
-        await store.updateBackupJob(editingId.value, payload)
-        notify.success('Backup job updated')
-      } else {
-        await store.createBackupJob(payload)
-        notify.success('Backup job created')
-      }
+      await store.createCronJob(payload)
+      notify.success('Cron job created')
     }
     showModal.value = false
   } catch (err) {
@@ -211,8 +187,6 @@ const jobs = computed<(CronJob | BackupJob)[]>(() =>
 
 const gracePresetLabel = (m: number) =>
   m < 60 ? `${m} min` : m === 60 ? '1 hour' : `${m / 60} hours`
-const intervalLabel = (h: number) =>
-  h < 24 ? `${h} hour${h > 1 ? 's' : ''}` : h === 24 ? 'Daily (24h)' : h === 168 ? 'Weekly (168h)' : `${h} hours`
 
 const subtitle = computed(() => {
   const cron = store.cronJobs.length
@@ -289,11 +263,11 @@ const subtitle = computed(() => {
       @edit="detailJob && openEdit(detailJob)"
     />
 
-    <!-- Add / Edit modal -->
-    <div v-if="showModal" class="modal-overlay" @click.self="showModal = false">
+    <!-- Add / Edit modal — Cron -->
+    <div v-if="showModal && tab === 'cron'" class="modal-overlay" @click.self="showModal = false">
       <div class="modal">
         <div class="modal-hdr">
-          <h2>{{ editMode ? 'Edit' : 'Add' }} {{ tab === 'cron' ? 'Cron' : 'Backup' }} Job</h2>
+          <h2>{{ editMode ? 'Edit' : 'Add' }} Cron Job</h2>
           <button class="close" @click="showModal = false">✕</button>
         </div>
 
@@ -308,37 +282,17 @@ const subtitle = computed(() => {
           <input v-model="form.name" placeholder="e.g. database-backup" :class="{ invalid: errors.name }" />
           <div v-if="errors.name" class="err">{{ errors.name }}</div>
 
-          <!-- Cron-specific -->
-          <template v-if="tab === 'cron'">
-            <label>Schedule (cron expression) *</label>
-            <input v-model="form.schedule" placeholder="0 * * * *" class="mono" :class="{ invalid: errors.schedule }" />
-            <div class="preview" :class="{ bad: !schedulePreview.valid }">
-              {{ schedulePreview.valid ? `Runs: ${schedulePreview.label}` : 'Invalid cron expression' }}
-            </div>
-            <div v-if="errors.schedule" class="err">{{ errors.schedule }}</div>
+          <label>Schedule (cron expression) *</label>
+          <input v-model="form.schedule" placeholder="0 * * * *" class="mono" :class="{ invalid: errors.schedule }" />
+          <div class="preview" :class="{ bad: !schedulePreview.valid }">
+            {{ schedulePreview.valid ? `Runs: ${schedulePreview.label}` : 'Invalid cron expression' }}
+          </div>
+          <div v-if="errors.schedule" class="err">{{ errors.schedule }}</div>
 
-            <label>Grace Period</label>
-            <select v-model.number="form.grace_period_min">
-              <option v-for="g in GRACE_OPTIONS" :key="g" :value="g">{{ gracePresetLabel(g) }}</option>
-            </select>
-          </template>
-
-          <!-- Backup-specific -->
-          <template v-else>
-            <label>Expected Interval</label>
-            <select v-model.number="form.expected_interval_hours">
-              <option v-for="h in INTERVAL_OPTIONS" :key="h" :value="h">{{ intervalLabel(h) }}</option>
-            </select>
-
-            <label>Description</label>
-            <input v-model="form.description" placeholder="Optional notes" />
-
-            <div class="instructions">
-              Add to the end of your backup script:
-              <pre>curl -s -X POST {ping_url} -d "status=success&size_bytes=&lt;BYTES&gt;&exit_code=$?"</pre>
-              The real ping URL appears in the job detail view after saving.
-            </div>
-          </template>
+          <label>Grace Period</label>
+          <select v-model.number="form.grace_period_min">
+            <option v-for="g in GRACE_OPTIONS" :key="g" :value="g">{{ gracePresetLabel(g) }}</option>
+          </select>
 
           <div v-if="errors._form" class="err">{{ errors._form }}</div>
 
@@ -351,6 +305,14 @@ const subtitle = computed(() => {
         </form>
       </div>
     </div>
+
+    <!-- Add / Edit modal — Backup (delegated to BackupJobModal) -->
+    <BackupJobModal
+      v-if="showModal && tab === 'backup'"
+      :job="editingBackupJob"
+      @saved="showModal = false"
+      @close="showModal = false"
+    />
   </div>
 </template>
 
@@ -386,8 +348,6 @@ input:focus, select:focus { border-color: var(--accent); }
 input.invalid, select.invalid { border-color: var(--red); }
 .preview { font-size: 11px; color: var(--accent-2); margin-top: 6px; }
 .preview.bad { color: var(--red); }
-.instructions { margin-top: 16px; font-size: 11px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; line-height: 1.6; }
-.instructions pre { margin: 8px 0; font-family: ui-monospace, monospace; font-size: 10px; color: var(--green); white-space: pre-wrap; word-break: break-all; }
 .err { color: var(--red); font-size: 11px; margin-top: 6px; }
 .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--border); }
 </style>
