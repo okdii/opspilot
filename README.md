@@ -5,10 +5,7 @@ servers over SSH, auto-deploys metric and log agents, and surfaces live dashboar
 alerting, uptime monitoring, and a public status page — all from a single Docker
 Compose stack.
 
-> **Status:** Phase 1 (Foundation) is implemented and verified — auth, organizations,
-> server management, SSH onboarding, metric/log ingestion, and WebSocket infrastructure.
-> Phases 2–11 (dashboards, log viewer, service/SSL/DB/cron monitoring, alerting,
-> status page, settings) are in progress. See [`pm/PROGRESS.md`](pm/PROGRESS.md).
+> **Status:** All phases complete and production-ready. See [`DEPLOY.md`](DEPLOY.md) for the deployment runbook.
 
 ---
 
@@ -39,7 +36,7 @@ Compose stack.
 | Backend      | Python 3.11 · FastAPI · SQLAlchemy (async, asyncpg) · APScheduler |
 | Frontend     | Vue 3 · Vite · TypeScript · Pinia · Vuestic Admin (dark) · ApexCharts |
 | Database     | PostgreSQL 16 + TimescaleDB (hypertables + continuous aggregates) |
-| Edge         | Nginx (TLS termination, reverse proxy, rate limiting) |
+| Edge         | Caddy (TLS termination) + Nginx (reverse proxy, rate limiting, CSP) |
 | Agents       | Telegraf + Fluent Bit (auto-deployed to monitored servers) |
 | Orchestration| Docker Compose |
 

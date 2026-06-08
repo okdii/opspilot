@@ -1,0 +1,25 @@
+# OpsPilot — Caddy TLS reverse proxy configuration
+#
+# Caddy terminates TLS and proxies to the nginx container on port 8080.
+# nginx handles internal routing to backend and frontend.
+#
+# Install Caddy: https://caddyserver.com/docs/install
+# Place this file at /etc/caddy/Caddyfile
+# Reload with: sudo systemctl reload caddy
+
+yourdomain.com {
+    # Automatic TLS via Let's Encrypt (requires port 80/443 open and DNS pointing here)
+    reverse_proxy localhost:8080
+
+    # HSTS — nginx.conf intentionally omits this header (set here at the TLS layer)
+    header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+    # Structured access logs
+    log {
+        output file /var/log/caddy/opspilot.log {
+            roll_size 50mb
+            roll_keep 5
+        }
+        format json
+    }
+}
