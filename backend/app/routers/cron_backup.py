@@ -241,15 +241,18 @@ async def ping_post(
         except (TypeError, ValueError):
             return default
 
+    def _as_optional_int(key: str) -> int | None:
+        val = form.get(key)
+        if val is None or val == "":
+            return None
+        try:
+            return int(val)
+        except (TypeError, ValueError):
+            return None
+
     backup = await db.scalar(select(BackupJob).where(BackupJob.ping_token == token_uuid))
     if backup is not None:
-        fc_raw = form.get("files_count")
-        files_count: int | None = None
-        if fc_raw is not None and fc_raw != "":
-            try:
-                files_count = int(fc_raw)
-            except (TypeError, ValueError):
-                files_count = None
+        files_count = _as_optional_int("files_count")
         return await _handle_backup_ping(
             db,
             backup,
@@ -321,7 +324,8 @@ async def _handle_backup_ping(db: AsyncSession, job: BackupJob, *, size_bytes: i
 
     job.last_ping_at = now
     job.last_size_bytes = size_bytes
-    job.last_files_count = files_count
+    if files_count is not None:
+        job.last_files_count = files_count
     job.last_status_text = status
     job.status = "healthy"
     if outcome == "success":
