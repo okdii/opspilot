@@ -116,7 +116,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /opt/opspilot
+            cd /home/opspilot
             docker compose pull
             docker compose up -d
             docker image prune -f
