@@ -35,7 +35,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.crypto import encrypt
+from app.core.crypto import decrypt, encrypt
 from app.database import AsyncSessionLocal, get_db
 from app.deps import AdminUser, CurrentUser
 from app.models.organization import Organization
@@ -261,15 +261,6 @@ async def create_db_credentials(
     if not server:
         raise HTTPException(404, detail={"error": "not_found", "message": "Server not found."})
 
-    if await _get_credential(server_id, db) is not None:
-        raise HTTPException(
-            409,
-            detail={
-                "error": "already_exists",
-                "message": "DB credentials already configured — use PATCH to update.",
-            },
-        )
-
     cred = DBCredential(
         server_id=server_id,
         host=body.host,
@@ -283,22 +274,27 @@ async def create_db_credentials(
     db.add(cred)
     await db.commit()
     await db.refresh(cred)
-
-    redeploy_queued = _trigger_redeploy(server_id)
+    _trigger_redeploy(server_id)
     return {
+        "credential_id": str(cred.id),
         "server_id": str(server_id),
+        "label": _resolve_label(cred),
         "host": cred.host,
         "port": cred.port,
         "username": cred.username,
         "is_replica": cred.is_replica,
         "has_credentials": True,
-        "redeploy_queued": redeploy_queued,
+        "redeploy_queued": True,
     }
 
 
-@router.patch("/api/servers/{server_id}/db-credentials")
+@router.patch("/api/servers/{server_id}/db-credentials/{credential_id}")
 async def update_db_credentials(
-    server_id: str, body: DBCredentialPatch, user: AdminUser, db: AsyncSession = Depends(get_db)
+    server_id: str,
+    credential_id: str,
+    body: DBCredentialPatch,
+    user: AdminUser,
+    db: AsyncSession = Depends(get_db),
 ):
     server = await db.scalar(
         select(Server).where(Server.id == server_id, Server.is_active == True)  # noqa: E712
@@ -306,16 +302,8 @@ async def update_db_credentials(
     if not server:
         raise HTTPException(404, detail={"error": "not_found", "message": "Server not found."})
 
-    cred = await _get_credential(server_id, db)
-    if cred is None:
-        raise HTTPException(
-            404,
-            detail={"error": "not_found", "message": "No DB credentials configured for this server."},
-        )
+    cred = await _get_credential_by_id(credential_id, server_id, db)
 
-    # Track whether anything that affects the Telegraf config changed; a blank
-    # password with no other field change preserves creds and skips re-deploy
-    # (spec §13 edge state).
     config_changed = False
     if body.host is not None and body.host != cred.host:
         cred.host = body.host
@@ -332,7 +320,9 @@ async def update_db_credentials(
     if body.db_type is not None and body.db_type != cred.db_type:
         cred.db_type = body.db_type
         config_changed = True
-    if body.password:  # non-empty → rotate password
+    if body.label is not None:
+        cred.label = body.label or None
+    if body.password:
         cred.password_encrypted = encrypt(body.password)
         config_changed = True
 
@@ -341,7 +331,9 @@ async def update_db_credentials(
 
     redeploy_queued = _trigger_redeploy(server_id) if config_changed else False
     return {
+        "credential_id": str(cred.id),
         "server_id": str(server_id),
+        "label": _resolve_label(cred),
         "host": cred.host,
         "port": cred.port,
         "username": cred.username,
@@ -352,9 +344,9 @@ async def update_db_credentials(
 
 
 
-@router.delete("/api/servers/{server_id}/db-credentials", status_code=200)
+@router.delete("/api/servers/{server_id}/db-credentials/{credential_id}", status_code=200)
 async def delete_db_credentials(
-    server_id: str, user: AdminUser, db: AsyncSession = Depends(get_db)
+    server_id: str, credential_id: str, user: AdminUser, db: AsyncSession = Depends(get_db)
 ):
     server = await db.scalar(
         select(Server).where(Server.id == server_id, Server.is_active == True)  # noqa: E712
@@ -362,21 +354,20 @@ async def delete_db_credentials(
     if not server:
         raise HTTPException(404, detail={"error": "not_found", "message": "Server not found."})
 
-    cred = await _get_credential(server_id, db)
-    if cred is None:
-        raise HTTPException(
-            404,
-            detail={"error": "not_found", "message": "No DB credentials configured for this server."},
-        )
-
+    cred = await _get_credential_by_id(credential_id, server_id, db)
     await db.delete(cred)
     await db.commit()
+    _trigger_redeploy(server_id)
+    return {"ok": True, "redeploy_queued": True}
 
-    # Re-deploy with no DBCredential present → telegraf.conf renders without the
-    # inputs.mysql block (mysql_dsn is None) and Telegraf restarts. Existing
-    # metric history is retained.
-    redeploy_queued = _trigger_redeploy(server_id)
-    return {"ok": True, "redeploy_queued": redeploy_queued}
+
+@router.get("/api/servers/{server_id}/db-credentials/{credential_id}/password")
+async def get_db_credential_password(
+    server_id: str, credential_id: str, user: AdminUser, db: AsyncSession = Depends(get_db)
+):
+    """Return the decrypted monitoring-user password for admins who need to retrieve it."""
+    cred = await _get_credential_by_id(credential_id, server_id, db)
+    return {"password": decrypt(cred.password_encrypted)}
 
 
 # ── Metric read endpoints ────────────────────────────────────────────────────
