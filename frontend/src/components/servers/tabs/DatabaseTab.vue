@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useOrgStore } from '@/stores/org'
 import { useDatabaseStore } from '@/stores/databases'
@@ -67,6 +67,11 @@ async function load() {
   if (hasPending()) startPolling()
 }
 
+watch(
+  () => orgId.value,
+  async (id) => { if (id) await load() },
+)
+
 onMounted(load)
 onUnmounted(stopPolling)
 
@@ -93,7 +98,7 @@ const DB_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" 
           type="button"
           @click="selectInstance(inst.credential_id)"
         >
-          <span class="inst-dot" :class="instanceDotClass(inst)">{{ instanceDot(inst) }}</span>
+          <span class="inst-dot" :class="instanceDotClass(inst)" aria-hidden="true">{{ instanceDot(inst) }}</span>
           {{ inst.label }}
         </button>
       </div>
