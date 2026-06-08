@@ -41,10 +41,9 @@ _FK_BY_TYPE: dict[str, str] = {
     "service_down": "service_id",
     "ssl_expiry": "ssl_cert_id",
     "domain_expiry": "domain_id",
-    "cron_missing": "cron_job_id",
-    "backup_missing": "backup_job_id",
-    "backup_failure": "backup_job_id",
-    "backup_size_drop": "backup_job_id",
+    "job_missing": "job_id",
+    "job_failure": "job_id",
+    "job_size_drop": "job_id",
     # Security audit alert types (all keyed on service_id)
     "security_tls_deprecated": "service_id",
     "security_weak_cipher": "service_id",
@@ -169,8 +168,7 @@ async def fire_alert(
     service_id: UUID | str | None = None,
     domain_id: UUID | str | None = None,
     ssl_cert_id: UUID | str | None = None,
-    cron_job_id: UUID | str | None = None,
-    backup_job_id: UUID | str | None = None,
+    job_id: UUID | str | None = None,
     cooldown_min: int = 60,
     email_meta: dict | None = None,
     commit: bool = True,
@@ -184,8 +182,7 @@ async def fire_alert(
         "service_id": service_id,
         "domain_id": domain_id,
         "ssl_cert_id": ssl_cert_id,
-        "cron_job_id": cron_job_id,
-        "backup_job_id": backup_job_id,
+        "job_id": job_id,
     }
 
     # (1) maintenance suppression — no new alerts while the server is in a window.
@@ -219,8 +216,7 @@ async def fire_alert(
         service_id=service_id,
         domain_id=domain_id,
         ssl_cert_id=ssl_cert_id,
-        cron_job_id=cron_job_id,
-        backup_job_id=backup_job_id,
+        job_id=job_id,
         type=type,
         severity=severity,
         message=message,
