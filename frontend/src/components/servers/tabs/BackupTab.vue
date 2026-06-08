@@ -2,8 +2,8 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useOrgStore } from '@/stores/org'
-import { useCronBackupStore } from '@/stores/cronBackup'
-import type { BackupJob } from '@/stores/cronBackup'
+import { useJobsStore } from '@/stores/jobs'
+import type { MonitoredJob } from '@/stores/jobs'
 import { useNotify } from '@/composables/useNotify'
 import { EmptyState } from '@/components/ui'
 import JobRow from '@/components/cron-backup/JobRow.vue'
@@ -12,7 +12,7 @@ import JobModal from '@/components/cron-backup/JobModal.vue'
 
 const route = useRoute()
 const orgStore = useOrgStore()
-const store = useCronBackupStore()
+const store = useJobsStore()
 const notify = useNotify()
 
 const serverId = computed(() => route.params.id as string)
@@ -20,14 +20,12 @@ const canEdit = computed(() => orgStore.canEdit)
 const openMenuId = ref<string | null>(null)
 
 // Jobs for this server only, inheriting sort order from the store getter.
-const jobs = computed(() =>
-  store.sortedBackupJobs.filter((j) => j.server_id === serverId.value)
-)
+const jobs = computed(() => store.jobsByServer(serverId.value))
 
 // Load if the store is empty (e.g., arrived directly on this tab).
 onMounted(async () => {
-  if (!store.backupJobs.length && orgStore.activeOrgId) {
-    await store.fetchBackupJobs(orgStore.activeOrgId)
+  if (!store.jobs.length && orgStore.activeOrgId) {
+    await store.fetchJobs(orgStore.activeOrgId)
   }
 })
 
@@ -35,15 +33,15 @@ onMounted(async () => {
 watch(
   () => orgStore.activeOrgId,
   async (orgId) => {
-    if (orgId) await store.fetchBackupJobs(orgId)
+    if (orgId) await store.fetchJobs(orgId)
   },
 )
 
 // ── Detail slide-over ────────────────────────────────────────────────────────
 const detailOpen = ref(false)
-const detailJob = ref<BackupJob | null>(null)
+const detailJob = ref<MonitoredJob | null>(null)
 
-function openDetail(job: BackupJob): void {
+function openDetail(job: MonitoredJob): void {
   detailJob.value = job
   detailOpen.value = true
   openMenuId.value = null
@@ -51,10 +49,10 @@ function openDetail(job: BackupJob): void {
 
 // Keep slide-over in sync after edits.
 watch(
-  () => store.backupJobs,
+  () => store.jobs,
   () => {
     if (!detailJob.value) return
-    const fresh = store.backupJobs.find((j) => j.id === detailJob.value!.id)
+    const fresh = store.jobs.find((j) => j.id === detailJob.value!.id)
     if (fresh) detailJob.value = fresh
   },
   { deep: true },
@@ -62,7 +60,7 @@ watch(
 
 // ── Add / Edit modal ─────────────────────────────────────────────────────────
 const showModal = ref(false)
-const editingJob = ref<BackupJob | null>(null)
+const editingJob = ref<MonitoredJob | null>(null)
 
 function openAdd(): void {
   editingJob.value = null
@@ -70,18 +68,18 @@ function openAdd(): void {
   openMenuId.value = null
 }
 
-function openEdit(job: BackupJob): void {
+function openEdit(job: MonitoredJob): void {
   editingJob.value = job
   showModal.value = true
   openMenuId.value = null
 }
 
 // ── Delete ───────────────────────────────────────────────────────────────────
-async function remove(job: BackupJob): Promise<void> {
+async function remove(job: MonitoredJob): Promise<void> {
   openMenuId.value = null
   if (!window.confirm(`Delete "${job.name}"? This permanently removes its run history and stops the ping URL.`)) return
   try {
-    await store.deleteBackupJob(job.id)
+    await store.deleteJob(job.id)
     notify.success('Job deleted')
     if (detailJob.value?.id === job.id) detailOpen.value = false
   } catch {
@@ -93,19 +91,19 @@ async function remove(job: BackupJob): Promise<void> {
 <template>
   <div class="backup-tab" @click="openMenuId = null">
     <div class="tab-hdr">
-      <span class="tab-title">Backup Jobs <span class="count">{{ jobs.length }}</span></span>
-      <button v-if="canEdit" class="primary" @click="openAdd">+ Add Backup Job</button>
+      <span class="tab-title">Jobs <span class="count">{{ jobs.length }}</span></span>
+      <button v-if="canEdit" class="primary" @click="openAdd">+ Add Job</button>
     </div>
 
     <div v-if="store.isLoadingList && !jobs.length" class="state-note">Loading…</div>
 
     <EmptyState
       v-else-if="!jobs.length"
-      title="No backup jobs for this server"
-      message="Track your rclone backups by adding a heartbeat check. OpsPilot alerts you if a job is missed or fails."
+      title="No jobs for this server"
+      message="Track your scheduled scripts and backups by adding a heartbeat check. OpsPilot alerts you if a job is missed or fails."
     >
       <template #action>
-        <button v-if="canEdit" class="primary" @click="openAdd">+ Add Backup Job</button>
+        <button v-if="canEdit" class="primary" @click="openAdd">+ Add Job</button>
       </template>
     </EmptyState>
 
@@ -114,7 +112,6 @@ async function remove(job: BackupJob): Promise<void> {
         v-for="job in jobs"
         :key="job.id"
         :job="job"
-        type="backup"
         :can-edit="canEdit"
         :menu-open="openMenuId === job.id"
         @detail="openDetail(job)"
@@ -127,7 +124,6 @@ async function remove(job: BackupJob): Promise<void> {
     <JobDetailSlideOver
       v-model="detailOpen"
       :job="detailJob"
-      type="backup"
       :can-edit="canEdit"
       @edit="detailJob && openEdit(detailJob)"
     />
