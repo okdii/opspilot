@@ -4,15 +4,16 @@ import { StatCard } from '@/components/ui'
 import DbChartPanel from './DbChartPanel.vue'
 import DbGaugePanel from './DbGaugePanel.vue'
 import { useDatabaseStore } from '@/stores/databases'
-import type { DbCredentialStatus, DbMetricName, DbSeriesPoint } from '@/stores/databases'
+import type { DbInstanceStatus, DbMetricName, DbPgMetricName, DbSeriesPoint, DbSeriesResponse } from '@/stores/databases'
 import type { MetricRange } from '@/types'
 
 const props = defineProps<{
   serverId: string
   serverName: string
-  status: DbCredentialStatus
+  status: DbInstanceStatus
   canEdit: boolean
   dbType?: 'mysql' | 'postgres'
+  credentialId: string
 }>()
 const emit = defineEmits<{ (e: 'edit'): void; (e: 'remove'): void }>()
 
@@ -25,6 +26,23 @@ const menuOpen = ref(false)
 const advancedOpen = ref(false)
 const replicationOpen = ref(true)
 
+const copyingPw = ref(false)
+const copiedPw = ref(false)
+async function copyPassword() {
+  if (copyingPw.value) return
+  copyingPw.value = true
+  try {
+    const pw = await store.fetchPassword(props.serverId, props.credentialId)
+    await navigator.clipboard.writeText(pw)
+    copiedPw.value = true
+    setTimeout(() => (copiedPw.value = false), 2000)
+  } catch {
+    // silently ignore — user sees no change
+  } finally {
+    copyingPw.value = false
+  }
+}
+
 const loadingSeries = ref(false)
 
 // Each chart's plotted series, kept as Apex datetime tuples.
@@ -32,7 +50,7 @@ type Series = { name: string; data: [number, number | null][] }[]
 const seriesByMetric = ref<Record<string, Series>>({})
 const connectionsMax = ref<number | null>(null)
 
-const latest = computed(() => store.latestFor(props.serverId))
+const latest = computed(() => store.latestFor(props.credentialId))
 const isReplica = computed(() => props.status.is_replica ?? false)
 
 function toTuples(points: DbSeriesPoint[]): [number, number | null][] {
@@ -70,7 +88,7 @@ async function loadSeries() {
     const results = await Promise.all(
       wanted.map((m) =>
         store
-          .fetchSeries(props.serverId, m as any, range.value)
+          .fetchSeries(props.serverId, m as any, range.value, props.credentialId)
           .then((r) => ({ metric: m, r }))
           .catch(() => ({ metric: m, r: null })),
       ),
@@ -91,16 +109,17 @@ async function loadSeries() {
 }
 
 async function reload() {
-  await Promise.all([store.fetchLatest(props.serverId), loadSeries()])
+  await Promise.all([store.fetchLatest(props.serverId, props.credentialId), loadSeries()])
 }
 
 onMounted(reload)
 watch(() => props.serverId, reload)
 watch(range, loadSeries)
+watch(() => props.credentialId, reload)
 
 // --- Stat-card derived values ---------------------------------------------
 const connCardAccent = computed<'success' | 'warning' | 'danger'>(() => {
-  const p = store.connectionPct(props.serverId)
+  const p = store.connectionPct(props.credentialId)
   if (p > 80) return 'danger'
   if (p > 60) return 'warning'
   return 'success'
@@ -124,12 +143,12 @@ const connValue = computed(() => {
   return `${l.connections_active} / ${l.connections_max ?? '?'}`
 })
 const connSub = computed(() => {
-  const p = store.connectionPct(props.serverId)
+  const p = store.connectionPct(props.credentialId)
   return latest.value.connections_active == null ? 'no data' : `${p}% of max`
 })
 
 // Connections gauge centre + value
-const connGaugeValue = computed(() => store.connectionPct(props.serverId) || (latest.value.connections_active == null ? null : 0))
+const connGaugeValue = computed(() => store.connectionPct(props.credentialId) || (latest.value.connections_active == null ? null : 0))
 const bufferGaugeValue = computed(() => latest.value.innodb_buffer_pool_hit_rate)
 
 // --- Replication banner ----------------------------------------------------
@@ -175,6 +194,9 @@ const connError = computed(() => props.status.last_check_ok === false)
         </div>
       </div>
       <div class="hd-actions" v-if="canEdit">
+        <button class="btn ghost" type="button" :disabled="copyingPw" @click="copyPassword">
+          {{ copiedPw ? 'Copied!' : copyingPw ? 'Copying…' : 'Copy Password' }}
+        </button>
         <button class="btn ghost" type="button" @click="emit('edit')">Edit Credentials</button>
         <div class="menu-wrap">
           <button class="kebab" type="button" aria-label="Database actions" @click="menuOpen = !menuOpen">⋮</button>
