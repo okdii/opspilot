@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-opspilot}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
     ports:
       - "127.0.0.1:5433:5432"
     healthcheck:
@@ -24,6 +24,7 @@ services:
         max-file: "5"
 
   migrate:
+    image: ghcr.io/okdii/opspilot-backend:latest
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -43,6 +44,7 @@ services:
     restart: on-failure
 
   backend:
+    image: ghcr.io/okdii/opspilot-backend:latest
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -76,6 +78,7 @@ services:
         max-file: "5"
 
   frontend:
+    image: ghcr.io/okdii/opspilot-frontend:latest
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -103,5 +106,3 @@ services:
         max-size: "50m"
         max-file: "5"
 
-volumes:
-  postgres_data:
