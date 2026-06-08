@@ -46,7 +46,12 @@ const durationText = computed(() => {
     const s = d % 60
     return s ? `${m}m ${s}s` : `${m}m`
   }
-  return (props.job as BackupJob).last_size_formatted ?? '—'
+  const bj = props.job as BackupJob
+  const size = bj.last_size_formatted ?? '—'
+  if (bj.last_files_count != null) {
+    return `${size} · ${bj.last_files_count.toLocaleString()} files`
+  }
+  return size
 })
 
 const durationLabel = computed(() => (isCron.value ? 'Duration' : 'Size'))
