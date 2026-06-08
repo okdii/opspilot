@@ -278,6 +278,7 @@ class DBCredential(Base):
     username: Mapped[str] = mapped_column(String(80), nullable=False)
     password_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
     is_replica: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    db_type: Mapped[str] = mapped_column(String(16), nullable=False, default="mysql", server_default="mysql")
     last_deadlock_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     server: Mapped["Server"] = relationship(back_populates="db_credentials")
