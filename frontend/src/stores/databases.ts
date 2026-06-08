@@ -135,12 +135,12 @@ export const useDatabaseStore = defineStore('databases', () => {
     return serverFor(serverId)?.instances.find((i) => i.credential_id === credentialId) ?? null
   }
 
-  function latestFor(serverId: string): DbMetricsLatest {
-    return latest.value[serverId] ?? EMPTY_LATEST
+  function latestFor(credentialId: string): DbMetricsLatest {
+    return latest.value[credentialId] ?? EMPTY_LATEST
   }
 
-  function connectionPct(serverId: string): number {
-    const l = latestFor(serverId)
+  function connectionPct(credentialId: string): number {
+    const l = latestFor(credentialId)
     if (!l.connections_active || !l.connections_max) return 0
     return Math.round((l.connections_active / l.connections_max) * 100)
   }
@@ -181,7 +181,7 @@ export const useDatabaseStore = defineStore('databases', () => {
     if (server) {
       server.instances = server.instances.filter((i) => i.credential_id !== credentialId)
     }
-    delete latest.value[serverId]
+    delete latest.value[credentialId]
   }
 
   async function fetchLatest(serverId: string, credentialId: string): Promise<void> {
@@ -191,9 +191,9 @@ export const useDatabaseStore = defineStore('databases', () => {
         `/api/servers/${serverId}/db-metrics/latest`,
         { params: { credential_id: credentialId } },
       )
-      latest.value = { ...latest.value, [serverId]: data }
+      latest.value = { ...latest.value, [credentialId]: data }
     } catch {
-      latest.value = { ...latest.value, [serverId]: { ...EMPTY_LATEST } }
+      latest.value = { ...latest.value, [credentialId]: { ...EMPTY_LATEST } }
     } finally {
       loadingLatest.value = false
     }
