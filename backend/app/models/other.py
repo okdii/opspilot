@@ -138,8 +138,7 @@ class Alert(Base):
     service_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("service.id", ondelete="SET NULL"), nullable=True)
     domain_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("domain.id", ondelete="SET NULL"), nullable=True)
     ssl_cert_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("ssl_cert.id", ondelete="SET NULL"), nullable=True)
-    cron_job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("cron_job.id", ondelete="SET NULL"), nullable=True)
-    backup_job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("backup_job.id", ondelete="SET NULL"), nullable=True)
+    job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("monitored_job.id", ondelete="SET NULL"), nullable=True)
     type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     severity: Mapped[str] = mapped_column(String(20), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
@@ -154,8 +153,7 @@ class Alert(Base):
     service: Mapped["Service"] = relationship(back_populates="alerts")
     domain: Mapped["Domain"] = relationship(back_populates="alerts")
     ssl_cert: Mapped["SSLCert"] = relationship(back_populates="alerts")
-    cron_job: Mapped["CronJob"] = relationship(back_populates="alerts")
-    backup_job: Mapped["BackupJob"] = relationship(back_populates="alerts")
+    job: Mapped["MonitoredJob"] = relationship(back_populates="alerts")
 
 
 class AlertRule(Base):
@@ -203,71 +201,45 @@ class MaintenanceWindow(Base):
     server: Mapped["Server"] = relationship(back_populates="maintenance_windows")
 
 
-class CronJob(Base):
-    __tablename__ = "cron_job"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    server_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("server.id", ondelete="CASCADE"), nullable=False, index=True)
-    name: Mapped[str] = mapped_column(String(120), nullable=False)
-    schedule: Mapped[str] = mapped_column(String(80), nullable=False)
-    grace_period_min: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
-    ping_token: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4)
-    last_ping_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    start_ping_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_duration_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
-
-    server: Mapped["Server"] = relationship(back_populates="cron_jobs")
-    runs: Mapped[list["CronJobRun"]] = relationship(back_populates="cron_job", cascade="all, delete-orphan")
-    alerts: Mapped[list["Alert"]] = relationship(back_populates="cron_job")
-
-
-class CronJobRun(Base):
-    __tablename__ = "cron_job_run"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    cron_job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("cron_job.id", ondelete="CASCADE"), nullable=False, index=True)
-    ran_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    duration_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    outcome: Mapped[str] = mapped_column(String(20), nullable=False)  # 'success' | 'missed'
-
-    cron_job: Mapped["CronJob"] = relationship(back_populates="runs")
-
-
-class BackupJob(Base):
-    __tablename__ = "backup_job"
+class MonitoredJob(Base):
+    __tablename__ = "monitored_job"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     server_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("server.id", ondelete="CASCADE"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    expected_interval_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
+    schedule: Mapped[str] = mapped_column(String(120), nullable=False)
+    grace_period_min: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
     ping_token: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="healthy")
     last_ping_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    start_ping_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_duration_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    last_status_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    previous_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    last_size_formatted: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_files_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    last_exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    previous_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
 
-    server: Mapped["Server"] = relationship(back_populates="backup_jobs")
-    runs: Mapped[list["BackupRun"]] = relationship(back_populates="backup_job", cascade="all, delete-orphan")
-    alerts: Mapped[list["Alert"]] = relationship(back_populates="backup_job")
+    server: Mapped["Server"] = relationship(back_populates="monitored_jobs")
+    runs: Mapped[list["JobRun"]] = relationship(back_populates="job", cascade="all, delete-orphan")
+    alerts: Mapped[list["Alert"]] = relationship(back_populates="job")
 
 
-class BackupRun(Base):
-    __tablename__ = "backup_run"
+class JobRun(Base):
+    __tablename__ = "job_run"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    backup_job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("backup_job.id", ondelete="CASCADE"), nullable=False, index=True)
+    job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("monitored_job.id", ondelete="CASCADE"), nullable=False, index=True)
     ran_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(20), nullable=False)
+    duration_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     files_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    outcome: Mapped[str] = mapped_column(String(20), nullable=False)  # 'success' | 'missed' | 'failed'
+    exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    backup_job: Mapped["BackupJob"] = relationship(back_populates="runs")
+    job: Mapped["MonitoredJob"] = relationship(back_populates="runs")
 
 
 class DBCredential(Base):

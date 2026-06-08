@@ -35,8 +35,7 @@ class Server(Base):
     alert_rules: Mapped[list["AlertRule"]] = relationship(back_populates="server", cascade="all, delete-orphan")
     log_alert_rules: Mapped[list["LogAlertRule"]] = relationship(back_populates="server", cascade="all, delete-orphan")
     maintenance_windows: Mapped[list["MaintenanceWindow"]] = relationship(back_populates="server", cascade="all, delete-orphan")
-    cron_jobs: Mapped[list["CronJob"]] = relationship(back_populates="server")
-    backup_jobs: Mapped[list["BackupJob"]] = relationship(back_populates="server")
+    monitored_jobs: Mapped[list["MonitoredJob"]] = relationship(back_populates="server", cascade="all, delete-orphan")
     db_credentials: Mapped[list["DBCredential"]] = relationship(back_populates="server", cascade="all, delete-orphan")
     alerts: Mapped[list["Alert"]] = relationship(back_populates="server")
 
