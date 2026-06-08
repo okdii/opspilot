@@ -12,6 +12,7 @@ const props = defineProps<{
   serverName: string
   status: DbCredentialStatus
   canEdit: boolean
+  dbType?: 'mysql' | 'postgres'
 }>()
 const emit = defineEmits<{ (e: 'edit'): void; (e: 'remove'): void }>()
 
@@ -51,15 +52,25 @@ const METRICS: DbMetricName[] = [
   'aborted_connections',
 ]
 
+const PG_METRICS = [
+  'connections_active',
+  'transactions_per_sec',
+  'cache_hit_rate',
+  'deadlocks',
+  'tuple_ops_per_sec',
+  'temp_files_per_min',
+  'checkpoints_per_min',
+]
+
 async function loadSeries() {
   loadingSeries.value = true
   try {
-    const wanted: DbMetricName[] = [...METRICS]
+    const wanted = props.dbType === 'postgres' ? [...PG_METRICS] : [...METRICS]
     if (isReplica.value) wanted.push('replication_lag_sec')
     const results = await Promise.all(
       wanted.map((m) =>
         store
-          .fetchSeries(props.serverId, m, range.value)
+          .fetchSeries(props.serverId, m as any, range.value)
           .then((r) => ({ metric: m, r }))
           .catch(() => ({ metric: m, r: null })),
       ),
@@ -151,7 +162,7 @@ const connError = computed(() => props.status.last_check_ok === false)
       <div class="hd-id">
         <h2 class="hd-name">
           {{ serverName }}
-          <span class="hd-ver">{{ latest.mariadb_version ? `MariaDB ${latest.mariadb_version}` : 'MariaDB' }}</span>
+          <span class="hd-ver">{{ props.dbType === 'postgres' ? 'PostgreSQL' : (latest.mariadb_version ? `MariaDB ${latest.mariadb_version}` : 'MariaDB') }}</span>
         </h2>
         <div class="hd-meta">
           <span>{{ status.host }}:{{ status.port }}</span>
@@ -180,148 +191,239 @@ const connError = computed(() => props.status.last_check_ok === false)
       (PROCESS, REPLICATION CLIENT, SELECT) and that MariaDB is reachable at {{ status.host }}:{{ status.port }}.
     </div>
 
-    <!-- Stat cards -->
-    <div class="cards">
-      <StatCard label="Connections" :value="connValue" :accent="connCardAccent" />
-      <StatCard label="Queries / sec" :value="latest.queries_per_sec == null ? '—' : `${fmt(latest.queries_per_sec)} qps`" accent="info" />
-      <StatCard label="Buffer Pool Hit" :value="fmt(latest.innodb_buffer_pool_hit_rate, '%')" :accent="bufferAccent" />
-      <StatCard label="Slow Queries" :value="latest.slow_queries_per_min == null ? '—' : `${fmt(latest.slow_queries_per_min)} /min`" accent="warning" />
-    </div>
-    <div class="cards-sub">
-      <span>Nearing 100% means new app connections will be rejected — alert fires at 80%.</span>
-      <span>Traffic baseline — sudden spikes reveal runaway loops or unexpected load.</span>
-      <span>Reads served from RAM vs disk. Below 95% means your DB needs more memory.</span>
-      <span>Rising values mean missing indexes or queries exceeding the slow query threshold.</span>
-    </div>
+    <!-- MySQL / MariaDB panels -->
+    <template v-if="dbType !== 'postgres'">
+      <!-- Stat cards -->
+      <div class="cards">
+        <StatCard label="Connections" :value="connValue" :accent="connCardAccent" />
+        <StatCard label="Queries / sec" :value="latest.queries_per_sec == null ? '—' : `${fmt(latest.queries_per_sec)} qps`" accent="info" />
+        <StatCard label="Buffer Pool Hit" :value="fmt(latest.innodb_buffer_pool_hit_rate, '%')" :accent="bufferAccent" />
+        <StatCard label="Slow Queries" :value="latest.slow_queries_per_min == null ? '—' : `${fmt(latest.slow_queries_per_min)} /min`" accent="warning" />
+      </div>
+      <div class="cards-sub">
+        <span>Nearing 100% means new app connections will be rejected — alert fires at 80%.</span>
+        <span>Traffic baseline — sudden spikes reveal runaway loops or unexpected load.</span>
+        <span>Reads served from RAM vs disk. Below 95% means your DB needs more memory.</span>
+        <span>Rising values mean missing indexes or queries exceeding the slow query threshold.</span>
+      </div>
 
-    <!-- Range tabs -->
-    <div class="ranges">
-      <button
-        v-for="r in RANGES" :key="r"
-        class="range" :class="{ active: range === r }"
-        type="button" @click="range = r"
-      >{{ r }}</button>
-    </div>
+      <!-- Range tabs -->
+      <div class="ranges">
+        <button
+          v-for="r in RANGES" :key="r"
+          class="range" :class="{ active: range === r }"
+          type="button" @click="range = r"
+        >{{ r }}</button>
+      </div>
 
-    <!-- Connections row: gauge + line -->
-    <div class="grid grid-2-1">
-      <DbGaugePanel
-        title="Connections"
-        :value="connGaugeValue"
-        :center-label="connValue"
-        :sub-label="latest.connections_max ? '' : 'max_connections not available'"
-        :warn-at="60"
-        :danger-at="80"
-        :loading="store.loadingLatest"
-      />
+      <!-- Connections row: gauge + line -->
+      <div class="grid grid-2-1">
+        <DbGaugePanel
+          title="Connections"
+          :value="connGaugeValue"
+          :center-label="connValue"
+          :sub-label="latest.connections_max ? '' : 'max_connections not available'"
+          :warn-at="60"
+          :danger-at="80"
+          :loading="store.loadingLatest"
+        />
+        <DbChartPanel
+          title="Active Connections"
+          subtitle="Rising count means more concurrent app load. Alert fires at 80% of max."
+          type="line"
+          :series="seriesByMetric.connections_active ?? []"
+          :has-data="hasPoints('connections_active')"
+          unit="count"
+          :loading="loadingSeries"
+        />
+      </div>
+
+      <!-- QPS area -->
       <DbChartPanel
-        title="Active Connections"
-        subtitle="Rising count means more concurrent app load. Alert fires at 80% of max."
-        type="line"
-        :series="seriesByMetric.connections_active ?? []"
-        :has-data="hasPoints('connections_active')"
+        title="Queries Per Second"
+        subtitle="Sudden spikes reveal traffic bursts or runaway background jobs."
+        type="area"
+        :series="seriesByMetric.queries_per_sec ?? []"
+        :has-data="hasPoints('queries_per_sec')"
         unit="count"
         :loading="loadingSeries"
       />
-    </div>
 
-    <!-- QPS area -->
-    <DbChartPanel
-      title="Queries Per Second"
-      subtitle="Sudden spikes reveal traffic bursts or runaway background jobs."
-      type="area"
-      :series="seriesByMetric.queries_per_sec ?? []"
-      :has-data="hasPoints('queries_per_sec')"
-      unit="count"
-      :loading="loadingSeries"
-    />
+      <!-- Slow queries + buffer pool gauge -->
+      <div class="grid grid-2-1">
+        <DbChartPanel
+          title="Slow Queries"
+          subtitle="Persistently high means a query needs optimization or an index is missing."
+          type="bar"
+          :series="seriesByMetric.slow_queries_per_min ?? []"
+          :has-data="hasPoints('slow_queries_per_min')"
+          unit="count"
+          :colors="['#f59e0b']"
+          :loading="loadingSeries"
+        />
+        <DbGaugePanel
+          title="Buffer Pool Hit"
+          :value="bufferGaugeValue"
+          :center-label="fmt(latest.innodb_buffer_pool_hit_rate, '%')"
+          sub-label="Target ≥ 95%"
+          :low-is-bad="true"
+          :loading="store.loadingLatest"
+        />
+      </div>
 
-    <!-- Slow queries + buffer pool gauge -->
-    <div class="grid grid-2-1">
+      <!-- Deadlocks -->
       <DbChartPanel
-        title="Slow Queries"
-        subtitle="Persistently high means a query needs optimization or an index is missing."
+        title="Deadlocks"
+        subtitle="Any deadlock means two transactions blocked each other — one silently failed."
         type="bar"
-        :series="seriesByMetric.slow_queries_per_min ?? []"
-        :has-data="hasPoints('slow_queries_per_min')"
+        :series="seriesByMetric.innodb_deadlocks ?? []"
+        :has-data="hasPoints('innodb_deadlocks')"
         unit="count"
-        :colors="['#f59e0b']"
+        :colors="['#ef4444']"
         :loading="loadingSeries"
       />
-      <DbGaugePanel
-        title="Buffer Pool Hit"
-        :value="bufferGaugeValue"
-        :center-label="fmt(latest.innodb_buffer_pool_hit_rate, '%')"
-        sub-label="Target ≥ 95%"
-        :low-is-bad="true"
-        :loading="store.loadingLatest"
-      />
-    </div>
 
-    <!-- Deadlocks -->
-    <DbChartPanel
-      title="Deadlocks"
-      subtitle="Any deadlock means two transactions blocked each other — one silently failed."
-      type="bar"
-      :series="seriesByMetric.innodb_deadlocks ?? []"
-      :has-data="hasPoints('innodb_deadlocks')"
-      unit="count"
-      :colors="['#ef4444']"
-      :loading="loadingSeries"
-    />
+      <!-- Replication (replica only) -->
+      <section v-if="isReplica" class="collapsible">
+        <button class="collapse-hdr" type="button" @click="replicationOpen = !replicationOpen">
+          <span class="caret" :class="{ open: replicationOpen }">▸</span>
+          Replication Status
+        </button>
+        <div v-show="replicationOpen" class="collapse-body">
+          <div class="repl-banner" :class="replicationBanner.tone">{{ replicationBanner.text }}</div>
+          <DbChartPanel
+            title="Replication Lag"
+            subtitle="Over 30s means reads from the replica return stale data."
+            type="line"
+            :series="seriesByMetric.replication_lag_sec ?? []"
+            :has-data="hasPoints('replication_lag_sec')"
+            unit="count"
+            :thresholds="[{ value: 30, color: '#ef4444', label: '30s' }]"
+            :loading="loadingSeries"
+          />
+        </div>
+      </section>
 
-    <!-- Replication (replica only) -->
-    <section v-if="isReplica" class="collapsible">
-      <button class="collapse-hdr" type="button" @click="replicationOpen = !replicationOpen">
-        <span class="caret" :class="{ open: replicationOpen }">▸</span>
-        Replication Status
-      </button>
-      <div v-show="replicationOpen" class="collapse-body">
-        <div class="repl-banner" :class="replicationBanner.tone">{{ replicationBanner.text }}</div>
+      <!-- Advanced -->
+      <section class="collapsible">
+        <button class="collapse-hdr" type="button" @click="advancedOpen = !advancedOpen">
+          <span class="caret" :class="{ open: advancedOpen }">▸</span>
+          Advanced Metrics
+        </button>
+        <div v-show="advancedOpen" class="collapse-body grid grid-2">
+          <DbChartPanel
+            title="Table Lock Waits"
+            subtitle="High waits mean queries are blocking each other — often from missing indexes."
+            type="line"
+            :series="seriesByMetric.table_locks_waited ?? []"
+            :has-data="hasPoints('table_locks_waited')"
+            unit="count"
+            :thresholds="[{ value: 10, color: '#f59e0b', label: '10/min' }]"
+            :loading="loadingSeries"
+            empty-message="No table-lock data for this period — not all MariaDB versions emit it."
+          />
+          <DbChartPanel
+            title="Aborted Connections"
+            subtitle="Clients failing to connect — check credentials, firewall, or app config."
+            type="line"
+            :series="seriesByMetric.aborted_connections ?? []"
+            :has-data="hasPoints('aborted_connections')"
+            unit="count"
+            :thresholds="[{ value: 5, color: '#f59e0b', label: '5/min' }]"
+            :loading="loadingSeries"
+            empty-message="No aborted-connection data for this period."
+          />
+        </div>
+      </section>
+    </template>
+
+    <!-- PostgreSQL panels -->
+    <template v-else>
+      <!-- PostgreSQL stat cards -->
+      <div class="cards">
+        <StatCard label="Active Connections" :value="fmt(latest.connections_active)" accent="info" />
+        <StatCard label="Transactions/sec" :value="fmt(latest.transactions_per_sec)" accent="info" />
+        <StatCard label="Cache Hit Rate" :value="fmt(latest.cache_hit_rate, '%')" :accent="latest.cache_hit_rate != null && latest.cache_hit_rate < 99 ? 'danger' : 'success'" />
+        <StatCard label="Deadlocks" :value="fmt(latest.innodb_deadlocks)" accent="warning" />
+      </div>
+      <div class="cards-sub">
+        <span>Nearing max_connections means new app connections will be rejected.</span>
+        <span>Sudden drops reveal connection failures or application errors.</span>
+        <span>Below 99% means frequent disk reads — tune shared_buffers or add RAM.</span>
+        <span>Any deadlock means two transactions blocked each other — one silently failed.</span>
+      </div>
+
+      <!-- Range tabs (reuse existing) -->
+      <div class="ranges">
+        <button v-for="r in RANGES" :key="r" class="range" :class="{ active: range === r }" type="button" @click="range = r">{{ r }}</button>
+      </div>
+
+      <!-- Tuple Ops + Temp Files -->
+      <div class="grid grid-2">
         <DbChartPanel
-          title="Replication Lag"
-          subtitle="Over 30s means reads from the replica return stale data."
-          type="line"
-          :series="seriesByMetric.replication_lag_sec ?? []"
-          :has-data="hasPoints('replication_lag_sec')"
+          title="Tuple Operations/sec"
+          subtitle="Combined inserts + updates + deletes — reflects write load on the database."
+          type="area"
+          :series="seriesByMetric.tuple_ops_per_sec ?? []"
+          :has-data="hasPoints('tuple_ops_per_sec')"
           unit="count"
-          :thresholds="[{ value: 30, color: '#ef4444', label: '30s' }]"
+          :loading="loadingSeries"
+        />
+        <DbChartPanel
+          title="Temp Files/min"
+          subtitle="Spilling to disk means queries need more work_mem or indexes are missing."
+          type="bar"
+          :colors="['#f59e0b']"
+          :series="seriesByMetric.temp_files_per_min ?? []"
+          :has-data="hasPoints('temp_files_per_min')"
+          unit="count"
           :loading="loadingSeries"
         />
       </div>
-    </section>
 
-    <!-- Advanced -->
-    <section class="collapsible">
-      <button class="collapse-hdr" type="button" @click="advancedOpen = !advancedOpen">
-        <span class="caret" :class="{ open: advancedOpen }">▸</span>
-        Advanced Metrics
-      </button>
-      <div v-show="advancedOpen" class="collapse-body grid grid-2">
+      <!-- Checkpoints + Transactions -->
+      <div class="grid grid-2">
         <DbChartPanel
-          title="Table Lock Waits"
-          subtitle="High waits mean queries are blocking each other — often from missing indexes."
+          title="Checkpoints/min"
+          subtitle="Frequent checkpoints mean heavy write load — consider tuning checkpoint_timeout."
           type="line"
-          :series="seriesByMetric.table_locks_waited ?? []"
-          :has-data="hasPoints('table_locks_waited')"
+          :series="seriesByMetric.checkpoints_per_min ?? []"
+          :has-data="hasPoints('checkpoints_per_min')"
           unit="count"
-          :thresholds="[{ value: 10, color: '#f59e0b', label: '10/min' }]"
           :loading="loadingSeries"
-          empty-message="No table-lock data for this period — not all MariaDB versions emit it."
         />
         <DbChartPanel
-          title="Aborted Connections"
-          subtitle="Clients failing to connect — check credentials, firewall, or app config."
-          type="line"
-          :series="seriesByMetric.aborted_connections ?? []"
-          :has-data="hasPoints('aborted_connections')"
+          title="Transactions/sec"
+          subtitle="Sudden drops reveal connection failures or application errors."
+          type="area"
+          :series="seriesByMetric.transactions_per_sec ?? []"
+          :has-data="hasPoints('transactions_per_sec')"
           unit="count"
-          :thresholds="[{ value: 5, color: '#f59e0b', label: '5/min' }]"
           :loading="loadingSeries"
-          empty-message="No aborted-connection data for this period."
         />
       </div>
-    </section>
+
+      <!-- Replication (replica only) -->
+      <section v-if="isReplica" class="collapsible">
+        <button class="collapse-hdr" type="button" @click="replicationOpen = !replicationOpen">
+          <span class="caret" :class="{ open: replicationOpen }">▸</span>
+          Replication Status
+        </button>
+        <div v-show="replicationOpen" class="collapse-body">
+          <div class="repl-banner" :class="replicationBanner.tone">{{ replicationBanner.text }}</div>
+          <DbChartPanel
+            title="Replication Lag"
+            subtitle="Over a few seconds means reads from the replica return stale data."
+            type="line"
+            :series="seriesByMetric.replication_lag_sec ?? []"
+            :has-data="hasPoints('replication_lag_sec')"
+            unit="count"
+            :thresholds="[{ value: 30, color: '#ef4444', label: '30s' }]"
+            :loading="loadingSeries"
+          />
+        </div>
+      </section>
+    </template>
   </div>
 </template>
 

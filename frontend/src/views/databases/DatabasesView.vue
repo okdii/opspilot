@@ -96,7 +96,7 @@ async function onRemove() {
 
 <template>
   <div class="page">
-    <PageHeader title="Database Monitoring" subtitle="MariaDB health metrics per server" />
+    <PageHeader title="Database Monitoring" subtitle="MariaDB & PostgreSQL health metrics per server" />
 
     <!-- No servers in org -->
     <EmptyState
@@ -130,6 +130,7 @@ async function onRemove() {
           :key="`nc-${selected.server_id}`"
           :server-name="selected.server_name"
           :can-edit="canEdit"
+          :db-type="selected.db_type ?? 'mysql'"
           @setup="openSetup"
         />
         <DbHealthDashboard
@@ -139,6 +140,7 @@ async function onRemove() {
           :server-name="selected.server_name"
           :status="selected"
           :can-edit="canEdit"
+          :db-type="selected.db_type ?? 'mysql'"
           @edit="modalOpen = true"
           @remove="confirmRemove = true"
         />
