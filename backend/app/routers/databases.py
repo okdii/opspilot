@@ -153,20 +153,24 @@ def _resolve_label(cred: DBCredential) -> str:
     return cred.label or f"{cred.db_type}:{cred.port}"
 
 
-async def _last_check(db: AsyncSession, server_id: str) -> tuple[bool | None, datetime | None]:
-    """Best-effort connection health: did any mysql.* sample land in the last
-    couple of minutes? Returns (ok, last_collected_at). ok is None when no DB
-    metric has ever been seen for this server."""
+async def _last_check(
+    db: AsyncSession, server_id: str, label: str, db_type: str
+) -> tuple[bool | None, datetime | None]:
+    """Best-effort connection health filtered by instance label.
+    Falls back to unlabelled metrics for backward compat with pre-migration data."""
+    prefix = "postgresql" if db_type == "postgres" else "mysql"
     row = (
         await db.execute(
             text(
                 """
                 SELECT MAX(time) AS last_t
                 FROM server_metrics
-                WHERE server_id = :sid AND metric_name LIKE 'mysql.%'
+                WHERE server_id = :sid
+                  AND metric_name LIKE :prefix
+                  AND (labels->>'db_label' = :label OR labels->>'db_label' IS NULL)
                 """
             ),
-            {"sid": str(server_id)},
+            {"sid": str(server_id), "prefix": f"{prefix}.%", "label": label},
         )
     ).first()
     last_t = row.last_t if row else None
@@ -189,8 +193,8 @@ def _trigger_redeploy(server_id: str) -> bool:
 
 @router.get("/api/organizations/{org_id}/db-credentials")
 async def list_db_credentials(org_id: str, user: CurrentUser, db: AsyncSession = Depends(get_db)):
-    """One entry per active server in the org with its credential status. No
-    passwords are returned (spec §12.1)."""
+    """One entry per active server; each entry has an `instances` array.
+    No passwords are returned."""
     await _assert_org_access(org_id, user, db)
 
     servers = (
@@ -203,30 +207,37 @@ async def list_db_credentials(org_id: str, user: CurrentUser, db: AsyncSession =
 
     out: list[dict] = []
     for s in servers:
-        cred = await _get_credential(str(s.id), db)
-        if cred is None:
-            out.append(
+        creds = (
+            await db.execute(
+                select(DBCredential)
+                .where(DBCredential.server_id == s.id)
+                .order_by(DBCredential.id)
+            )
+        ).scalars().all()
+
+        instances: list[dict] = []
+        for cred in creds:
+            label = _resolve_label(cred)
+            last_ok, last_checked = await _last_check(db, str(s.id), label, cred.db_type)
+            instances.append(
                 {
-                    "server_id": str(s.id),
-                    "server_name": s.name,
-                    "has_credentials": False,
-                    "db_type": "mysql",
+                    "credential_id": str(cred.id),
+                    "label": label,
+                    "host": cred.host,
+                    "port": cred.port,
+                    "username": cred.username,
+                    "is_replica": cred.is_replica,
+                    "db_type": cred.db_type,
+                    "last_check_ok": last_ok,
+                    "last_checked": last_checked.isoformat() if last_checked else None,
                 }
             )
-            continue
-        last_ok, last_checked = await _last_check(db, str(s.id))
+
         out.append(
             {
                 "server_id": str(s.id),
                 "server_name": s.name,
-                "has_credentials": True,
-                "host": cred.host,
-                "port": cred.port,
-                "username": cred.username,
-                "is_replica": cred.is_replica,
-                "db_type": cred.db_type,
-                "last_check_ok": last_ok,
-                "last_checked": last_checked.isoformat() if last_checked else None,
+                "instances": instances,
             }
         )
     return out
