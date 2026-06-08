@@ -274,7 +274,7 @@ async def create_db_credentials(
     db.add(cred)
     await db.commit()
     await db.refresh(cred)
-    _trigger_redeploy(server_id)
+    redeploy_queued = _trigger_redeploy(server_id)
     return {
         "credential_id": str(cred.id),
         "server_id": str(server_id),
@@ -284,7 +284,7 @@ async def create_db_credentials(
         "username": cred.username,
         "is_replica": cred.is_replica,
         "has_credentials": True,
-        "redeploy_queued": True,
+        "redeploy_queued": redeploy_queued,
     }
 
 
@@ -357,8 +357,8 @@ async def delete_db_credentials(
     cred = await _get_credential_by_id(credential_id, server_id, db)
     await db.delete(cred)
     await db.commit()
-    _trigger_redeploy(server_id)
-    return {"ok": True, "redeploy_queued": True}
+    redeploy_queued = _trigger_redeploy(server_id)
+    return {"ok": True, "redeploy_queued": redeploy_queued}
 
 
 @router.get("/api/servers/{server_id}/db-credentials/{credential_id}/password")
