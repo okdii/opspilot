@@ -19,6 +19,11 @@ import SecurityGrade from '@/components/SecurityGrade.vue'
 import SecurityTab from '@/components/services/tabs/SecurityTab.vue'
 import type { ResponseRange, ResponseTimeData, SecurityScan, Service } from '@/stores/services'
 
+const props = withDefaults(defineProps<{
+  serviceId?: string
+  embedded?: boolean
+}>(), { embedded: false })
+
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
@@ -28,7 +33,7 @@ const store = useServiceStore()
 const notify = useNotify()
 const { formatDateTime } = useDateFormat()
 
-const serviceId = computed(() => route.params.id as string)
+const serviceId = computed(() => props.serviceId ?? (route.params.id as string))
 const service = computed<Service | null>(() => store.activeService)
 const canEdit = computed(() => orgStore.canEdit)
 
@@ -188,8 +193,10 @@ async function load() {
     incidentCount.value = store.incidents.length
     subscribeWs(svc)
   } catch {
-    notify.error('Service not found.')
-    void router.replace('/services')
+    if (!props.embedded) {
+      notify.error('Service not found.')
+      void router.replace('/services')
+    }
   }
 }
 
@@ -253,10 +260,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="detail" v-if="service">
-    <router-link to="/services" class="back">← Services</router-link>
+  <div class="detail" :class="{ embedded }" v-if="service">
+    <router-link v-if="!embedded" to="/services" class="back">← Services</router-link>
 
-    <PageHeader :title="service.name">
+    <PageHeader v-if="!embedded" :title="service.name">
       <template #actions>
         <div class="hdr-status">
           <StatusBadge kind="service" v-bind="statusBadge" />
@@ -381,6 +388,7 @@ onUnmounted(() => {
     </section>
 
     <ServiceModal
+      v-if="!embedded"
       v-model="modalOpen"
       :service="service"
       :servers="[{ id: service.server_id, name: service.server_name, status: 'online' }]"
@@ -391,6 +399,7 @@ onUnmounted(() => {
 
 <style scoped>
 .detail { padding: 24px 28px; max-width: 1300px; }
+.detail.embedded { padding: 0; max-width: none; }
 .back { display: inline-block; color: var(--muted); text-decoration: none; font-size: 13px; margin-bottom: 12px; }
 .back:hover { color: var(--text); }
 .hdr-status { display: flex; align-items: center; gap: 10px; }
