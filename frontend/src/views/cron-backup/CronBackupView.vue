@@ -8,7 +8,7 @@ import { useNotify } from '@/composables/useNotify'
 import { PageHeader, EmptyState } from '@/components/ui'
 import JobRow from '@/components/cron-backup/JobRow.vue'
 import JobDetailSlideOver from '@/components/cron-backup/JobDetailSlideOver.vue'
-import BackupJobModal from '@/components/cron-backup/BackupJobModal.vue'
+import JobModal from '@/components/cron-backup/JobModal.vue'
 import { cronToLabel } from '@/components/cron-backup/cronLabel'
 
 const orgStore = useOrgStore()
@@ -306,8 +306,8 @@ const subtitle = computed(() => {
       </div>
     </div>
 
-    <!-- Add / Edit modal — Backup (delegated to BackupJobModal) -->
-    <BackupJobModal
+    <!-- Add / Edit modal — Backup (delegated to JobModal) -->
+    <JobModal
       v-if="showModal && tab === 'backup'"
       :job="editingBackupJob"
       @saved="showModal = false"

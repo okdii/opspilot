@@ -8,7 +8,7 @@ import { useNotify } from '@/composables/useNotify'
 import { EmptyState } from '@/components/ui'
 import JobRow from '@/components/cron-backup/JobRow.vue'
 import JobDetailSlideOver from '@/components/cron-backup/JobDetailSlideOver.vue'
-import BackupJobModal from '@/components/cron-backup/BackupJobModal.vue'
+import JobModal from '@/components/cron-backup/JobModal.vue'
 
 const route = useRoute()
 const orgStore = useOrgStore()
@@ -132,7 +132,7 @@ async function remove(job: BackupJob): Promise<void> {
       @edit="detailJob && openEdit(detailJob)"
     />
 
-    <BackupJobModal
+    <JobModal
       v-if="showModal"
       :job="editingJob"
       :server-id="serverId"
