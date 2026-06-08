@@ -1,17 +1,16 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
 import { SlideOver } from '@/components/ui'
-import type { DbCredentialPayload, DbCredentialStatus, DbType } from '@/stores/databases'
+import type { DbCredentialPayload, DbInstanceStatus, DbType } from '@/stores/databases'
 
 const props = defineProps<{
   modelValue: boolean
   serverName: string
-  /** Existing status when editing; null/no-credentials → create mode. */
-  existing: DbCredentialStatus | null
+  existing: DbInstanceStatus | null
 }>()
 const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void
-  (e: 'save', payload: DbCredentialPayload, edit: boolean): void
+  (e: 'save', payload: DbCredentialPayload, credentialId: string | null): void
 }>()
 
 const dbType = ref<DbType>('mysql')
@@ -23,22 +22,20 @@ const form = reactive<DbCredentialPayload>({
   password: '',
   is_replica: false,
   db_type: 'mysql',
+  label: '',
 })
 const saving = ref(false)
 const errors = reactive<Record<string, string>>({})
-
 const isEdit = ref(false)
 
-// Update port/username defaults when db_type changes (create mode only).
 watch(dbType, (t) => {
-  if (props.existing?.has_credentials) return
+  if (isEdit.value) return
   form.port = t === 'postgres' ? 5432 : 3306
   if (!form.username || form.username === 'opspilot_monitor' || form.username === 'opspilot') {
     form.username = t === 'postgres' ? 'opspilot' : 'opspilot_monitor'
   }
 })
 
-// Re-seed form whenever the modal opens.
 watch(
   () => props.modelValue,
   (open) => {
@@ -46,13 +43,15 @@ watch(
     saving.value = false
     Object.keys(errors).forEach((k) => delete errors[k])
     const e = props.existing
-    isEdit.value = !!e?.has_credentials
+    isEdit.value = !!e
     dbType.value = e?.db_type ?? 'mysql'
     form.host = e?.host ?? '127.0.0.1'
     form.port = e?.port ?? (dbType.value === 'postgres' ? 5432 : 3306)
     form.username = e?.username ?? (dbType.value === 'postgres' ? 'opspilot' : 'opspilot_monitor')
     form.password = ''
     form.is_replica = e?.is_replica ?? false
+    form.db_type = dbType.value
+    form.label = e?.label ?? ''
   },
 )
 
@@ -65,6 +64,7 @@ function validate(): boolean {
   else if (form.username.length > 80) errors.username = 'Max 80 characters.'
   if (!isEdit.value && !form.password) errors.password = 'Password is required.'
   if (form.password && form.password.length > 255) errors.password = 'Max 255 characters.'
+  if (form.label && form.label.length > 60) errors.label = 'Max 60 characters.'
   return Object.keys(errors).length === 0
 }
 
@@ -78,18 +78,15 @@ function submit() {
     username: form.username.trim(),
     is_replica: form.is_replica,
     db_type: dbType.value,
+    label: form.label?.trim() || undefined,
   }
-  // On edit, omit blank password to preserve existing encrypted value.
   if (form.password) payload.password = form.password
-  emit('save', payload, isEdit.value)
+  emit('save', payload, props.existing?.credential_id ?? null)
 }
 
-// Parent flips modelValue to false on success; reset saving on close.
 watch(
   () => props.modelValue,
-  (open) => {
-    if (!open) saving.value = false
-  },
+  (open) => { if (!open) saving.value = false },
 )
 
 const showPassword = ref(false)
@@ -98,8 +95,8 @@ const showPassword = ref(false)
 <template>
   <SlideOver
     :model-value="modelValue"
-    :title="isEdit ? `Edit DB Credentials — ${serverName}` : `Set Up DB Monitoring — ${serverName}`"
-    subtitle="Read-only MariaDB monitoring user"
+    :title="isEdit ? `Edit DB Instance — ${existing?.label ?? serverName}` : `Add DB Instance — ${serverName}`"
+    subtitle="Read-only database monitoring user"
     width="480px"
     @update:model-value="emit('update:modelValue', $event)"
   >
@@ -112,18 +109,18 @@ const showPassword = ref(false)
             type="button"
             class="type-pill"
             :class="{ active: dbType === 'mysql' }"
-            :disabled="!!existing?.has_credentials"
+            :disabled="isEdit"
             @click="dbType = 'mysql'"
           >MySQL / MariaDB</button>
           <button
             type="button"
             class="type-pill"
             :class="{ active: dbType === 'postgres' }"
-            :disabled="!!existing?.has_credentials"
+            :disabled="isEdit"
             @click="dbType = 'postgres'"
           >PostgreSQL</button>
         </div>
-        <p v-if="existing?.has_credentials" class="field-hint">Database type cannot be changed after setup.</p>
+        <p v-if="isEdit" class="field-hint">Database type cannot be changed after setup.</p>
       </div>
 
       <div class="row two">
@@ -162,6 +159,20 @@ const showPassword = ref(false)
         </div>
         <small v-if="errors.password" class="err-msg">{{ errors.password }}</small>
         <small v-else-if="isEdit" class="hint">Leave password blank to keep existing credentials.</small>
+      </label>
+
+      <label class="field">
+        <span class="lbl">Instance Label</span>
+        <input
+          v-model="form.label"
+          class="inp"
+          :class="{ err: errors.label }"
+          placeholder="e.g. Primary, Analytics, Port 3307"
+          autocomplete="off"
+          maxlength="60"
+        />
+        <small v-if="errors.label" class="err-msg">{{ errors.label }}</small>
+        <small v-else class="hint">Optional — defaults to "{{ dbType }}:{{ form.port }}" if blank.</small>
       </label>
 
       <label class="toggle-row">
