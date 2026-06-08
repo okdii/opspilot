@@ -278,6 +278,7 @@ async def ping_post(
 
     # Update job fields — only touch fields when present in form.
     job.last_ping_at = now
+    job.last_duration_sec = duration
     job.start_ping_at = None
     if size_bytes is not None:
         job.last_size_bytes = size_bytes
