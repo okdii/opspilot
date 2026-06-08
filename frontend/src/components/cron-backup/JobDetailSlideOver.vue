@@ -146,10 +146,6 @@ async function copy(text: string, label: string): Promise<void> {
   }
 }
 
-const backupPostCommand = computed(
-  () => `curl -s -X POST ${pingUrl.value} -d "status=success&size_bytes=<BYTES>&exit_code=$?"`,
-)
-
 const snippetTab = ref<'snippet' | 'curl'>('snippet')
 
 const rcloneSnippet = computed(() => {
@@ -195,7 +191,7 @@ const curlOnlySnippet = computed(() => {
     '# Add these lines at the end of your backup script.',
     '# IMPORTANT: capture $? immediately after rclone, before any other command.',
     'EXIT_CODE=$?',
-    'JSON=$(rclone size "gdrive:YOUR_REMOTE_PATH" --json 2>/dev/null)',
+    'JSON=$(rclone size "YOUR_REMOTE:YOUR_PATH" --json 2>/dev/null)',
     "SIZE_BYTES=$(echo \"$JSON\" | grep -o '\"bytes\":[0-9]*' | grep -o '[0-9]*$')",
     "FILES_COUNT=$(echo \"$JSON\" | grep -o '\"count\":[0-9]*' | grep -o '[0-9]*$')",
     `curl -s -X POST "${url}" \\`,
