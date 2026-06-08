@@ -35,7 +35,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.crypto import decrypt, encrypt
+from app.core.crypto import encrypt
 from app.database import AsyncSessionLocal, get_db
 from app.deps import AdminUser, CurrentUser
 from app.models.organization import Organization
@@ -259,6 +259,7 @@ async def create_db_credentials(
         password_encrypted=encrypt(body.password),
         is_replica=body.is_replica,
         db_type=body.db_type,
+        label=body.label or None,
     )
     db.add(cred)
     await db.commit()
@@ -330,19 +331,6 @@ async def update_db_credentials(
         "redeploy_queued": redeploy_queued,
     }
 
-
-@router.get("/api/servers/{server_id}/db-credentials/password")
-async def get_db_credential_password(
-    server_id: str, user: AdminUser, db: AsyncSession = Depends(get_db)
-):
-    """Return the decrypted monitoring-user password for admins who need to retrieve it."""
-    cred = await _get_credential(server_id, db)
-    if cred is None:
-        raise HTTPException(
-            404,
-            detail={"error": "not_found", "message": "No DB credentials configured for this server."},
-        )
-    return {"password": decrypt(cred.password_encrypted)}
 
 
 @router.delete("/api/servers/{server_id}/db-credentials", status_code=200)
