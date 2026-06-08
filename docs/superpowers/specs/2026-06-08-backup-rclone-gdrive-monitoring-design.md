@@ -100,6 +100,8 @@ The tab selection is client-side state, not persisted.
 
 ### 3.2 rclone Wrapper Snippet
 
+The snippet retries rclone up to **3 times** before giving up. On final failure it pings OpsPilot with the non-zero exit code, which triggers OpsPilot's existing `backup_failure` alert → email notification to the admin.
+
 ```bash
 #!/bin/bash
 # OpsPilot backup monitoring wrapper
@@ -107,17 +109,26 @@ The tab selection is client-side state, not persisted.
 
 REMOTE="gdrive:YOUR_REMOTE_PATH"    # ← set your rclone remote:path
 SOURCE="/your/source/path"           # ← set your local source directory
+MAX_RETRIES=3
+RETRY_DELAY=60                       # seconds to wait between retries
 
-# Run rclone sync
-rclone sync "$SOURCE" "$REMOTE"
-EXIT_CODE=$?
+# Run rclone with auto-retry
+EXIT_CODE=1
+ATTEMPT=0
+while [ $ATTEMPT -lt $MAX_RETRIES ]; do
+  ATTEMPT=$((ATTEMPT + 1))
+  rclone sync "$SOURCE" "$REMOTE"
+  EXIT_CODE=$?
+  [ $EXIT_CODE -eq 0 ] && break
+  [ $ATTEMPT -lt $MAX_RETRIES ] && sleep $RETRY_DELAY
+done
 
 # Query destination size and file count
 JSON=$(rclone size "$REMOTE" --json 2>/dev/null)
 SIZE_BYTES=$(echo "$JSON" | grep -o '"bytes":[0-9]*' | grep -o '[0-9]*$')
 FILES_COUNT=$(echo "$JSON" | grep -o '"count":[0-9]*' | grep -o '[0-9]*$')
 
-# Ping OpsPilot
+# Ping OpsPilot — exit_code != 0 fires a backup_failure alert + email
 curl -s -X POST "__PING_URL__" \
   -d "status=success&size_bytes=${SIZE_BYTES:-0}&exit_code=${EXIT_CODE}&files_count=${FILES_COUNT:-0}" \
   > /dev/null
@@ -127,6 +138,8 @@ exit $EXIT_CODE
 
 **Notes:**
 - `__PING_URL__` is substituted server-side with the real ping URL before sending to the frontend. The frontend never constructs this URL itself.
+- Retries 3 times with a 60-second delay between attempts. On success at any attempt, no further retries run.
+- On final failure (`exit_code != 0`), OpsPilot fires a `backup_failure` alert (severity: critical) which sends an email notification via the existing alerting system.
 - `rclone size --json` returns `{"count": N, "bytes": M}` — no Python or jq dependency.
 - `${SIZE_BYTES:-0}` and `${FILES_COUNT:-0}` guard against empty strings if `rclone size` fails.
 - `exit $EXIT_CODE` preserves the rclone exit code so cron/mail-on-error still works.
@@ -195,7 +208,10 @@ No changes. Adding files_count as a secondary axis would clutter the chart. Defe
 | Case | Behaviour |
 |---|---|
 | `rclone size` fails (network timeout, auth error) | `SIZE_BYTES` and `FILES_COUNT` fall back to `0` via `:-0`; ping still fires; size-zero alert may fire if `exit_code=0` and size is 0 |
-| Script runs but rclone had partial failure (exit_code != 0) | Ping fires with `exit_code=$EXIT_CODE`; outcome = `failed`; backup_failure alert fires |
+| rclone fails on first attempt | Script waits 60s and retries; up to 3 total attempts before pinging with failure |
+| rclone succeeds on retry 2 or 3 | `EXIT_CODE=0`; loop breaks; ping fires as success; no alert |
+| All 3 retries fail (exit_code != 0) | Ping fires with non-zero exit_code; OpsPilot fires `backup_failure` alert → email sent |
+| Script runs but rclone had partial failure (exit_code != 0) | Same as above — ping fires with `exit_code=$EXIT_CODE`; outcome = `failed`; backup_failure alert fires |
 | `files_count` absent from ping (old script) | `files_count = None`; displayed as `—`; no alert |
 | Destination grows to millions of files | `rclone size` may be slow; this runs after the sync so it doesn't block the backup itself |
 | Admin uses `rclone copy` instead of `rclone sync` | Snippet works unchanged — `REMOTE` in `rclone size` still queries the destination |
