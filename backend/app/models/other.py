@@ -280,6 +280,7 @@ class DBCredential(Base):
     is_replica: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     db_type: Mapped[str] = mapped_column(String(16), nullable=False, default="mysql", server_default="mysql")
     last_deadlock_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    label: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
     server: Mapped["Server"] = relationship(back_populates="db_credentials")
 

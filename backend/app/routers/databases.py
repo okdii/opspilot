@@ -35,7 +35,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.crypto import encrypt
+from app.core.crypto import decrypt, encrypt
 from app.database import AsyncSessionLocal, get_db
 from app.deps import AdminUser, CurrentUser
 from app.models.organization import Organization
@@ -97,6 +97,7 @@ class DBCredentialIn(BaseModel):
     password: str = Field(min_length=1, max_length=255)
     is_replica: bool = False
     db_type: str = Field(default="mysql", pattern="^(mysql|postgres)$")
+    label: str | None = Field(default=None, max_length=60)
 
 
 class DBCredentialPatch(BaseModel):
@@ -107,6 +108,7 @@ class DBCredentialPatch(BaseModel):
     password: str | None = Field(default=None, max_length=255)
     is_replica: bool | None = None
     db_type: str | None = Field(default=None, pattern="^(mysql|postgres)$")
+    label: str | None = Field(default=None, max_length=60)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -130,6 +132,25 @@ async def _get_credential(server_id: str, db: AsyncSession) -> DBCredential | No
     return await db.scalar(
         select(DBCredential).where(DBCredential.server_id == server_id).limit(1)
     )
+
+
+async def _get_credential_by_id(credential_id: str, server_id: str, db: AsyncSession) -> DBCredential:
+    cred = await db.scalar(
+        select(DBCredential).where(
+            DBCredential.id == credential_id,
+            DBCredential.server_id == server_id,
+        )
+    )
+    if cred is None:
+        raise HTTPException(
+            404,
+            detail={"error": "not_found", "message": "DB credential not found."},
+        )
+    return cred
+
+
+def _resolve_label(cred: DBCredential) -> str:
+    return cred.label or f"{cred.db_type}:{cred.port}"
 
 
 async def _last_check(db: AsyncSession, server_id: str) -> tuple[bool | None, datetime | None]:
@@ -308,6 +329,20 @@ async def update_db_credentials(
         "has_credentials": True,
         "redeploy_queued": redeploy_queued,
     }
+
+
+@router.get("/api/servers/{server_id}/db-credentials/password")
+async def get_db_credential_password(
+    server_id: str, user: AdminUser, db: AsyncSession = Depends(get_db)
+):
+    """Return the decrypted monitoring-user password for admins who need to retrieve it."""
+    cred = await _get_credential(server_id, db)
+    if cred is None:
+        raise HTTPException(
+            404,
+            detail={"error": "not_found", "message": "No DB credentials configured for this server."},
+        )
+    return {"password": decrypt(cred.password_encrypted)}
 
 
 @router.delete("/api/servers/{server_id}/db-credentials", status_code=200)
