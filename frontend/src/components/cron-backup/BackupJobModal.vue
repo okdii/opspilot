@@ -35,9 +35,7 @@ const submitting = ref(false)
 const editMode = computed(() => props.job != null)
 
 const lockedServer = computed(() =>
-  props.serverId
-    ? serverStore.servers.find((s) => s.id === props.serverId)
-    : null
+  props.serverId ? serverStore.servers.find((s) => s.id === props.serverId) ?? null : null
 )
 
 function reset(): void {
@@ -59,7 +57,7 @@ function reset(): void {
   }
 }
 
-watch(() => [props.job, props.serverId], reset, { immediate: true })
+watch(() => [props.job, props.serverId], reset, { immediate: true, deep: true })
 
 function validate(): boolean {
   errors.value = {}
