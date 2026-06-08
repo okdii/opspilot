@@ -150,6 +150,64 @@ const backupPostCommand = computed(
   () => `curl -s -X POST ${pingUrl.value} -d "status=success&size_bytes=<BYTES>&exit_code=$?"`,
 )
 
+const snippetTab = ref<'snippet' | 'curl'>('snippet')
+
+const rcloneSnippet = computed(() => {
+  const url = pingUrl.value
+  return [
+    '#!/bin/bash',
+    '# OpsPilot backup monitoring wrapper',
+    '# Edit REMOTE and SOURCE, then replace your existing rclone call with this script.',
+    '',
+    'REMOTE="gdrive:YOUR_REMOTE_PATH"    # ← set your rclone remote:path',
+    'SOURCE="/your/source/path"           # ← set your local source directory',
+    'MAX_RETRIES=3',
+    'RETRY_DELAY=60                       # seconds to wait between retries',
+    '',
+    '# Run rclone with auto-retry',
+    'EXIT_CODE=1',
+    'ATTEMPT=0',
+    'while [ $ATTEMPT -lt $MAX_RETRIES ]; do',
+    '  ATTEMPT=$((ATTEMPT + 1))',
+    '  rclone sync "$SOURCE" "$REMOTE"',
+    '  EXIT_CODE=$?',
+    '  [ $EXIT_CODE -eq 0 ] && break',
+    '  [ $ATTEMPT -lt $MAX_RETRIES ] && sleep $RETRY_DELAY',
+    'done',
+    '',
+    '# Query destination size and file count',
+    'JSON=$(rclone size "$REMOTE" --json 2>/dev/null)',
+    "SIZE_BYTES=$(echo \"$JSON\" | grep -o '\"bytes\":[0-9]*' | grep -o '[0-9]*$')",
+    "FILES_COUNT=$(echo \"$JSON\" | grep -o '\"count\":[0-9]*' | grep -o '[0-9]*$')",
+    '',
+    '# Ping OpsPilot — exit_code != 0 fires a backup_failure alert + email',
+    `curl -s -X POST "${url}" \\`,
+    '  -d "status=success&size_bytes=${SIZE_BYTES:-0}&exit_code=${EXIT_CODE}&files_count=${FILES_COUNT:-0}" \\',
+    '  > /dev/null',
+    '',
+    'exit $EXIT_CODE',
+  ].join('\n')
+})
+
+const curlOnlySnippet = computed(() => {
+  const url = pingUrl.value
+  return [
+    '# Add these lines at the end of your backup script.',
+    '# IMPORTANT: capture $? immediately after rclone, before any other command.',
+    'EXIT_CODE=$?',
+    'JSON=$(rclone size "gdrive:YOUR_REMOTE_PATH" --json 2>/dev/null)',
+    "SIZE_BYTES=$(echo \"$JSON\" | grep -o '\"bytes\":[0-9]*' | grep -o '[0-9]*$')",
+    "FILES_COUNT=$(echo \"$JSON\" | grep -o '\"count\":[0-9]*' | grep -o '[0-9]*$')",
+    `curl -s -X POST "${url}" \\`,
+    '  -d "status=success&size_bytes=${SIZE_BYTES:-0}&exit_code=${EXIT_CODE}&files_count=${FILES_COUNT:-0}" \\',
+    '  > /dev/null',
+  ].join('\n')
+})
+
+const activeSnippet = computed(() =>
+  snippetTab.value === 'snippet' ? rcloneSnippet.value : curlOnlySnippet.value
+)
+
 async function confirmRegenerate(): Promise<void> {
   if (!props.job) return
   regenerating.value = true
@@ -207,27 +265,44 @@ function fmtDuration(d: number | null | undefined): string {
       <!-- Ping URL block -->
       <section class="block ping-block">
         <div class="block-hd">
-          <h3>Ping URL</h3>
-          <button
-            v-if="canEdit"
-            class="link-danger"
-            @click="showRegenConfirm = true"
-          >Regenerate</button>
+          <h3>{{ isCron ? 'Ping URL' : 'rclone Snippet' }}</h3>
+          <button v-if="canEdit" class="link-danger" @click="showRegenConfirm = true">Regenerate</button>
         </div>
-        <pre class="curl">{{ curlCommand }}</pre>
-        <div class="ping-actions">
-          <button class="btn ghost sm" @click="copy(pingUrl, 'Ping URL')">Copy URL</button>
-          <button
-            v-if="!isCron"
-            class="btn ghost sm"
-            @click="copy(backupPostCommand, 'POST command')"
-          >Copy as POST</button>
-          <button v-else class="btn ghost sm" @click="copy(curlCommand, 'Command')">Copy Command</button>
-        </div>
-        <p class="hint">
-          Append this to the end of your {{ isCron ? 'cron' : 'backup' }} script.
-          The UUID in the URL is the only authentication.
-        </p>
+
+        <!-- Cron: simple curl line (unchanged) -->
+        <template v-if="isCron">
+          <pre class="curl">{{ curlCommand }}</pre>
+          <div class="ping-actions">
+            <button class="btn ghost sm" @click="copy(pingUrl, 'Ping URL')">Copy URL</button>
+            <button class="btn ghost sm" @click="copy(curlCommand, 'Command')">Copy Command</button>
+          </div>
+          <p class="hint">Append this to the end of your cron script. The UUID in the URL is the only authentication.</p>
+        </template>
+
+        <!-- Backup: rclone snippet with tab switcher -->
+        <template v-else>
+          <div class="snippet-tabs">
+            <button
+              class="stab"
+              :class="{ active: snippetTab === 'snippet' }"
+              @click="snippetTab = 'snippet'"
+            >rclone snippet</button>
+            <button
+              class="stab"
+              :class="{ active: snippetTab === 'curl' }"
+              @click="snippetTab = 'curl'"
+            >curl only</button>
+          </div>
+          <pre class="curl">{{ activeSnippet }}</pre>
+          <div class="ping-actions">
+            <button class="btn ghost sm" @click="copy(activeSnippet, 'Snippet')">Copy snippet</button>
+            <button class="btn ghost sm" @click="copy(pingUrl, 'Ping URL')">Copy URL</button>
+          </div>
+          <p class="hint">
+            Edit <code>REMOTE</code> and <code>SOURCE</code> before deploying.
+            The UUID in the URL is the only authentication.
+          </p>
+        </template>
       </section>
 
       <!-- Calendar heatmap -->
@@ -269,6 +344,7 @@ function fmtDuration(d: number | null | undefined): string {
               <th v-if="isCron">Duration</th>
               <template v-else>
                 <th>Size</th>
+                <th>Files</th>
                 <th>Exit</th>
               </template>
             </tr>
@@ -283,6 +359,7 @@ function fmtDuration(d: number | null | undefined): string {
               <td v-if="isCron">{{ fmtDuration(r.duration_sec) }}</td>
               <template v-else>
                 <td>{{ r.size_formatted ?? '—' }}</td>
+                <td class="num">{{ r.files_count != null ? r.files_count.toLocaleString() : '—' }}</td>
                 <td>{{ r.exit_code ?? '—' }}</td>
               </template>
             </tr>
@@ -330,6 +407,11 @@ function fmtDuration(d: number | null | undefined): string {
 .curl { background: #0f1117; border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-family: ui-monospace, monospace; font-size: 11px; color: var(--green); overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin-bottom: 12px; }
 .ping-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 .hint { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.hint code { background: rgba(255,255,255,0.07); border-radius: 3px; padding: 1px 4px; font-family: ui-monospace, monospace; }
+.snippet-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+.stab { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--muted); font-size: 11px; padding: 4px 10px; cursor: pointer; }
+.stab.active { background: rgba(99, 102, 241, 0.15); border-color: rgba(99, 102, 241, 0.4); color: var(--accent-2); }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 .empty-note { font-size: 12px; color: var(--muted); padding: 8px 0; }
 
