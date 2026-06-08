@@ -11,36 +11,41 @@ INGESTION_TOKEN = "{{ ingestion_token }}"
 INTERVAL_SEC = 60
 
 SERVICES = [
-    {"name": "apache",     "aliases": ["apache2", "httpd"]},
-    {"name": "nginx",      "aliases": ["nginx"]},
-    {"name": "mysql",      "aliases": ["mysql", "mysqld", "mariadb"]},
-    {"name": "php-fpm",    "aliases": ["php-fpm", "php8.1-fpm", "php8.2-fpm", "php7.4-fpm"]},
-    {"name": "postgresql", "aliases": ["postgresql", "postgres"]},
-    {"name": "redis",      "aliases": ["redis", "redis-server"]},
-    {"name": "mongodb",    "aliases": ["mongod"]},
-    {"name": "nodejs",     "aliases": ["node", "nodejs"]},
-    {"name": "docker",     "aliases": ["docker"]},
+    {"name": "apache",     "aliases": ["apache2", "httpd"],                                    "proc_names": ["apache2", "httpd"]},
+    {"name": "nginx",      "aliases": ["nginx"],                                               "proc_names": ["nginx"]},
+    {"name": "mysql",      "aliases": ["mysql", "mysqld", "mariadb"],                          "proc_names": ["mysqld", "mariadbd"]},
+    {"name": "php-fpm",    "aliases": ["php-fpm", "php8.1-fpm", "php8.2-fpm", "php7.4-fpm"], "proc_names": ["php-fpm", "php8.1-fpm", "php8.2-fpm", "php7.4-fpm"]},
+    {"name": "postgresql", "aliases": ["postgresql", "postgres"],                              "proc_names": ["postgres"]},
+    {"name": "redis",      "aliases": ["redis", "redis-server"],                               "proc_names": ["redis-server"]},
+    {"name": "mongodb",    "aliases": ["mongod"],                                              "proc_names": ["mongod"]},
+    {"name": "nodejs",     "aliases": ["node", "nodejs"],                                      "proc_names": ["node"]},
+    {"name": "docker",     "aliases": ["docker"],                                              "proc_names": ["dockerd"]},
 ]
 
 
-def _systemctl_active(unit):
+def _unit_state(unit):
+    """Return (load_state, active_state) for a systemd unit."""
     try:
         r = subprocess.run(
-            ["systemctl", "is-active", unit],
+            ["systemctl", "show", "--property=LoadState,ActiveState", unit],
             capture_output=True, text=True, timeout=5,
         )
-        return r.stdout.strip()
+        props = dict(
+            line.split("=", 1) for line in r.stdout.strip().splitlines() if "=" in line
+        )
+        return props.get("LoadState", "not-found"), props.get("ActiveState", "unknown")
     except Exception:
-        return "unknown"
+        return "not-found", "unknown"
 
 
-def _proc_stats(service_name):
+def _proc_stats(proc_names):
     try:
         import psutil
-        target = service_name.lower()
+        targets = [p.lower() for p in proc_names]
         for proc in psutil.process_iter(["name", "cpu_percent", "memory_info", "create_time"]):
             try:
-                if target in proc.info["name"].lower():
+                pname = proc.info["name"].lower()
+                if any(t in pname for t in targets):
                     cpu = proc.cpu_percent(interval=0.1)
                     mem_mb = round(proc.info["memory_info"].rss / (1024 * 1024), 2)
                     uptime = int(time.time() - proc.info["create_time"])
@@ -57,16 +62,17 @@ def collect_services():
     for svc in SERVICES:
         status = "not_installed"
         for alias in svc["aliases"]:
-            state = _systemctl_active(alias)
-            if state == "active":
+            load, active = _unit_state(alias)
+            if load == "not-found":
+                continue  # unit doesn't exist, try next alias
+            if active == "active":
                 status = "running"
-                break
-            if state in ("inactive", "failed", "activating", "deactivating"):
+            else:
                 status = "stopped"
-                break
+            break
         entry = {"name": svc["name"], "status": status}
         if status == "running":
-            entry.update(_proc_stats(svc["name"]))
+            entry.update(_proc_stats(svc["proc_names"]))
         else:
             entry.update({"cpu_pct": None, "mem_mb": None, "uptime_seconds": None})
         results.append(entry)

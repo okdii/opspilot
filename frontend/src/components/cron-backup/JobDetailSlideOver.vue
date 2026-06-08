@@ -148,8 +148,11 @@ const rcloneSnippet = computed(() => {
   const url = pingUrl.value
   return [
     '#!/bin/bash',
-    '# OpsPilot backup monitoring wrapper',
-    '# Edit REMOTE and SOURCE, then replace your existing rclone call with this script.',
+    '# OpsPilot backup monitoring wrapper — use as a standalone script.',
+    '# Option A: save as a new .sh file and point your cron job here.',
+    '# Option B: copy only the retry block + curl ping into your existing script.',
+    '#   If integrating: capture EXIT_CODE=$? immediately after rclone,',
+    '#   and place the curl ping as the last line before exit.',
     '',
     'REMOTE="gdrive:YOUR_REMOTE_PATH"    # ← set your rclone remote:path',
     'SOURCE="/your/source/path"           # ← set your local source directory',
@@ -252,7 +255,7 @@ function fmtDuration(d: number | null | undefined): string {
       <!-- Snippet block: rclone snippet / curl only tabs -->
       <section class="block ping-block">
         <div class="block-hd">
-          <h3>rclone Snippet</h3>
+          <h3>Integration Snippet</h3>
           <button v-if="canEdit" class="link-danger" @click="showRegenConfirm = true">Regenerate</button>
         </div>
         <div class="snippet-tabs">
@@ -260,12 +263,12 @@ function fmtDuration(d: number | null | undefined): string {
             class="stab"
             :class="{ active: snippetTab === 'snippet' }"
             @click="snippetTab = 'snippet'"
-          >rclone snippet</button>
+          >Standalone script</button>
           <button
             class="stab"
             :class="{ active: snippetTab === 'curl' }"
             @click="snippetTab = 'curl'"
-          >curl only</button>
+          >Add to existing script</button>
         </div>
         <pre class="curl">{{ activeSnippet }}</pre>
         <div class="ping-actions">
@@ -273,7 +276,8 @@ function fmtDuration(d: number | null | undefined): string {
           <button class="btn ghost sm" @click="copy(pingUrl, 'Ping URL')">Copy URL</button>
         </div>
         <p class="hint">
-          Edit <code>REMOTE</code> and <code>SOURCE</code> before deploying.
+          <strong>Standalone:</strong> save as a new <code>.sh</code> file, fill in <code>REMOTE</code> and <code>SOURCE</code>, point your cron job here. &nbsp;
+          <strong>Existing script:</strong> paste only the curl ping block at the end — <code>EXIT_CODE=$?</code> must come immediately after your rclone call.
           The UUID in the URL is the only authentication.
         </p>
       </section>

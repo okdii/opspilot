@@ -8,14 +8,13 @@ import type { ServerServiceEntry } from '@/types'
 const metrics = useMetricsStore()
 const services = ref<ServerServiceEntry[]>([])
 const loading = ref(true)
-const showNotInstalled = ref(false)
 
 async function fetchServices() {
   const id = metrics.activeServerId
   if (!id) return
   loading.value = true
   try {
-    services.value = await getServerServices(id, showNotInstalled.value)
+    services.value = await getServerServices(id, true)
   } catch {
     // keep stale data on transient error
   } finally {
@@ -34,8 +33,6 @@ function formatUptime(seconds: number | null): string {
 }
 
 onMounted(() => void fetchServices())
-watch(showNotInstalled, () => void fetchServices())
-// Refresh when the server's metrics update (WS heartbeat path)
 watch(() => metrics.latestValues, () => void fetchServices(), { deep: false })
 </script>
 
@@ -43,10 +40,6 @@ watch(() => metrics.latestValues, () => void fetchServices(), { deep: false })
   <div class="svc">
     <div class="svc-head">
       <h3>System Services</h3>
-      <label class="toggle">
-        <input type="checkbox" v-model="showNotInstalled" />
-        <span>Show not installed</span>
-      </label>
     </div>
 
     <div v-if="loading && !services.length" class="skeleton-wrap">
@@ -92,8 +85,6 @@ watch(() => metrics.latestValues, () => void fetchServices(), { deep: false })
 .svc-head { display: flex; align-items: center; justify-content: space-between; }
 .svc-head h3 { font-size: 15px; color: var(--text); font-weight: 600; }
 
-.toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
-.toggle input { accent-color: var(--accent); cursor: pointer; }
 
 .skeleton-wrap { display: flex; flex-direction: column; gap: 8px; }
 .skeleton-row {

@@ -259,6 +259,21 @@ async def get_service_security(
     )
 
 
+@router.post("/api/organizations/{org_id}/services/{service_id}/security/scan", status_code=202)
+async def trigger_security_scan(
+    org_id: str, service_id: str, user: CurrentUser, db: AsyncSession = Depends(get_db)
+):
+    """Trigger an immediate security audit for an HTTPS service (bypasses the 24 h throttle)."""
+    await _assert_org_access(org_id, user, db)
+    service = await _get_accessible_service(service_id, user, db)
+    if not service.ssl_enabled:
+        raise HTTPException(400, detail={"error": "not_http", "message": "Security audit only available for HTTPS services."})
+    import asyncio
+    from app.services.security_checker import run_security_check
+    asyncio.ensure_future(run_security_check(service_id))
+    return {"queued": True}
+
+
 # ── Create / update / delete (Admin) ────────────────────────────────────────
 
 

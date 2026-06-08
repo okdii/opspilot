@@ -21,7 +21,7 @@ const passwordRef = ref<HTMLInputElement | null>(null)
 
 // Dev-only demo credentials helper (never rendered in production builds).
 const isDev = import.meta.env.DEV
-const demoCreds = { username: 'admin', password: 'OpsPilot123!' }
+const demoCreds = { username: 'admin', password: 'admin123' }
 
 function fillDemo(submit = false) {
   username.value = demoCreds.username

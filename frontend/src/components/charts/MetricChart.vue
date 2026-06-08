@@ -35,6 +35,10 @@ const props = withDefaults(
     colors?: string[]
     /** Render bar chart with horizontal bars (categories on y-axis, values on x-axis). */
     horizontal?: boolean
+    /** Time ranges (ms timestamps) to shade red as down periods. */
+    downPeriods?: Array<{ start: number; end: number }>
+    /** Number of x-axis ticks. ApexCharts auto-hides overlapping labels. */
+    tickAmount?: number
   }>(),
   {
     height: 300,
@@ -91,22 +95,49 @@ function formatValue(v: number): string {
 
 const isAxisChart = computed(() => props.type === 'area' || props.type === 'line' || props.type === 'bar')
 
+// When any series carries its own `type` field, ApexCharts runs in mixed mode.
+const isMixed = computed(() =>
+  isAxisChart.value &&
+  (props.series as any[]).some((s) => s && typeof s === 'object' && 'type' in s),
+)
+// Per-series stroke widths and marker sizes for mixed charts (scatter = no line, big dot).
+const mixedStroke = computed(() =>
+  isMixed.value
+    ? (props.series as any[]).map((s) => (s?.type === 'scatter' ? 0 : 2))
+    : undefined,
+)
+const mixedMarkers = computed(() =>
+  isMixed.value
+    ? (props.series as any[]).map((s) => (s?.type === 'scatter' ? 4 : 0))
+    : undefined,
+)
+
 const yMax = computed<number | undefined>(() => (props.unit === '%' ? 100 : undefined))
 
 const annotations = computed<ApexOptions['annotations']>(() => {
-  if (!props.thresholds?.length || !isAxisChart.value) return {}
-  return {
-    yaxis: props.thresholds.map((t) => ({
-      y: t.value,
+  if (!isAxisChart.value) return {}
+  const yaxis = (props.thresholds ?? []).map((t) => ({
+    y: t.value,
+    borderColor: t.color,
+    strokeDashArray: 4,
+    label: {
+      text: t.label ?? formatValue(t.value),
       borderColor: t.color,
-      strokeDashArray: 4,
-      label: {
-        text: t.label ?? formatValue(t.value),
-        borderColor: t.color,
-        style: { color: '#0f1117', background: t.color, fontSize: '10px' },
-      },
-    })),
-  }
+      style: { color: '#0f1117', background: t.color, fontSize: '10px' },
+    },
+  }))
+  const xaxis = (props.downPeriods ?? []).map((p) => ({
+    x: p.start,
+    x2: p.end,
+    fillColor: '#ef4444',
+    opacity: 0.12,
+    label: {
+      text: 'Down',
+      borderColor: '#ef4444',
+      style: { color: '#ef4444', background: 'transparent', fontSize: '10px' },
+    },
+  }))
+  return { yaxis, xaxis }
 })
 
 const options = computed<ApexOptions>(() => {
@@ -132,8 +163,9 @@ const options = computed<ApexOptions>(() => {
     },
     stroke: {
       curve: 'smooth',
-      width: props.type === 'bar' ? 0 : 2,
+      width: mixedStroke.value ?? (props.type === 'bar' ? 0 : 2),
     },
+    markers: mixedMarkers.value ? { size: mixedMarkers.value, strokeWidth: 0 } : { size: 0 },
     legend: {
       labels: { colors: THEME.muted },
       fontSize: '12px',
@@ -153,9 +185,11 @@ const options = computed<ApexOptions>(() => {
       // Default to [] — ApexCharts calls xaxis.categories.slice() unconditionally
       // for axis charts, so an undefined value crashes parseDataAxisCharts.
       categories: props.categories ?? [],
+      tickAmount: props.tickAmount,
       labels: {
         style: { colors: THEME.muted, fontSize: '11px' },
         datetimeUTC: false,
+        datetimeFormatter: { hour: 'HH:mm', minute: 'HH:mm' },
       },
       axisBorder: { color: THEME.border },
       axisTicks: { color: THEME.border },

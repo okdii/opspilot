@@ -11,10 +11,43 @@ const emit = defineEmits<{ (e: 'setup'): void }>()
 
 const notify = useNotify()
 
+function generatePassword(): string {
+  const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+  const lower = 'abcdefghijklmnopqrstuvwxyz'
+  const digits = '0123456789'
+  const special = '!@#$%^&*()-_=+'
+  const all = upper + lower + digits + special
+  const arr = new Uint32Array(20)
+  crypto.getRandomValues(arr)
+  // Ensure at least one of each character class
+  const required = [
+    upper[arr[0] % upper.length],
+    lower[arr[1] % lower.length],
+    digits[arr[2] % digits.length],
+    special[arr[3] % special.length],
+  ]
+  const rest = Array.from(arr.slice(4), n => all[n % all.length])
+  const combined = [...required, ...rest]
+  // Fisher-Yates shuffle
+  const swapArr = new Uint32Array(combined.length)
+  crypto.getRandomValues(swapArr)
+  for (let i = combined.length - 1; i > 0; i--) {
+    const j = swapArr[i] % (i + 1)
+    ;[combined[i], combined[j]] = [combined[j], combined[i]]
+  }
+  return combined.join('')
+}
+
+const password = ref(generatePassword())
+
+function regenerate() {
+  password.value = generatePassword()
+}
+
 const setupSql = computed(() =>
   props.dbType === 'postgres'
-    ? `CREATE USER opspilot WITH PASSWORD '<password>';\nGRANT pg_monitor TO opspilot;`
-    : `CREATE USER 'opspilot_monitor'@'%' IDENTIFIED BY '<password>';\nGRANT PROCESS, REPLICATION CLIENT,\n  SELECT ON *.* TO 'opspilot_monitor'@'%';\nFLUSH PRIVILEGES;`
+    ? `CREATE USER opspilot WITH PASSWORD '${password.value}';\nGRANT pg_monitor TO opspilot;`
+    : `CREATE USER 'opspilot_monitor'@'%' IDENTIFIED BY '${password.value}';\nGRANT PROCESS, REPLICATION CLIENT,\n  SELECT ON *.* TO 'opspilot_monitor'@'%';\nFLUSH PRIVILEGES;`
 )
 
 const dbLabel = computed(() => props.dbType === 'postgres' ? 'PostgreSQL' : 'MariaDB')
@@ -52,9 +85,14 @@ async function copySql() {
       <span class="step-label">Step 1 — Run on {{ serverName }}</span>
       <div class="sql-card">
         <pre class="sql"><code>{{ setupSql }}</code></pre>
-        <button class="copy-btn" type="button" @click="copySql">
-          {{ copied ? 'Copied' : 'Copy SQL' }}
-        </button>
+        <div class="sql-actions">
+          <button class="copy-btn" type="button" @click="copySql">
+            {{ copied ? 'Copied' : 'Copy SQL' }}
+          </button>
+          <button class="regen-btn" type="button" @click="regenerate" title="Generate a new password">
+            ↻
+          </button>
+        </div>
       </div>
     </div>
 
@@ -88,12 +126,19 @@ async function copySql() {
   margin: 0; font-family: 'SFMono-Regular', ui-monospace, Menlo, Consolas, monospace;
   font-size: 12.5px; line-height: 1.6; color: #c7d2fe; white-space: pre-wrap; word-break: break-word;
 }
+.sql-actions {
+  position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; align-items: center;
+}
 .copy-btn {
-  position: absolute; top: 10px; right: 10px;
   background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
   font-size: 11px; padding: 5px 10px; border-radius: 6px; cursor: pointer; min-height: 28px;
 }
 .copy-btn:hover { border-color: var(--accent); color: var(--accent-2); }
+.regen-btn {
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--muted);
+  font-size: 14px; padding: 0 8px; border-radius: 6px; cursor: pointer; min-height: 28px; line-height: 1;
+}
+.regen-btn:hover { border-color: var(--accent); color: var(--accent-2); }
 .setup-btn {
   background: var(--accent); color: #fff; border: none; border-radius: 8px;
   font-size: 13px; font-weight: 600; padding: 11px 18px; cursor: pointer; min-height: 44px;

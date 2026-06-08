@@ -276,6 +276,10 @@ export const useServiceStore = defineStore('services', () => {
     }
   }
 
+  async function triggerSecurityScan(orgId: string, serviceId: string): Promise<void> {
+    await api.post(`/api/organizations/${orgId}/services/${serviceId}/security/scan`)
+  }
+
   // ── Mutations (Admin) ──────────────────────────────────────────────────────
 
   async function createService(payload: ServiceCreatePayload): Promise<Service> {
@@ -385,6 +389,7 @@ export const useServiceStore = defineStore('services', () => {
     fetchIncidents,
     fetchChecks,
     fetchSecurityScan,
+    triggerSecurityScan,
     createService,
     updateService,
     deleteService,
