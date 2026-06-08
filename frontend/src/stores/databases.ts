@@ -9,6 +9,8 @@ import type { MetricRange } from '@/types'
 // only the shared axios `api` instance is imported.
 // ---------------------------------------------------------------------------
 
+export type DbType = 'mysql' | 'postgres'
+
 /** One row from GET /api/organizations/:org_id/db-credentials.
  *  Fields beyond has_credentials are only present when has_credentials = true. */
 export interface DbCredentialStatus {
@@ -19,6 +21,7 @@ export interface DbCredentialStatus {
   port?: number
   username?: string
   is_replica?: boolean
+  db_type: DbType
   /** null = no successful check yet (e.g. re-deploy just queued). */
   last_check_ok?: boolean | null
   last_checked?: string | null
@@ -37,6 +40,12 @@ export interface DbMetricsLatest {
   replication_running: boolean | null
   table_locks_waited: number | null
   aborted_connections: number | null
+  // PostgreSQL-specific (null for MySQL servers)
+  transactions_per_sec: number | null
+  cache_hit_rate: number | null
+  tuple_ops_per_sec: number | null
+  temp_files_per_min: number | null
+  checkpoints_per_min: number | null
   mariadb_version: string | null
   last_collected_at: string | null
 }
@@ -63,6 +72,7 @@ export interface DbCredentialPayload {
   username: string
   password?: string
   is_replica: boolean
+  db_type: DbType
 }
 
 export type DbMetricName =
@@ -75,6 +85,16 @@ export type DbMetricName =
   | 'table_locks_waited'
   | 'aborted_connections'
 
+export type DbPgMetricName =
+  | 'connections_active'
+  | 'transactions_per_sec'
+  | 'cache_hit_rate'
+  | 'deadlocks'
+  | 'tuple_ops_per_sec'
+  | 'temp_files_per_min'
+  | 'checkpoints_per_min'
+  | 'replication_lag_sec'
+
 const EMPTY_LATEST: DbMetricsLatest = {
   connections_active: null,
   connections_max: null,
@@ -86,6 +106,11 @@ const EMPTY_LATEST: DbMetricsLatest = {
   replication_running: null,
   table_locks_waited: null,
   aborted_connections: null,
+  transactions_per_sec: null,
+  cache_hit_rate: null,
+  tuple_ops_per_sec: null,
+  temp_files_per_min: null,
+  checkpoints_per_min: null,
   mariadb_version: null,
   last_collected_at: null,
 }
