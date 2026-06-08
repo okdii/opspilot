@@ -173,6 +173,7 @@ class BackupJobOut(BaseModel):
     last_size_formatted: str | None
     last_status_text: str | None
     previous_size_bytes: int | None
+    last_files_count: int | None = None
     status: str
     next_expected_at: datetime | None
 
@@ -184,3 +185,4 @@ class BackupRunOut(BaseModel):
     size_formatted: str | None
     exit_code: int | None
     outcome: str
+    files_count: int | None = None

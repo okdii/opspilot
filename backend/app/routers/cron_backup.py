@@ -179,6 +179,7 @@ def _backup_out(job: BackupJob, server_name: str, base: str) -> BackupJobOut:
         last_size_formatted=_format_bytes(job.last_size_bytes),
         last_status_text=job.last_status_text,
         previous_size_bytes=job.previous_size_bytes,
+        last_files_count=job.last_files_count,
         status=job.status,
         next_expected_at=nxt,
     )
@@ -208,7 +209,7 @@ async def ping_get(
     backup = await db.scalar(select(BackupJob).where(BackupJob.ping_token == token_uuid))
     if backup is not None:
         # GET on a backup token → zero-value payload (spec §9.2 note).
-        return await _handle_backup_ping(db, backup, size_bytes=0, exit_code=0, status="success")
+        return await _handle_backup_ping(db, backup, size_bytes=0, exit_code=0, status="success", files_count=None)
 
     raise HTTPException(404, detail={"error": "unknown token"})
 
@@ -242,12 +243,20 @@ async def ping_post(
 
     backup = await db.scalar(select(BackupJob).where(BackupJob.ping_token == token_uuid))
     if backup is not None:
+        fc_raw = form.get("files_count")
+        files_count: int | None = None
+        if fc_raw is not None and fc_raw != "":
+            try:
+                files_count = int(fc_raw)
+            except (TypeError, ValueError):
+                files_count = None
         return await _handle_backup_ping(
             db,
             backup,
             size_bytes=_as_int("size_bytes", 0),
             exit_code=_as_int("exit_code", 0),
             status=str(form.get("status") or "success"),
+            files_count=files_count,
         )
 
     cron = await db.scalar(select(CronJob).where(CronJob.ping_token == token_uuid))
@@ -289,7 +298,7 @@ async def _handle_cron_ping(db: AsyncSession, job: CronJob, event: str | None):
     return {"ok": True}
 
 
-async def _handle_backup_ping(db: AsyncSession, job: BackupJob, *, size_bytes: int, exit_code: int, status: str):
+async def _handle_backup_ping(db: AsyncSession, job: BackupJob, *, size_bytes: int, exit_code: int, status: str, files_count: int | None):
     from app.services.alerting import fire_alert
 
     now = _now()
@@ -312,6 +321,7 @@ async def _handle_backup_ping(db: AsyncSession, job: BackupJob, *, size_bytes: i
 
     job.last_ping_at = now
     job.last_size_bytes = size_bytes
+    job.last_files_count = files_count
     job.last_status_text = status
     job.status = "healthy"
     if outcome == "success":
@@ -324,6 +334,7 @@ async def _handle_backup_ping(db: AsyncSession, job: BackupJob, *, size_bytes: i
             size_bytes=size_bytes,
             exit_code=exit_code,
             outcome=outcome,
+            files_count=files_count,
         )
     )
     await db.flush()
@@ -585,6 +596,7 @@ async def list_backup_runs(
                 size_formatted=_format_bytes(r.size_bytes),
                 exit_code=r.exit_code,
                 outcome=r.outcome,
+                files_count=r.files_count,
             )
             for r in rows
         ],
