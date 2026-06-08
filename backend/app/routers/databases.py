@@ -374,16 +374,18 @@ async def get_db_credential_password(
 
 @router.get("/api/servers/{server_id}/db-metrics/latest")
 async def get_db_metrics_latest(
-    server_id: str, user: CurrentUser, db: AsyncSession = Depends(get_db)
+    server_id: str,
+    user: CurrentUser,
+    credential_id: str = Query(...),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Latest DB metric values for the stat cards (spec §11 DBMetricsLatest).
-    Returns null-valued fields gracefully when no DB metrics are flowing yet."""
+    """Latest DB metric values for the stat cards. Filtered to the given credential instance."""
     await _assert_server_access(server_id, user, db)
 
-    cred = await _get_credential(server_id, db)
-    is_pg = cred and cred.db_type == "postgres"
+    cred = await _get_credential_by_id(credential_id, server_id, db)
+    label = _resolve_label(cred)
+    is_pg = cred.db_type == "postgres"
 
-    # Latest single sample per metric within a short lookback (10 min).
     rows = (
         await db.execute(
             text(
@@ -393,10 +395,11 @@ async def get_db_metrics_latest(
                 WHERE server_id = :sid
                   AND (metric_name LIKE 'mysql.%' OR metric_name LIKE 'mariadb.%' OR metric_name LIKE 'postgresql.%')
                   AND time >= now() - INTERVAL '10 minutes'
+                  AND (labels->>'db_label' = :label OR labels->>'db_label' IS NULL)
                 ORDER BY metric_name, time DESC
                 """
             ),
-            {"sid": str(server_id)},
+            {"sid": str(server_id), "label": label},
         )
     ).all()
     latest: dict[str, float] = {m: float(v) for m, v, _ in rows if v is not None}
@@ -409,45 +412,49 @@ async def get_db_metrics_latest(
     if is_pg:
         return {
             "connections_active":   _val("postgresql.numbackends"),
-            "transactions_per_sec": await _rate_latest(db, server_id, "postgresql.xact_commit", per="sec"),
+            "connections_max":      None,
+            "queries_per_sec":      None,
+            "slow_queries_per_min": None,
+            "innodb_buffer_pool_hit_rate": None,
+            "innodb_deadlocks":     None,
+            "transactions_per_sec": await _rate_latest(db, server_id, "postgresql.xact_commit", per="sec", db_label=label),
             "cache_hit_rate":       _val("postgresql.blks_hit_rate"),
-            "deadlocks":            await _rate_latest(db, server_id, "postgresql.deadlocks", per="sec"),
-            "tuple_ops_per_sec":    await _pg_tuple_ops_rate(db, server_id),
-            "temp_files_per_min":   await _rate_latest(db, server_id, "postgresql.temp_files", per="min"),
-            "checkpoints_per_min":  await _rate_latest(db, server_id, "postgresql.checkpoints_timed", per="min"),
-            "replication_lag_sec":  _val("postgresql.replication_delay") if (cred and cred.is_replica) else None,
+            "deadlocks":            await _rate_latest(db, server_id, "postgresql.deadlocks", per="sec", db_label=label),
+            "tuple_ops_per_sec":    await _pg_tuple_ops_rate(db, server_id, db_label=label),
+            "temp_files_per_min":   await _rate_latest(db, server_id, "postgresql.temp_files", per="min", db_label=label),
+            "checkpoints_per_min":  await _rate_latest(db, server_id, "postgresql.checkpoints_timed", per="min", db_label=label),
+            "replication_lag_sec":  _val("postgresql.replication_delay") if cred.is_replica else None,
             "replication_running":  None,
             "mariadb_version":      None,
             "last_collected_at":    last_t.isoformat() if last_t else None,
         }
 
-    # Rate-based fields (per second / per minute) are derived from the last two
-    # raw counter samples.
-    qps = await _rate_latest(db, server_id, "mysql.queries", per="sec")
-    slow_pm = await _rate_latest(db, server_id, "mysql.slow_queries", per="min")
-
-    # mariadb version arrives as a string field; we don't store strings in
-    # server_metrics (numeric only), so version is surfaced as null here and
-    # read from the metric labels by the frontend if available.
-    is_replica = bool(cred.is_replica) if cred else False
+    qps = await _rate_latest(db, server_id, "mysql.queries", per="sec", db_label=label)
+    slow_pm = await _rate_latest(db, server_id, "mysql.slow_queries", per="min", db_label=label)
 
     return {
-        "connections_active": _val("mysql.threads_connected"),
-        "connections_max": _val(_MAX_CONNECTIONS_METRIC),
-        "queries_per_sec": qps,
-        "slow_queries_per_min": slow_pm,
+        "connections_active":         _val("mysql.threads_connected"),
+        "connections_max":            _val(_MAX_CONNECTIONS_METRIC),
+        "queries_per_sec":            qps,
+        "slow_queries_per_min":       slow_pm,
         "innodb_buffer_pool_hit_rate": _val("mysql.innodb_buffer_pool_hit_rate"),
-        "innodb_deadlocks": _val("mysql.innodb_deadlocks"),
-        "replication_lag_sec": _val("mariadb.seconds_behind_master") if is_replica else None,
+        "innodb_deadlocks":           _val("mysql.innodb_deadlocks"),
+        "replication_lag_sec":        _val("mariadb.seconds_behind_master") if cred.is_replica else None,
         "replication_running": (
             bool(_val("mariadb.replication_running"))
-            if (is_replica and _val("mariadb.replication_running") is not None)
+            if (cred.is_replica and _val("mariadb.replication_running") is not None)
             else None
         ),
-        "table_locks_waited": _val("mysql.table_locks_waited"),
+        "table_locks_waited":  _val("mysql.table_locks_waited"),
         "aborted_connections": _val("mysql.aborted_connects"),
-        "mariadb_version": None,
-        "last_collected_at": last_t.isoformat() if last_t else None,
+        "deadlocks":           None,
+        "transactions_per_sec": None,
+        "cache_hit_rate":      None,
+        "tuple_ops_per_sec":   None,
+        "temp_files_per_min":  None,
+        "checkpoints_per_min": None,
+        "mariadb_version":     None,
+        "last_collected_at":   last_t.isoformat() if last_t else None,
     }
 
 
@@ -505,17 +512,17 @@ async def _pg_tuple_ops_rate(db: AsyncSession, server_id: str, *, db_label: str 
 async def get_db_metrics(
     server_id: str,
     user: CurrentUser,
+    credential_id: str = Query(...),
     metric: str = Query(...),
     range: str = Query("1h"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Time-series chart data for one DB metric over a range (spec §12.2).
-    Counter-derived metrics are returned as rates. Returns an empty `data` array
-    gracefully when no samples exist."""
+    """Time-series chart data for one DB metric over a range. Filtered to credential instance."""
     await _assert_server_access(server_id, user, db)
 
-    cred = await _get_credential(server_id, db)
-    metric_map = _PG_METRIC_MAP if (cred and cred.db_type == "postgres") else _METRIC_MAP
+    cred = await _get_credential_by_id(credential_id, server_id, db)
+    label = _resolve_label(cred)
+    metric_map = _PG_METRIC_MAP if cred.db_type == "postgres" else _METRIC_MAP
 
     if metric not in metric_map:
         raise HTTPException(
@@ -530,15 +537,14 @@ async def get_db_metrics(
     source, valcol, timecol, resolution = RANGE_SOURCE[range]
     interval = RANGE_INTERVAL[range]
 
-    pts = await _series(db, server_id, stored, source, valcol, timecol, interval, is_rate)
+    pts = await _series(db, server_id, stored, source, valcol, timecol, interval, is_rate, db_label=label)
 
     result: dict = {"metric": metric, "range": range, "resolution": resolution, "data": pts}
 
-    if metric == "connections_active" and not (cred and cred.db_type == "postgres"):
+    if metric == "connections_active" and cred.db_type != "postgres":
         max_pts = await _series(
-            db, server_id, _MAX_CONNECTIONS_METRIC, source, valcol, timecol, interval, False
+            db, server_id, _MAX_CONNECTIONS_METRIC, source, valcol, timecol, interval, False, db_label=label
         )
-        # Ceiling line: the most recent max value (or null when unavailable).
         result["connections_max"] = max_pts[-1]["value"] if max_pts else None
 
     return result
