@@ -136,11 +136,39 @@ def format_fire_body(
     return "\n".join(lines) + "\n"
 
 
+_RESOLVE_SUMMARY: dict[str, str] = {
+    "service_down": "Good news — the service is back up and running normally.",
+    "cpu": "CPU usage has returned to normal levels.",
+    "ram": "RAM usage has returned to normal levels.",
+    "disk": "Disk usage has returned to normal levels.",
+    "disk_inode": "Disk inode usage has returned to normal levels.",
+    "agent_offline": "The agent is back online and reporting normally.",
+    "ssl_expiry": "The SSL certificate issue has been resolved.",
+    "domain_expiry": "The domain registration issue has been resolved.",
+    "cron_missing": "The cron job has been detected and is running normally.",
+    "backup_missing": "The backup job has resumed running normally.",
+    "backup_failure": "The backup job completed successfully.",
+    "backup_size_drop": "Backup size has returned to expected levels.",
+    "db_connections": "Database connection count has returned to normal.",
+    "db_replication_lag": "Database replication lag has cleared.",
+    "db_replication_stopped": "Database replication has resumed.",
+    "db_deadlock": "No further deadlocks have been detected.",
+    "php_fatal": "No further PHP fatal errors have been detected.",
+    "nginx_5xx": "Nginx error rate has returned to normal.",
+    "ssh_brute_force": "SSH brute force activity has subsided.",
+    "mariadb_error": "No further MariaDB errors have been detected.",
+    "slow_query_spike": "Slow query rate has returned to normal.",
+}
+
+
 def format_resolve_body(alert: Alert, *, server_name: str | None) -> str:
+    summary = _RESOLVE_SUMMARY.get(alert.type, "The issue has been resolved and everything is back to normal.")
     lines = [
         _DIVIDER,
         "OpsPilot Alert — Resolved",
         _DIVIDER,
+        "",
+        summary,
         "",
         f"Severity:   {alert.severity.upper()} (resolved)",
         f"Server:     {server_name or '—'}",
