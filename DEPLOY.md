@@ -197,6 +197,99 @@ OpsPilot installs and configures Telegraf (metrics) and Fluent Bit (logs) automa
 
 ---
 
+## Deploying Your Own Instance
+
+Anyone can run their own OpsPilot instance using the pre-built images from GitHub Container Registry (GHCR). You do not need to build anything — just pull and run.
+
+### How it works
+
+```
+GitHub Container Registry (ghcr.io/okdii/opspilot-*)
+        │
+        ▼
+  Your VPS (docker compose pull + up -d)
+```
+
+All images are built automatically by the CI/CD pipeline on every push to `main`.
+
+### Prerequisites
+
+- Ubuntu 22.04 LTS (or Debian 12) VPS
+- Docker Engine 24+ and Docker Compose v2
+- A GitHub account (free) with a Personal Access Token — needed to pull images from GHCR
+
+### Step 1 — Create a GitHub PAT
+
+Go to `github.com/settings/tokens` → **Generate new token (classic)**
+
+Scopes required: check **`read:packages`** only. Copy the token.
+
+### Step 2 — Clone the repo (one time)
+
+```bash
+git clone https://github.com/okdii/opspilot.git /home/opspilot
+cd /home/opspilot
+```
+
+### Step 3 — Create your `.env` file
+
+```bash
+nano /home/opspilot/.env
+```
+
+```env
+POSTGRES_PASSWORD=your_strong_password
+OPSPILOT_WRITER_PASSWORD=your_writer_password
+OPSPILOT_JWT_SECRET=your_jwt_secret_min_32_chars
+OPSPILOT_ENCRYPTION_KEY=your_encryption_key_min_32_chars
+OPSPILOT_BASE_URL=https://yourdomain.com
+```
+
+Generate secure random values with:
+```bash
+openssl rand -hex 32
+```
+
+### Step 4 — Authenticate to GHCR
+
+```bash
+echo YOUR_PAT_HERE | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+```
+
+Expected output: `Login Succeeded`
+
+### Step 5 — Pull images and start
+
+```bash
+cd /home/opspilot
+docker compose pull
+docker compose up -d
+```
+
+Migrations run automatically before the backend starts. All services should be up within ~30 seconds.
+
+### Step 6 — Verify
+
+```bash
+docker compose ps
+```
+
+All services (`postgres`, `backend`, `frontend`, `nginx`) should show `running`.
+
+### Staying up to date
+
+When a new version is released, pull the latest compose file and images:
+
+```bash
+cd /home/opspilot
+git pull origin main
+docker compose pull
+docker compose up -d
+docker image prune -f
+```
+
+---
+
 ## Upgrade Procedure
 
 ```bash
