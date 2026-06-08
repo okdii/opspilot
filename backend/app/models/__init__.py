@@ -12,10 +12,8 @@ from app.models.other import (
     AlertRule,
     LogAlertRule,
     MaintenanceWindow,
-    CronJob,
-    CronJobRun,
-    BackupJob,
-    BackupRun,
+    MonitoredJob,
+    JobRun,
     DBCredential,
     Settings as AppSettings,
 )
@@ -24,5 +22,5 @@ __all__ = [
     "User", "UserOrganization", "Session", "Organization", "Invite",
     "Server", "OnboardingLog", "Service", "Incident", "Domain", "SSLCert",
     "Alert", "AlertRule", "LogAlertRule", "MaintenanceWindow",
-    "CronJob", "CronJobRun", "BackupJob", "BackupRun", "DBCredential", "AppSettings",
+    "MonitoredJob", "JobRun", "DBCredential", "AppSettings",
 ]

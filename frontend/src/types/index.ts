@@ -308,8 +308,7 @@ export interface Alert {
   service_id: string | null
   domain_id: string | null
   ssl_cert_id: string | null
-  cron_job_id: string | null
-  backup_job_id: string | null
+  job_id: string | null
   server_name: string | null
   service_name: string | null
   domain_name: string | null
