@@ -188,10 +188,10 @@ const connError = computed(() => props.status.last_check_ok === false)
       <StatCard label="Slow Queries" :value="latest.slow_queries_per_min == null ? '—' : `${fmt(latest.slow_queries_per_min)} /min`" accent="warning" />
     </div>
     <div class="cards-sub">
-      <span>{{ connSub }}</span>
-      <span>5-min avg</span>
-      <span>InnoDB cache · target ≥ 95%</span>
-      <span>last 5 min</span>
+      <span>Nearing 100% means new app connections will be rejected — alert fires at 80%.</span>
+      <span>Traffic baseline — sudden spikes reveal runaway loops or unexpected load.</span>
+      <span>Reads served from RAM vs disk. Below 95% means your DB needs more memory.</span>
+      <span>Rising values mean missing indexes or queries exceeding the slow query threshold.</span>
     </div>
 
     <!-- Range tabs -->
@@ -216,7 +216,7 @@ const connError = computed(() => props.status.last_check_ok === false)
       />
       <DbChartPanel
         title="Active Connections"
-        subtitle="active vs. max"
+        subtitle="Rising count means more concurrent app load. Alert fires at 80% of max."
         type="line"
         :series="seriesByMetric.connections_active ?? []"
         :has-data="hasPoints('connections_active')"
@@ -228,7 +228,7 @@ const connError = computed(() => props.status.last_check_ok === false)
     <!-- QPS area -->
     <DbChartPanel
       title="Queries Per Second"
-      subtitle="throughput"
+      subtitle="Sudden spikes reveal traffic bursts or runaway background jobs."
       type="area"
       :series="seriesByMetric.queries_per_sec ?? []"
       :has-data="hasPoints('queries_per_sec')"
@@ -240,7 +240,7 @@ const connError = computed(() => props.status.last_check_ok === false)
     <div class="grid grid-2-1">
       <DbChartPanel
         title="Slow Queries"
-        subtitle="per minute"
+        subtitle="Persistently high means a query needs optimization or an index is missing."
         type="bar"
         :series="seriesByMetric.slow_queries_per_min ?? []"
         :has-data="hasPoints('slow_queries_per_min')"
@@ -261,7 +261,7 @@ const connError = computed(() => props.status.last_check_ok === false)
     <!-- Deadlocks -->
     <DbChartPanel
       title="Deadlocks"
-      subtitle="new per hour"
+      subtitle="Any deadlock means two transactions blocked each other — one silently failed."
       type="bar"
       :series="seriesByMetric.innodb_deadlocks ?? []"
       :has-data="hasPoints('innodb_deadlocks')"
@@ -280,7 +280,7 @@ const connError = computed(() => props.status.last_check_ok === false)
         <div class="repl-banner" :class="replicationBanner.tone">{{ replicationBanner.text }}</div>
         <DbChartPanel
           title="Replication Lag"
-          subtitle="seconds behind master"
+          subtitle="Over 30s means reads from the replica return stale data."
           type="line"
           :series="seriesByMetric.replication_lag_sec ?? []"
           :has-data="hasPoints('replication_lag_sec')"
@@ -300,7 +300,7 @@ const connError = computed(() => props.status.last_check_ok === false)
       <div v-show="advancedOpen" class="collapse-body grid grid-2">
         <DbChartPanel
           title="Table Lock Waits"
-          subtitle="per minute"
+          subtitle="High waits mean queries are blocking each other — often from missing indexes."
           type="line"
           :series="seriesByMetric.table_locks_waited ?? []"
           :has-data="hasPoints('table_locks_waited')"
@@ -311,7 +311,7 @@ const connError = computed(() => props.status.last_check_ok === false)
         />
         <DbChartPanel
           title="Aborted Connections"
-          subtitle="per minute"
+          subtitle="Clients failing to connect — check credentials, firewall, or app config."
           type="line"
           :series="seriesByMetric.aborted_connections ?? []"
           :has-data="hasPoints('aborted_connections')"
