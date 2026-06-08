@@ -4,20 +4,20 @@ import { SlideOver, StatusBadge } from '@/components/ui'
 import MetricChart from '@/components/charts/MetricChart.vue'
 import { useNotify } from '@/composables/useNotify'
 import { useDateFormat } from '@/composables/useDateFormat'
-import { useCronBackupStore } from '@/stores/cronBackup'
-import type { CronJob, BackupJob, JobRun } from '@/stores/cronBackup'
+import { useJobsStore } from '@/stores/jobs'
+import type { MonitoredJob, JobRun } from '@/stores/jobs'
 import { cronToLabel } from './cronLabel'
 import CalendarHeatmap from './CalendarHeatmap.vue'
 
 /**
- * Job detail slide-over (spec 09 §7): ping URL block (copyable),
- * 30-day calendar heatmap, duration/size trend chart, run history table,
- * and regenerate-token action. Reuses ui/SlideOver, StatusBadge, MetricChart.
+ * Job detail slide-over for the unified MonitoredJob system (spec §7.5).
+ * rclone snippet block (always with two tabs), 30-day calendar heatmap,
+ * size/duration trend chart, and all-column run history table.
+ * Reuses ui/SlideOver, StatusBadge, MetricChart.
  */
 const props = defineProps<{
   modelValue: boolean
-  job: CronJob | BackupJob | null
-  type: 'cron' | 'backup'
+  job: MonitoredJob | null
   canEdit: boolean
 }>()
 
@@ -26,7 +26,7 @@ const emit = defineEmits<{
   (e: 'edit'): void
 }>()
 
-const store = useCronBackupStore()
+const store = useJobsStore()
 const notify = useNotify()
 const { formatDateTime: fmtDateTime } = useDateFormat()
 
@@ -37,30 +37,22 @@ const loadingRuns = ref(false)
 const showRegenConfirm = ref(false)
 const regenerating = ref(false)
 
-const isCron = computed(() => props.type === 'cron')
-
 const cronLabel = computed(() => {
-  if (!isCron.value || !props.job) return null
-  return cronToLabel((props.job as CronJob).schedule)
+  if (!props.job) return null
+  return cronToLabel(props.job.schedule)
 })
 
 const scheduleText = computed(() => {
   if (!props.job) return ''
-  if (isCron.value) return cronLabel.value?.label ?? ''
-  return `Every ${(props.job as BackupJob).expected_interval_hours} hours`
+  return cronLabel.value?.label ?? props.job.schedule
 })
 
 const graceText = computed(() => {
-  if (!props.job || !isCron.value) return null
-  return `Grace: ${(props.job as CronJob).grace_period_min} min`
+  if (!props.job) return null
+  return `Grace: ${props.job.grace_period_min} min`
 })
 
 const pingUrl = computed(() => props.job?.ping_url ?? '')
-
-const curlCommand = computed(() => {
-  if (isCron.value) return `curl -s ${pingUrl.value} > /dev/null`
-  return `curl -s -X POST ${pingUrl.value} \\\n  -d "status=success&size_bytes=<BYTES>&exit_code=$?"`
-})
 
 function relativeTime(iso: string | null): string {
   if (!iso) return 'never'
@@ -85,34 +77,38 @@ const nextExpectedText = computed(() => {
 })
 
 // ── Charts ────────────────────────────────────────────────────────────────
-const hasDuration = computed(() => isCron.value && runs.value.some((r) => r.duration_sec != null))
-const hasSize = computed(() => !isCron.value && runs.value.some((r) => r.size_bytes != null))
+const hasSize = computed(() => runs.value.some((r) => r.size_bytes != null))
+const hasDuration = computed(() => runs.value.some((r) => r.duration_sec != null))
+const hasTrendData = computed(() => hasSize.value || hasDuration.value)
 
 const trendSeries = computed(() => {
   // Oldest → newest for a left-to-right time axis.
   const ordered = [...runs.value].reverse()
-  if (isCron.value) {
+  if (hasSize.value) {
     return [{
-      name: 'Duration',
+      name: 'Size',
       data: ordered
-        .filter((r) => r.duration_sec != null)
-        .map((r) => ({ x: new Date(r.ran_at).getTime(), y: r.duration_sec as number })),
+        .filter((r) => r.size_bytes != null)
+        .map((r) => ({ x: new Date(r.ran_at).getTime(), y: r.size_bytes as number })),
     }]
   }
   return [{
-    name: 'Size',
+    name: 'Duration',
     data: ordered
-      .filter((r) => r.size_bytes != null)
-      .map((r) => ({ x: new Date(r.ran_at).getTime(), y: r.size_bytes as number })),
+      .filter((r) => r.duration_sec != null)
+      .map((r) => ({ x: new Date(r.ran_at).getTime(), y: r.duration_sec as number })),
   }]
 })
+
+const trendTitle = computed(() => (hasSize.value ? 'Backup Size Trend' : 'Duration Trend'))
+const trendUnit = computed(() => (hasSize.value ? 'bytes/s' : 'count'))
 
 // ── Run history ───────────────────────────────────────────────────────────
 async function loadRuns(reset = true): Promise<void> {
   if (!props.job) return
   loadingRuns.value = true
   try {
-    const res = await store.fetchRuns(props.type, props.job.id, reset ? null : cursor.value)
+    const res = await store.fetchRuns(props.job.id, reset ? null : cursor.value)
     runs.value = reset ? res.runs : [...runs.value, ...res.runs]
     cursor.value = res.next_cursor
     hasMore.value = !!res.next_cursor
@@ -136,7 +132,7 @@ watch(
   { immediate: true },
 )
 
-// ── Ping URL / token actions ──────────────────────────────────────────────
+// ── Ping URL / snippet actions ────────────────────────────────────────────
 async function copy(text: string, label: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text)
@@ -208,7 +204,7 @@ async function confirmRegenerate(): Promise<void> {
   if (!props.job) return
   regenerating.value = true
   try {
-    await store.regenerateToken(props.type, props.job.id)
+    await store.regenerateToken(props.job.id)
     notify.success('Ping URL regenerated — update your scripts.')
     showRegenConfirm.value = false
   } catch {
@@ -216,11 +212,6 @@ async function confirmRegenerate(): Promise<void> {
   } finally {
     regenerating.value = false
   }
-}
-
-function runOutcomeTone(outcome: string): string {
-  if (outcome === 'success') return 'success'
-  return 'danger'
 }
 
 function fmtDuration(d: number | null | undefined): string {
@@ -258,75 +249,52 @@ function fmtDuration(d: number | null | undefined): string {
     </template>
 
     <div v-if="job" class="body">
-      <!-- Ping URL block -->
+      <!-- Snippet block: rclone snippet / curl only tabs -->
       <section class="block ping-block">
         <div class="block-hd">
-          <h3>{{ isCron ? 'Ping URL' : 'rclone Snippet' }}</h3>
+          <h3>rclone Snippet</h3>
           <button v-if="canEdit" class="link-danger" @click="showRegenConfirm = true">Regenerate</button>
         </div>
-
-        <!-- Cron: simple curl line (unchanged) -->
-        <template v-if="isCron">
-          <pre class="curl">{{ curlCommand }}</pre>
-          <div class="ping-actions">
-            <button class="btn ghost sm" @click="copy(pingUrl, 'Ping URL')">Copy URL</button>
-            <button class="btn ghost sm" @click="copy(curlCommand, 'Command')">Copy Command</button>
-          </div>
-          <p class="hint">Append this to the end of your cron script. The UUID in the URL is the only authentication.</p>
-        </template>
-
-        <!-- Backup: rclone snippet with tab switcher -->
-        <template v-else>
-          <div class="snippet-tabs">
-            <button
-              class="stab"
-              :class="{ active: snippetTab === 'snippet' }"
-              @click="snippetTab = 'snippet'"
-            >rclone snippet</button>
-            <button
-              class="stab"
-              :class="{ active: snippetTab === 'curl' }"
-              @click="snippetTab = 'curl'"
-            >curl only</button>
-          </div>
-          <pre class="curl">{{ activeSnippet }}</pre>
-          <div class="ping-actions">
-            <button class="btn ghost sm" @click="copy(activeSnippet, 'Snippet')">Copy snippet</button>
-            <button class="btn ghost sm" @click="copy(pingUrl, 'Ping URL')">Copy URL</button>
-          </div>
-          <p class="hint">
-            Edit <code>REMOTE</code> and <code>SOURCE</code> before deploying.
-            The UUID in the URL is the only authentication.
-          </p>
-        </template>
+        <div class="snippet-tabs">
+          <button
+            class="stab"
+            :class="{ active: snippetTab === 'snippet' }"
+            @click="snippetTab = 'snippet'"
+          >rclone snippet</button>
+          <button
+            class="stab"
+            :class="{ active: snippetTab === 'curl' }"
+            @click="snippetTab = 'curl'"
+          >curl only</button>
+        </div>
+        <pre class="curl">{{ activeSnippet }}</pre>
+        <div class="ping-actions">
+          <button class="btn ghost sm" @click="copy(activeSnippet, 'Snippet')">Copy snippet</button>
+          <button class="btn ghost sm" @click="copy(pingUrl, 'Ping URL')">Copy URL</button>
+        </div>
+        <p class="hint">
+          Edit <code>REMOTE</code> and <code>SOURCE</code> before deploying.
+          The UUID in the URL is the only authentication.
+        </p>
       </section>
 
       <!-- Calendar heatmap -->
       <section class="block">
         <h3>Last 30 Days</h3>
-        <CalendarHeatmap :runs="runs" :show-size="!isCron" />
+        <CalendarHeatmap :runs="runs" :show-size="true" />
       </section>
 
       <!-- Trend chart -->
       <section class="block">
-        <h3>{{ isCron ? 'Duration Trend' : 'Backup Size Trend' }}</h3>
+        <h3>{{ trendTitle }}</h3>
         <MetricChart
-          v-if="isCron && hasDuration"
+          v-if="hasTrendData"
           type="line"
           :series="trendSeries"
-          unit="count"
+          :unit="trendUnit"
           :height="220"
         />
-        <MetricChart
-          v-else-if="!isCron && hasSize"
-          type="line"
-          :series="trendSeries"
-          unit="bytes/s"
-          :height="220"
-        />
-        <p v-else class="empty-note">
-          {{ isCron ? 'Enable two-ping mode to track run duration.' : 'No backup size data yet.' }}
-        </p>
+        <p v-else class="empty-note">No trend data yet.</p>
       </section>
 
       <!-- Run history -->
@@ -337,27 +305,23 @@ function fmtDuration(d: number | null | undefined): string {
             <tr>
               <th>Time</th>
               <th>Outcome</th>
-              <th v-if="isCron">Duration</th>
-              <template v-else>
-                <th>Size</th>
-                <th>Files</th>
-                <th>Exit</th>
-              </template>
+              <th>Duration</th>
+              <th>Size</th>
+              <th>Files</th>
+              <th>Exit</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="r in runs" :key="r.id">
               <td class="mono">{{ fmtDateTime(r.ran_at) }}</td>
               <td>
-                <StatusBadge kind="alert" :status="runOutcomeTone(r.outcome) === 'success' ? 'resolved' : 'firing'" />
+                <StatusBadge kind="alert" :status="r.outcome === 'success' ? 'resolved' : 'firing'" />
                 <span class="outcome-text">{{ r.outcome }}</span>
               </td>
-              <td v-if="isCron">{{ fmtDuration(r.duration_sec) }}</td>
-              <template v-else>
-                <td>{{ r.size_formatted ?? '—' }}</td>
-                <td class="num">{{ r.files_count != null ? r.files_count.toLocaleString() : '—' }}</td>
-                <td>{{ r.exit_code ?? '—' }}</td>
-              </template>
+              <td>{{ fmtDuration(r.duration_sec) }}</td>
+              <td>{{ r.size_formatted ?? '—' }}</td>
+              <td class="num">{{ r.files_count != null ? r.files_count.toLocaleString() : '—' }}</td>
+              <td>{{ r.exit_code != null ? r.exit_code : '—' }}</td>
             </tr>
           </tbody>
         </table>

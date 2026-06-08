@@ -2,16 +2,15 @@
 import { computed } from 'vue'
 import { StatusBadge } from '@/components/ui'
 import { cronToLabel } from './cronLabel'
-import type { CronJob, BackupJob } from '@/stores/cronBackup'
+import type { MonitoredJob } from '@/stores/jobs'
 
 /**
- * One job card row, shared by both tabs (spec 09 §4.1).
+ * One job card row for the unified MonitoredJob system (spec §7.4).
  * Status dot + name + server + schedule label + StatusBadge + last ping +
- * duration/size + next-expected. Kebab emits edit / detail / delete.
+ * size + next-expected. Kebab emits edit / detail / delete.
  */
 const props = defineProps<{
-  job: CronJob | BackupJob
-  type: 'cron' | 'backup'
+  job: MonitoredJob
   canEdit: boolean
   menuOpen: boolean
 }>()
@@ -23,38 +22,22 @@ const emit = defineEmits<{
   (e: 'toggle-menu'): void
 }>()
 
-const isCron = computed(() => props.type === 'cron')
+const cronLabel = computed(() => cronToLabel(props.job.schedule))
 
-const cronLabel = computed(() => {
-  if (!isCron.value) return null
-  return cronToLabel((props.job as CronJob).schedule)
-})
+const scheduleText = computed(() => cronLabel.value?.label ?? props.job.schedule)
 
-const scheduleText = computed(() => {
-  if (isCron.value) return cronLabel.value?.label ?? ''
-  return `Every ${(props.job as BackupJob).expected_interval_hours}h`
-})
+const scheduleInvalid = computed(() => cronLabel.value?.valid === false)
 
-const scheduleInvalid = computed(() => isCron.value && cronLabel.value?.valid === false)
-
-const durationText = computed(() => {
-  if (isCron.value) {
-    const d = (props.job as CronJob).last_duration_sec
-    if (d == null) return '—'
-    if (d < 60) return `${d}s`
-    const m = Math.floor(d / 60)
-    const s = d % 60
-    return s ? `${m}m ${s}s` : `${m}m`
+const sizeText = computed(() => {
+  const job = props.job
+  if (job.last_size_formatted != null) {
+    if (job.last_files_count != null) {
+      return `${job.last_size_formatted} · ${job.last_files_count.toLocaleString()} files`
+    }
+    return job.last_size_formatted
   }
-  const bj = props.job as BackupJob
-  const size = bj.last_size_formatted ?? '—'
-  if (bj.last_files_count != null) {
-    return `${size} · ${bj.last_files_count.toLocaleString()} files`
-  }
-  return size
+  return '—'
 })
-
-const durationLabel = computed(() => (isCron.value ? 'Duration' : 'Size'))
 
 function relativeTime(iso: string | null): string {
   if (!iso) return 'never'
@@ -106,8 +89,8 @@ const dotClass = computed(() => `dot-${props.job.status}`)
         <span class="mc-val">{{ relativeTime(job.last_ping_at) }}</span>
       </div>
       <div class="meta-cell">
-        <span class="mc-label">{{ durationLabel }}</span>
-        <span class="mc-val">{{ durationText }}</span>
+        <span class="mc-label">Size</span>
+        <span class="mc-val">{{ sizeText }}</span>
       </div>
       <div class="meta-cell">
         <span class="mc-label">Next</span>

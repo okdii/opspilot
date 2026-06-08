@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { JobRun } from '@/stores/cronBackup'
+import type { JobRun } from '@/stores/jobs'
 
 /**
  * 30-day calendar heatmap (spec 09 §7.3).

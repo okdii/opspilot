@@ -33,10 +33,11 @@ def _aware(dt: datetime | None) -> datetime | None:
 
 
 def _base(job: MonitoredJob) -> datetime:
-    """Anchor for next-expected computation: last ping, else now().
+    """Anchor for next-expected computation: last ping → created_at → now.
 
-    A job with no ping yet is healthy until its first scheduled window elapses."""
-    return _aware(job.last_ping_at) or _now()
+    Using created_at ensures a brand-new job eventually goes late/missing
+    if it never pings within its scheduled window."""
+    return _aware(job.last_ping_at) or _aware(job.created_at) or _now()
 
 
 async def _evaluate_job(db: AsyncSession, job: MonitoredJob, now: datetime) -> None:
