@@ -4,6 +4,7 @@ import { fileURLToPath, URL } from 'node:url'
 import { execSync } from 'node:child_process'
 
 function getVersion(): string {
+  if (process.env.VITE_APP_VERSION) return process.env.VITE_APP_VERSION
   try {
     return execSync('git describe --tags --abbrev=0', { encoding: 'utf-8' }).trim()
   } catch {
