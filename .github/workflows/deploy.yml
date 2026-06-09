@@ -132,8 +132,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: VITE_APP_VERSION=${{ steps.version.outputs.value }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=frontend-${{ steps.version.outputs.value }}
+          cache-to: type=gha,mode=max,scope=frontend-${{ steps.version.outputs.value }}
 
   deploy:
     needs: [build-backend, build-frontend]
