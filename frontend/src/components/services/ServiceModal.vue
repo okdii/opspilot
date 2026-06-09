@@ -30,8 +30,6 @@ const submitting = ref(false)
 const INTERVALS = [30, 60, 120, 300, 600]
 const TIMEOUTS = [3, 5, 10, 30]
 const METHODS = ['GET', 'POST', 'HEAD']
-const DB_TYPES = ['MySQL', 'MariaDB', 'PostgreSQL']
-
 interface FormState {
   server_id: string
   name: string
@@ -46,10 +44,9 @@ interface FormState {
   ignore_ssl_errors: boolean
   ssl_warn_days: number
   ssl_critical_days: number
-  // tcp / db
+  // tcp
   host: string
   port: number | null
-  db_type: string
 }
 
 function blank(): FormState {
@@ -68,7 +65,6 @@ function blank(): FormState {
     ssl_critical_days: 7,
     host: '',
     port: null,
-    db_type: 'MySQL',
   }
 }
 
@@ -209,7 +205,7 @@ function intervalLabel(s: number): string {
   <SlideOver
     :model-value="modelValue"
     :title="editMode ? 'Edit Service' : 'Add Service'"
-    :subtitle="editMode ? service?.name : 'Monitor an HTTP endpoint or TCP/DB port'"
+    :subtitle="editMode ? service?.name : 'Monitor an HTTP endpoint or TCP port'"
     @update:model-value="emit('update:modelValue', $event)"
   >
     <form id="service-form" class="form" @submit.prevent="submit">
@@ -226,9 +222,6 @@ function intervalLabel(s: number): string {
         </label>
         <label class="radio" :class="{ on: form.type === 'tcp' }">
           <input v-model="form.type" type="radio" value="tcp" :disabled="editMode" /> TCP
-        </label>
-        <label class="radio" :class="{ on: form.type === 'db' }">
-          <input v-model="form.type" type="radio" value="db" :disabled="editMode" /> DB Port
         </label>
       </div>
 
@@ -308,13 +301,6 @@ function intervalLabel(s: number): string {
             <p v-if="errors.port" class="err">{{ errors.port }}</p>
           </div>
         </div>
-        <template v-if="form.type === 'db'">
-          <label class="fl">DB Type</label>
-          <select v-model="form.db_type">
-            <option v-for="d in DB_TYPES" :key="d" :value="d">{{ d }}</option>
-          </select>
-          <small class="hint">Display only — performs a TCP reachability check, no credentials.</small>
-        </template>
       </template>
 
       <label class="fl">Service Name</label>
