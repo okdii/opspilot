@@ -35,6 +35,27 @@ const form = ref({
 })
 const tagInput = ref('')
 const showKey = ref(false)
+const showManualInstall = ref(false)
+
+const manualCmds = {
+  repos: [
+    'sudo install -d -m 0755 /etc/apt/keyrings',
+    'curl -fsSL https://repos.influxdata.com/influxdata-archive.key | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/influxdata-archive.gpg',
+    'echo "deb [signed-by=/etc/apt/keyrings/influxdata-archive.gpg] https://repos.influxdata.com/debian stable main" | sudo tee /etc/apt/sources.list.d/influxdata.list',
+    'sudo apt-get update -y',
+  ].join('\n'),
+  telegraf: 'sudo apt-get install -y telegraf',
+  fluentbit: [
+    'curl -fsSL https://packages.fluentbit.io/fluentbit.key | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/fluentbit.gpg',
+    '. /etc/os-release',
+    'echo "deb [signed-by=/etc/apt/keyrings/fluentbit.gpg] https://packages.fluentbit.io/${ID}/${VERSION_CODENAME} ${VERSION_CODENAME} main" | sudo tee /etc/apt/sources.list.d/fluent-bit.list',
+    'sudo apt-get update -y && sudo apt-get install -y fluent-bit',
+  ].join('\n'),
+}
+
+function copyCmd(text: string) {
+  navigator.clipboard.writeText(text)
+}
 
 // ── Onboarding panel + per-card action menu ──────────────────────────────────
 const panelServerId = ref<string | null>(null)
@@ -519,6 +540,42 @@ const summaryText = computed(() => {
 
           <div v-if="errors._form" class="err">{{ errors._form }}</div>
 
+          <!-- Manual installation guide (add mode only) -->
+          <div v-if="!editMode" class="manual-install">
+            <button type="button" class="manual-toggle" @click="showManualInstall = !showManualInstall">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+              Need to install packages manually?
+              <span class="chev-sm">{{ showManualInstall ? '▲' : '▼' }}</span>
+            </button>
+            <div v-if="showManualInstall" class="manual-body">
+              <p class="manual-note">Run these commands on the server before registering. OpsPilot will detect them and skip those steps automatically.</p>
+
+              <div class="cmd-group">
+                <div class="cmd-label">1. Add InfluxData repository <span class="os-badge">Debian / Ubuntu</span></div>
+                <div class="cmd-block">
+                  <pre>{{ manualCmds.repos }}</pre>
+                  <button type="button" class="copy-btn" @click="copyCmd(manualCmds.repos)">Copy</button>
+                </div>
+              </div>
+
+              <div class="cmd-group">
+                <div class="cmd-label">2. Install Telegraf</div>
+                <div class="cmd-block">
+                  <pre>{{ manualCmds.telegraf }}</pre>
+                  <button type="button" class="copy-btn" @click="copyCmd(manualCmds.telegraf)">Copy</button>
+                </div>
+              </div>
+
+              <div class="cmd-group">
+                <div class="cmd-label">3. Install Fluent Bit <span class="os-badge">Debian 10+ / Ubuntu 18+ only</span></div>
+                <div class="cmd-block">
+                  <pre>{{ manualCmds.fluentbit }}</pre>
+                  <button type="button" class="copy-btn" @click="copyCmd(manualCmds.fluentbit)">Copy</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="actions">
             <button type="button" class="btn ghost" @click="showAddModal = false">Cancel</button>
             <button type="submit" class="primary" :disabled="submitting">
@@ -569,6 +626,21 @@ const summaryText = computed(() => {
 .ob-running { font-size: 12px; color: var(--text); margin: 6px 0 8px; }
 .bar { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
 .bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 3px; transition: width 0.3s ease-out; }
+
+/* Manual install panel */
+.manual-install { margin: 16px 0 4px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.manual-toggle { width: 100%; display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--surface-2); border: none; color: var(--muted); font-size: 12px; cursor: pointer; text-align: left; }
+.manual-toggle:hover { color: var(--text); }
+.manual-toggle .chev-sm { margin-left: auto; font-size: 9px; }
+.manual-body { padding: 14px; display: flex; flex-direction: column; gap: 12px; background: var(--surface); }
+.manual-note { font-size: 12px; color: var(--muted); margin: 0; line-height: 1.5; }
+.cmd-group { display: flex; flex-direction: column; gap: 6px; }
+.cmd-label { font-size: 11px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.os-badge { font-size: 10px; font-weight: 400; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; }
+.cmd-block { position: relative; background: #0d0d0d; border: 1px solid var(--border); border-radius: 6px; }
+.cmd-block pre { margin: 0; padding: 10px 70px 10px 12px; font-size: 11px; font-family: ui-monospace, monospace; color: #a8d8a8; white-space: pre-wrap; word-break: break-all; line-height: 1.6; }
+.copy-btn { position: absolute; top: 6px; right: 6px; padding: 3px 10px; font-size: 11px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; color: var(--muted); cursor: pointer; }
+.copy-btn:hover { color: var(--text); border-color: var(--accent); }
 .ob-link { margin-top: 10px; background: none; border: none; color: var(--accent-2); font-size: 12px; cursor: pointer; padding: 0; font-weight: 600; }
 .ob-link:hover { text-decoration: underline; }
 .ob-link.fail { color: var(--red); }
