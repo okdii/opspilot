@@ -256,7 +256,9 @@ async def _step_add_repos(db, server, ssh: SSHSession, os_info: OSInfo):
         repo_check = await ssh.run("test -f /etc/yum.repos.d/influxdata.repo", sudo=False, timeout=10)
     if repo_check.ok:
         if os_info.family == "debian":
-            await ssh.run("apt-get update -y", sudo=True, timeout=240)
+            telegraf_check = await ssh.run("dpkg-query -W -f='${Status}' telegraf 2>/dev/null | grep -q 'install ok installed'", sudo=False, timeout=10)
+            if not telegraf_check.ok:
+                await ssh.run("apt-get update -y", sudo=True, timeout=240)
         await _finish_step(db, log, t0, status="done", message="package repositories already configured")
         return
     script = _add_repos_script(os_info)
