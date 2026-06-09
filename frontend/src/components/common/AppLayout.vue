@@ -138,7 +138,7 @@ async function logout() {
         </span>
         <div class="brand-text">
           <span class="name">OpsPilot</span>
-          <span class="version">v{{ appVersion }}</span>
+          <span class="version">{{ appVersion }}</span>
         </div>
       </div>
 
