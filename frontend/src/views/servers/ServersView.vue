@@ -250,6 +250,7 @@ function openEdit(s: Server) {
 }
 
 async function submit() {
+  addTag() // flush any text still in the tag input before submitting
   if (!validate()) return
   submitting.value = true
   try {
