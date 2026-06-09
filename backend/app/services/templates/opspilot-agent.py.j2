@@ -29,7 +29,8 @@ def _unit_state(unit):
     try:
         r = subprocess.run(
             ["systemctl", "show", "--property=LoadState,ActiveState", unit],
-            capture_output=True, text=True, timeout=5,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            universal_newlines=True, timeout=5,
         )
         props = dict(
             line.split("=", 1) for line in r.stdout.strip().splitlines() if "=" in line

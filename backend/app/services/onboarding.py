@@ -458,7 +458,11 @@ async def _step_deploy_opspilot_agent(db, server, ssh: SSHSession):
             ingestion_token=str(server.ingestion_token),
         )
 
-        # Install psutil (pip3 first, apt fallback, ignore failure)
+        # Ensure python3 is available, then install psutil
+        await ssh.run(
+            "which python3 >/dev/null 2>&1 || apt-get install -y python3 2>/dev/null || true",
+            sudo=True, timeout=60,
+        )
         await ssh.run(
             "python3 -m pip install --quiet psutil 2>/dev/null || "
             "apt-get install -y python3-psutil 2>/dev/null || true",
