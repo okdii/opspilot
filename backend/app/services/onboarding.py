@@ -195,17 +195,21 @@ async def _step_detect_os(db, server, ssh: SSHSession) -> OSInfo:
 
 def _add_repos_script(os_info: OSInfo) -> str:
     if os_info.family == "debian":
-        return r"""
-set -e
+        fb_block = ""
+        if _fluent_bit_supported(os_info):
+            fb_block = (
+                "curl -fsSL https://packages.fluentbit.io/fluentbit.key"
+                " | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/fluentbit.gpg\n"
+                ". /etc/os-release\n"
+                'echo "deb [signed-by=/etc/apt/keyrings/fluentbit.gpg]'
+                " https://packages.fluentbit.io/${ID}/${VERSION_CODENAME}"
+                ' ${VERSION_CODENAME} main" | sudo tee /etc/apt/sources.list.d/fluent-bit.list\n'
+            )
+        return f"""set -e
 sudo install -d -m 0755 /etc/apt/keyrings
-# InfluxData (Telegraf)
 curl -fsSL https://repos.influxdata.com/influxdata-archive.key | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/influxdata-archive.gpg
 echo "deb [signed-by=/etc/apt/keyrings/influxdata-archive.gpg] https://repos.influxdata.com/debian stable main" | sudo tee /etc/apt/sources.list.d/influxdata.list
-# Fluent Bit
-curl -fsSL https://packages.fluentbit.io/fluentbit.key | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/fluentbit.gpg
-. /etc/os-release
-echo "deb [signed-by=/etc/apt/keyrings/fluentbit.gpg] https://packages.fluentbit.io/${ID}/${VERSION_CODENAME} ${VERSION_CODENAME} main" | sudo tee /etc/apt/sources.list.d/fluent-bit.list
-sudo apt-get update -y
+{fb_block}sudo apt-get update -y
 """
     # RHEL family
     return r"""
@@ -227,6 +231,21 @@ gpgcheck=1
 gpgkey=https://packages.fluentbit.io/fluentbit.key
 EOF
 """
+
+
+def _fluent_bit_supported(os_info: OSInfo) -> bool:
+    """Fluent Bit has no packages for Debian < 10 (stretch and older)."""
+    if os_info.id == "debian":
+        try:
+            return int(os_info.version_id.split(".")[0]) >= 10
+        except (ValueError, IndexError):
+            return True
+    return True
+
+
+async def _skip_step(db, server_id, step: str, n: int, message: str) -> None:
+    log, t0 = await _start_step(db, server_id, step, n)
+    await _finish_step(db, log, t0, status="skipped", message=message)
 
 
 async def _step_add_repos(db, server, ssh: SSHSession, os_info: OSInfo):
@@ -352,17 +371,17 @@ async def _step_enable_mariadb_slowlog(db, server, ssh: SSHSession, os_info: OSI
         await _finish_step(db, log, t0, status="skipped", message=f"could not enable: {e}")
 
 
-async def _step_start_services(db, server, ssh: SSHSession):
+async def _step_start_services(db, server, ssh: SSHSession, os_info: OSInfo):
     log, t0 = await _start_step(db, server.id, "start_services", 9)
     try:
-        # enable for boot, then restart to apply freshly-written config.
-        # `enable --now` is a no-op on an already-running service, so a redeploy
-        # would otherwise never pick up config changes. reset-failed clears any
-        # failed/start-limit state so restart isn't rejected.
+        if _fluent_bit_supported(os_info):
+            services = "telegraf fluent-bit"
+        else:
+            services = "telegraf"
         r = await ssh.run(
-            "systemctl reset-failed telegraf fluent-bit 2>/dev/null; "
-            "systemctl enable telegraf fluent-bit && "
-            "systemctl restart telegraf fluent-bit",
+            f"systemctl reset-failed {services} 2>/dev/null; "
+            f"systemctl enable {services} && "
+            f"systemctl restart {services}",
             sudo=True, timeout=30,
         )
         if not r.ok:
@@ -493,7 +512,10 @@ async def run_onboarding(server_id: str, redeploy_only: bool = False) -> None:
                     os_info = await _step_detect_os(db, server, ssh)
                     await _step_add_repos(db, server, ssh, os_info)
                     await _step_install(db, server, ssh, os_info, "telegraf", "install_telegraf", 4)
-                    await _step_install(db, server, ssh, os_info, "fluent-bit", "install_fluent_bit", 5)
+                    if _fluent_bit_supported(os_info):
+                        await _step_install(db, server, ssh, os_info, "fluent-bit", "install_fluent_bit", 5)
+                    else:
+                        await _skip_step(db, server.id, "install_fluent_bit", 5, f"skipped — Fluent Bit not available on {os_info.pretty_name}")
                 else:
                     # Re-detect OS without writing a log row (we need OSInfo for templates)
                     os_release = await ssh.run("cat /etc/os-release", raise_on_error=True)
@@ -504,9 +526,12 @@ async def run_onboarding(server_id: str, redeploy_only: bool = False) -> None:
 
                 db_instances = await _build_db_instances(db, server)
                 await _step_configure_telegraf(db, server, ssh, db_instances)
-                await _step_configure_fluent_bit(db, server, ssh, os_info)
+                if _fluent_bit_supported(os_info):
+                    await _step_configure_fluent_bit(db, server, ssh, os_info)
+                else:
+                    await _skip_step(db, server.id, "configure_fluent_bit", 7, f"skipped — Fluent Bit not available on {os_info.pretty_name}")
                 await _step_enable_mariadb_slowlog(db, server, ssh, os_info)
-                await _step_start_services(db, server, ssh)
+                await _step_start_services(db, server, ssh, os_info)
 
                 # Persist OS info on the server row
                 server.os_distro = os_info.pretty_name
