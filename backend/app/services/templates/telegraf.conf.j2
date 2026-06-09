@@ -64,9 +64,11 @@
   [inputs.cpu.tags]
     scope = "percore"
 
+{% if supports_systemd_units %}
 # ── Agent service health (scoped to our two agents only) ─────────────────────
 [[inputs.systemd_units]]
   pattern = "telegraf.service fluent-bit.service"
+{% endif %}
 
 # ── Top-N processes (proctop) — bounded, 30s ─────────────────────────────────
 [[inputs.exec]]

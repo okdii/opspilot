@@ -303,15 +303,22 @@ async def _step_install(db, server, ssh: SSHSession, os_info: OSInfo, package: s
     await _finish_step(db, log, t0, status="done", ssh_output=r.stdout[-2000:])
 
 
-async def _step_configure_telegraf(db, server, ssh: SSHSession, db_instances: list[dict]):
+async def _step_configure_telegraf(db, server, ssh: SSHSession, db_instances: list[dict], os_info: OSInfo | None = None):
     log, t0 = await _start_step(db, server.id, "configure_telegraf", 6)
     tmpl = _template_env.get_template("telegraf.conf.j2")
+    # inputs.systemd_units requires systemd ≥ 233 D-Bus API; Debian 9 ships 232
+    supports_systemd_units = not (
+        os_info is not None
+        and os_info.id == "debian"
+        and os_info.version_id.split(".")[0] == "9"
+    )
     conf = tmpl.render(
         server_id=str(server.id),
         server_name=server.name,
         ingest_url=settings.opspilot_base_url.rstrip("/") if settings.opspilot_base_url else "http://opspilot-backend:8000",
         ingestion_token=str(server.ingestion_token),
         db_instances=db_instances,
+        supports_systemd_units=supports_systemd_units,
     )
     try:
         await ssh.upload(conf, "/etc/telegraf/telegraf.conf", mode=0o644, sudo=True)
@@ -552,7 +559,7 @@ async def run_onboarding(server_id: str, redeploy_only: bool = False) -> None:
                         raise SSHError("OS no longer detectable")
 
                 db_instances = await _build_db_instances(db, server)
-                await _step_configure_telegraf(db, server, ssh, db_instances)
+                await _step_configure_telegraf(db, server, ssh, db_instances, os_info)
                 if _fluent_bit_supported(os_info):
                     await _step_configure_fluent_bit(db, server, ssh, os_info)
                 else:
