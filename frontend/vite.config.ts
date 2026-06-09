@@ -1,9 +1,15 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
-import { readFileSync } from 'node:fs'
+import { execSync } from 'node:child_process'
 
-const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8'))
+function getVersion(): string {
+  try {
+    return execSync('git describe --tags --abbrev=0', { encoding: 'utf-8' }).trim()
+  } catch {
+    return 'dev'
+  }
+}
 
 // In Docker dev, backend is reachable by service name; locally it's localhost.
 const apiTarget = process.env.VITE_API_TARGET ?? 'http://localhost:8000'
@@ -26,7 +32,7 @@ export default defineConfig({
     },
   },
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_VERSION__: JSON.stringify(getVersion()),
   },
   build: {
     outDir: 'dist',
