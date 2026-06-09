@@ -111,6 +111,7 @@ class JobOut(BaseModel):
     last_size_formatted: str | None
     last_files_count: int | None
     last_exit_code: int | None
+    last_label: str | None
     next_expected_at: datetime | None
 
 

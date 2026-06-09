@@ -219,6 +219,7 @@ class MonitoredJob(Base):
     last_size_formatted: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_files_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
     previous_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
 

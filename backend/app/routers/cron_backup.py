@@ -153,6 +153,7 @@ def _job_out(job: MonitoredJob, server_name: str, base: str) -> JobOut:
         last_size_formatted=job.last_size_formatted,
         last_files_count=job.last_files_count,
         last_exit_code=job.last_exit_code,
+        last_label=job.last_label,
         next_expected_at=nxt,
     )
 
@@ -292,6 +293,8 @@ async def ping_post(
         job.last_files_count = files_count
     if exit_code is not None:
         job.last_exit_code = exit_code
+    if label is not None:
+        job.last_label = label
     if outcome == "success" and size_bytes is not None:
         job.previous_size_bytes = size_bytes  # baseline advances only on success
     job.status = "healthy"
