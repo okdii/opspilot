@@ -92,6 +92,8 @@ const navIcons: Record<string, string> = {
 
 const visibleNav = computed(() => nav.filter((n) => !n.adminOnly || auth.isAdmin))
 
+const appVersion = __APP_VERSION__
+
 onMounted(async () => {
   if (auth.isAuthenticated) {
     await orgStore.fetchOrgs()
@@ -134,7 +136,10 @@ async function logout() {
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
           </svg>
         </span>
-        <span class="name">OpsPilot</span>
+        <div class="brand-text">
+          <span class="name">OpsPilot</span>
+          <span class="version">v{{ appVersion }}</span>
+        </div>
       </div>
 
       <OrgSwitcher />
@@ -197,7 +202,9 @@ async function logout() {
 .sidebar { width: 240px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
 .brand { padding: 18px 20px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); }
 .brand .logo { width: 28px; height: 28px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); border-radius: 7px; display: flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; }
-.brand .name { font-size: 16px; font-weight: 700; color: #fff; letter-spacing: -0.3px; }
+.brand-text { display: flex; flex-direction: column; gap: 1px; }
+.brand .name { font-size: 16px; font-weight: 700; color: #fff; letter-spacing: -0.3px; line-height: 1.2; }
+.brand .version { font-size: 10px; color: var(--muted); letter-spacing: 0.02em; }
 .org-switcher { margin: 12px 0; }
 .nav { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 2px; }
 .nav-link { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; color: var(--muted); text-decoration: none; font-size: 13px; transition: all 0.15s; }
