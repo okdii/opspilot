@@ -233,6 +233,27 @@ function fmtTime(iso: string | null | undefined): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 }
+
+const jobTodayRuns = computed(() => {
+  if (!props.job) return []
+  return store.todayRuns.filter((r) => r.job_id === props.job!.id)
+})
+
+const jobTodayIds = computed(() =>
+  new Set(jobTodayRuns.value.map((r) => r.id))
+)
+
+const jobTodayFailedCount = computed(() =>
+  jobTodayRuns.value.filter((r) => r.outcome !== 'success').length
+)
+
+const todayLabel = computed(() =>
+  new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+)
+
+const earlierRuns = computed(() =>
+  runs.value.filter((r) => !jobTodayIds.value.has(r.id))
+)
 </script>
 
 <template>
@@ -312,8 +333,15 @@ function fmtTime(iso: string | null | undefined): string {
 
       <!-- Run history -->
       <section class="block">
-        <h3>Run History</h3>
-        <table v-if="runs.length" class="runs">
+        <div class="rh-hdr">
+          <h3>Run History</h3>
+          <template v-if="jobTodayRuns.length > 0">
+            <span class="today-chip">{{ todayLabel }}</span>
+            <span class="today-badge">{{ jobTodayRuns.length }} run{{ jobTodayRuns.length !== 1 ? 's' : '' }} today</span>
+            <span v-if="jobTodayFailedCount > 0" class="today-badge fail">{{ jobTodayFailedCount }} failed</span>
+          </template>
+        </div>
+        <table v-if="jobTodayRuns.length > 0 || earlierRuns.length > 0" class="runs">
           <thead>
             <tr>
               <th></th>
@@ -327,7 +355,35 @@ function fmtTime(iso: string | null | undefined): string {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in runs" :key="r.id">
+            <!-- Today group: pinned at top, sourced from store.todayRuns filtered by job.id -->
+            <template v-if="jobTodayRuns.length > 0">
+              <tr class="group-label today-group">
+                <td colspan="8">▸ Today</td>
+              </tr>
+              <tr
+                v-for="r in jobTodayRuns"
+                :key="r.id"
+                :class="r.outcome === 'success' ? 'today-row' : 'today-row-fail'"
+              >
+                <td class="icon-col">
+                  <span :class="r.outcome === 'success' ? 'run-ok' : 'run-fail'">
+                    {{ r.outcome === 'success' ? '✓' : '✗' }}
+                  </span>
+                </td>
+                <td class="mono run-label">{{ r.label ?? '—' }}</td>
+                <td class="mono">{{ fmtTime(r.started_at) }}</td>
+                <td class="mono">{{ fmtTime(r.ran_at) }}</td>
+                <td>{{ fmtDuration(r.duration_sec) }}</td>
+                <td>{{ r.size_formatted ?? '—' }}</td>
+                <td class="num">{{ r.files_count != null ? r.files_count.toLocaleString() : '—' }}</td>
+                <td>{{ r.exit_code != null ? r.exit_code : '—' }}</td>
+              </tr>
+              <tr v-if="earlierRuns.length > 0" class="group-label earlier-group">
+                <td colspan="8">Earlier</td>
+              </tr>
+            </template>
+            <!-- Earlier runs: paginated, excludes IDs already shown in today group -->
+            <tr v-for="r in earlierRuns" :key="r.id">
               <td class="icon-col">
                 <span :class="r.outcome === 'success' ? 'run-ok' : 'run-fail'">
                   {{ r.outcome === 'success' ? '✓' : '✗' }}
@@ -419,4 +475,14 @@ function fmtTime(iso: string | null | undefined): string {
 .confirm h3 { font-size: 15px; color: #fff; margin-bottom: 10px; }
 .confirm p { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 18px; }
 .confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.rh-hdr { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.rh-hdr h3 { margin-bottom: 0; color: #fff; font-size: 13px; }
+.today-chip { font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 2px 7px; }
+.today-badge { font-size: 11px; color: var(--text); background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 10px; padding: 2px 8px; }
+.today-badge.fail { color: #fca5a5; background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.3); }
+.group-label td { padding: 6px 8px 4px; font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; border-bottom: none; }
+.today-group td { color: #6366f1; background: rgba(99, 102, 241, 0.05); border-bottom: 1px solid rgba(99, 102, 241, 0.15); }
+.earlier-group td { color: #475569; background: #0d1117; border-top: 2px solid var(--border); border-bottom: 1px solid var(--border); }
+.today-row td { background: rgba(99, 102, 241, 0.03); }
+.today-row-fail td { background: rgba(239, 68, 68, 0.04); }
 </style>
