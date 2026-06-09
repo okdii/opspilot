@@ -79,9 +79,7 @@ The moment a task or phase is **done and verified working as expected** (smoke t
 
 **Always trigger a release after every bug fix or enhancement:**
 - Check the latest tag: `git describe --tags --abbrev=0`
-- Bug fix → bump patch: `v1.1.2` → `v1.1.3`
-- Enhancement / new feature → bump minor: `v1.1.2` → `v1.2.0`
-- Breaking change → bump major: `v1.1.2` → `v2.0.0`
+- Always bump patch: `v1.1.6` → `v1.1.7` → `v1.1.8` (continue the sequence)
 - Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`
 - This triggers the CI `release` job which creates a GitHub Release automatically
 
