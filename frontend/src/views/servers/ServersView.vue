@@ -45,6 +45,11 @@ const manualCmds = {
     'sudo apt-get update -y',
   ].join('\n'),
   telegraf: 'sudo apt-get install -y telegraf',
+  telegrafDirect: [
+    '# If apt-get update is slow (e.g. Debian 9 / many repos), install directly:',
+    'curl -LO https://dl.influxdata.com/telegraf/releases/telegraf_1.33.1-1_amd64.deb',
+    'sudo dpkg -i telegraf_1.33.1-1_amd64.deb',
+  ].join('\n'),
   fluentbit: [
     'curl -fsSL https://packages.fluentbit.io/fluentbit.key | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/fluentbit.gpg',
     '. /etc/os-release',
@@ -559,10 +564,18 @@ const summaryText = computed(() => {
               </div>
 
               <div class="cmd-group">
-                <div class="cmd-label">2. Install Telegraf</div>
+                <div class="cmd-label">2. Install Telegraf <span class="os-badge">via apt</span></div>
                 <div class="cmd-block">
                   <pre>{{ manualCmds.telegraf }}</pre>
                   <button type="button" class="copy-btn" @click="copyCmd(manualCmds.telegraf)">Copy</button>
+                </div>
+              </div>
+
+              <div class="cmd-group">
+                <div class="cmd-label">2b. Install Telegraf <span class="os-badge">direct download — if apt is slow</span></div>
+                <div class="cmd-block">
+                  <pre>{{ manualCmds.telegrafDirect }}</pre>
+                  <button type="button" class="copy-btn" @click="copyCmd(manualCmds.telegrafDirect)">Copy</button>
                 </div>
               </div>
 
