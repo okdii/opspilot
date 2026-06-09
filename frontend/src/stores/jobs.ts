@@ -21,6 +21,7 @@ export interface MonitoredJob {
   last_size_formatted: string | null
   last_files_count: number | null
   last_exit_code: number | null
+  last_label: string | null
   next_expected_at: string | null
 }
 

@@ -4,11 +4,6 @@ import { StatusBadge } from '@/components/ui'
 import { cronToLabel } from './cronLabel'
 import type { MonitoredJob } from '@/stores/jobs'
 
-/**
- * One job card row for the unified MonitoredJob system (spec §7.4).
- * Status dot + name + server + schedule label + StatusBadge + last ping +
- * size + next-expected. Kebab emits edit / detail / delete.
- */
 const props = defineProps<{
   job: MonitoredJob
   canEdit: boolean
@@ -23,9 +18,7 @@ const emit = defineEmits<{
 }>()
 
 const cronLabel = computed(() => cronToLabel(props.job.schedule))
-
 const scheduleText = computed(() => cronLabel.value?.label ?? props.job.schedule)
-
 const scheduleInvalid = computed(() => cronLabel.value?.valid === false)
 
 const sizeText = computed(() => {
@@ -50,6 +43,33 @@ function relativeTime(iso: string | null): string {
   if (h < 24) return `${h}h ago`
   return `${Math.floor(h / 24)}d ago`
 }
+
+function fmtDate(iso: string | null): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}
+
+function fmtDuration(sec: number | null | undefined): string {
+  if (sec == null) return '—'
+  if (sec < 60) return `${sec}s`
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  return s ? `${m}m ${s}s` : `${m}m`
+}
+
+const lastRunStatus = computed(() => {
+  const code = props.job.last_exit_code
+  if (code == null || code === 0) return { text: '✓ Success', ok: true }
+  return { text: `✗ Failed (exit ${code})`, ok: false }
+})
+
+const showStrip = computed(() => props.job.last_ping_at != null)
 
 const nextExpected = computed(() => {
   const iso = props.job.next_expected_at
@@ -109,6 +129,32 @@ const dotClass = computed(() => `dot-${props.job.status}`)
         </div>
       </div>
     </div>
+
+    <!-- Last Run strip — shown once job has received at least one ping -->
+    <div v-if="showStrip" class="last-run-strip" :class="{ 'strip-fail': !lastRunStatus.ok }">
+      <span class="strip-title">Last Run</span>
+      <div class="strip-divider"></div>
+      <div class="run-cell">
+        <span class="rc-label">Date</span>
+        <span class="rc-val">{{ fmtDate(job.last_ping_at) }}</span>
+      </div>
+      <div class="run-cell">
+        <span class="rc-label">Status</span>
+        <span class="rc-val" :class="lastRunStatus.ok ? 'rc-ok' : 'rc-fail'">{{ lastRunStatus.text }}</span>
+      </div>
+      <div class="run-cell">
+        <span class="rc-label">File</span>
+        <span class="rc-val rc-mono">{{ job.last_label ?? '—' }}</span>
+      </div>
+      <div class="run-cell">
+        <span class="rc-label">Size</span>
+        <span class="rc-val">{{ job.last_size_formatted ?? '—' }}</span>
+      </div>
+      <div class="run-cell">
+        <span class="rc-label">Duration</span>
+        <span class="rc-val">{{ fmtDuration(job.last_duration_sec) }}</span>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -117,23 +163,25 @@ const dotClass = computed(() => `dot-${props.job.status}`)
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 14px 18px;
+  flex-wrap: wrap;
+  gap: 0;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
   transition: border-color 0.15s;
+  overflow: hidden;
 }
 .job-row:hover { border-color: var(--accent); }
 .job-row.missing { border-color: rgba(239, 68, 68, 0.4); }
 
+/* top row — name + meta */
 .row-main {
   display: flex;
   align-items: center;
   gap: 12px;
   background: none;
   border: none;
-  padding: 0;
+  padding: 14px 18px;
   cursor: pointer;
   text-align: left;
   min-width: 0;
@@ -151,7 +199,7 @@ const dotClass = computed(() => `dot-${props.job.status}`)
 .sep { margin: 0 6px; opacity: 0.5; }
 .sched-bad { color: var(--amber); }
 
-.row-meta { display: flex; align-items: center; gap: 18px; flex-shrink: 0; }
+.row-meta { display: flex; align-items: center; gap: 18px; flex-shrink: 0; padding: 14px 18px; }
 .meta-cell { display: flex; flex-direction: column; align-items: flex-end; min-width: 56px; }
 .mc-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); opacity: 0.7; }
 .mc-val { font-size: 12px; color: var(--text); font-variant-numeric: tabular-nums; }
@@ -167,8 +215,46 @@ const dotClass = computed(() => `dot-${props.job.status}`)
 .kmi.danger:hover { background: rgba(239, 68, 68, 0.1); color: var(--red); }
 .kmi-div { height: 1px; background: var(--border); margin: 2px 0; }
 
+/* last-run strip */
+.last-run-strip {
+  width: 100%;
+  border-top: 1px solid var(--border);
+  padding: 9px 18px;
+  background: rgba(255, 255, 255, 0.02);
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+.last-run-strip.strip-fail { background: rgba(239, 68, 68, 0.04); }
+
+.strip-title {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  align-self: center;
+  white-space: nowrap;
+  opacity: 0.7;
+}
+.strip-divider {
+  width: 1px;
+  height: 28px;
+  background: var(--border);
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.run-cell { display: flex; flex-direction: column; gap: 2px; }
+.rc-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); opacity: 0.7; }
+.rc-val { font-size: 12px; color: var(--text); font-variant-numeric: tabular-nums; }
+.rc-ok { color: var(--green); font-weight: 600; }
+.rc-fail { color: var(--red); font-weight: 600; }
+.rc-mono { font-family: ui-monospace, monospace; font-size: 11px; }
+
 @media (max-width: 720px) {
   .row-meta { gap: 10px; }
   .meta-cell { min-width: 44px; }
+  .last-run-strip { gap: 14px; flex-wrap: wrap; }
 }
 </style>
