@@ -252,14 +252,14 @@ async def _step_add_repos(db, server, ssh: SSHSession, os_info: OSInfo):
     log, t0 = await _start_step(db, server.id, "add_repos", 3)
     script = _add_repos_script(os_info)
     try:
-        r = await ssh.run(script, sudo=False, timeout=120)
+        r = await ssh.run(script, sudo=False, timeout=240)
         if not r.ok:
             msg = "Could not reach package repositories. Ensure outbound access to repos.influxdata.com and packages.fluentbit.io."
             await _finish_step(db, log, t0, status="failed", message=msg, ssh_output=r.stderr or r.stdout)
             raise SSHError(msg)
         await _finish_step(db, log, t0, status="done", ssh_output=r.stdout)
     except asyncio.TimeoutError:
-        await _finish_step(db, log, t0, status="failed", message="timed out fetching repos")
+        await _finish_step(db, log, t0, status="failed", message="timed out fetching repos (>240s) — server may have slow package mirrors")
         raise SSHError("add_repos timed out")
 
 
