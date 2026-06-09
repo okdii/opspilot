@@ -47,7 +47,7 @@ function regenerate() {
 const setupSql = computed(() =>
   props.dbType === 'postgres'
     ? `CREATE USER opspilot WITH PASSWORD '${password.value}';\nGRANT pg_monitor TO opspilot;`
-    : `CREATE USER 'opspilot_monitor'@'%' IDENTIFIED BY '${password.value}';\nGRANT PROCESS, REPLICATION CLIENT,\n  SELECT ON *.* TO 'opspilot_monitor'@'%';\nFLUSH PRIVILEGES;`
+    : `CREATE USER 'opspilot_monitor'@'127.0.0.1' IDENTIFIED BY '${password.value}';\nGRANT PROCESS, REPLICATION CLIENT,\n  SELECT ON *.* TO 'opspilot_monitor'@'127.0.0.1';\nFLUSH PRIVILEGES;`
 )
 
 const dbLabel = computed(() => props.dbType === 'postgres' ? 'PostgreSQL' : 'MariaDB')
