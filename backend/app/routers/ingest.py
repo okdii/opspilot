@@ -12,11 +12,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import select, text
+from sqlalchemy import and_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.models.other import Alert
 from app.models.server import Server
+from app.services.alerting import OPEN_STATES, fire_alert, resolve_alert
 from app.services.ingestion import write_logs, write_metrics
 
 router = APIRouter(prefix="/api/ingest", tags=["ingest"])
@@ -99,6 +101,38 @@ async def ingest_logs(
     return {"ok": True, "rows": count}
 
 
+async def _evaluate_agent_services(
+    db: AsyncSession, server_id, server_name: str, services: list[_ServiceMetric]
+) -> None:
+    """Fire/resolve agent_service_down alerts based on heartbeat service statuses."""
+    for svc in services:
+        alert_type = f"agent_service_down:{svc.name}"
+        if svc.status == "stopped":
+            await fire_alert(
+                db,
+                type=alert_type,
+                severity="critical",
+                message=f"Service {svc.name} is down (reported by OpsPilot agent)",
+                server_id=server_id,
+                cooldown_min=60,
+                commit=False,
+            )
+        elif svc.status == "running":
+            open_alert = (
+                await db.execute(
+                    select(Alert).where(
+                        and_(
+                            Alert.type == alert_type,
+                            Alert.server_id == server_id,
+                            Alert.state.in_(OPEN_STATES),
+                        )
+                    ).limit(1)
+                )
+            ).scalar_one_or_none()
+            if open_alert:
+                await resolve_alert(db, open_alert, commit=False)
+
+
 @router.post("/heartbeat")
 async def ingest_heartbeat(
     payload: _HeartbeatPayload,
@@ -131,5 +165,6 @@ async def ingest_heartbeat(
             rows,
         )
         row_count = len(rows)
+        await _evaluate_agent_services(db, server.id, server.name, payload.services)
     await db.commit()
     return {"ok": True, "rows": row_count}
