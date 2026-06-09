@@ -250,6 +250,13 @@ async def _skip_step(db, server_id, step: str, n: int, message: str) -> None:
 
 async def _step_add_repos(db, server, ssh: SSHSession, os_info: OSInfo):
     log, t0 = await _start_step(db, server.id, "add_repos", 3)
+    if os_info.family == "debian":
+        repo_check = await ssh.run("test -f /etc/apt/sources.list.d/influxdata.list", sudo=False, timeout=10)
+    else:
+        repo_check = await ssh.run("test -f /etc/yum.repos.d/influxdata.repo", sudo=False, timeout=10)
+    if repo_check.ok:
+        await _finish_step(db, log, t0, status="done", message="package repositories already configured")
+        return
     script = _add_repos_script(os_info)
     try:
         r = await ssh.run(script, sudo=False, timeout=240)
@@ -265,6 +272,13 @@ async def _step_add_repos(db, server, ssh: SSHSession, os_info: OSInfo):
 
 async def _step_install(db, server, ssh: SSHSession, os_info: OSInfo, package: str, step: str, n: int):
     log, t0 = await _start_step(db, server.id, step, n)
+    if os_info.family == "debian":
+        check = await ssh.run(f"dpkg-query -W -f='${{Status}}' {package} 2>/dev/null | grep -q 'install ok installed'", sudo=False, timeout=10)
+    else:
+        check = await ssh.run(f"rpm -q {package}", sudo=False, timeout=10)
+    if check.ok:
+        await _finish_step(db, log, t0, status="done", message=f"{package} already installed")
+        return
     if os_info.family == "debian":
         cmd = f"DEBIAN_FRONTEND=noninteractive apt-get install -y {package}"
     else:
