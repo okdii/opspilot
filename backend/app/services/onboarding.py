@@ -255,6 +255,8 @@ async def _step_add_repos(db, server, ssh: SSHSession, os_info: OSInfo):
     else:
         repo_check = await ssh.run("test -f /etc/yum.repos.d/influxdata.repo", sudo=False, timeout=10)
     if repo_check.ok:
+        if os_info.family == "debian":
+            await ssh.run("apt-get update -y", sudo=True, timeout=240)
         await _finish_step(db, log, t0, status="done", message="package repositories already configured")
         return
     script = _add_repos_script(os_info)
