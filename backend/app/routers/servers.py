@@ -21,6 +21,12 @@ router = APIRouter(tags=["servers"])
 _ONLINE_THRESHOLD = timedelta(minutes=2)
 
 
+def _logs_supported(server: Server) -> bool:
+    if server.os_distro is None:
+        return True
+    return "Debian GNU/Linux 9" not in server.os_distro
+
+
 def _compute_status(server: Server) -> str:
     if server.os_distro is None:
         return "pending"
@@ -56,6 +62,7 @@ async def _server_to_out(server: Server, db: AsyncSession) -> ServerOut:
         status=_compute_status(server),
         last_seen_at=server.last_seen_at,
         active_alert_count=await _active_alert_count(str(server.id), db),
+        logs_supported=_logs_supported(server),
         created_at=server.created_at,
     )
 

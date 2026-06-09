@@ -16,6 +16,8 @@ const metrics = useMetricsStore()
 const orgStore = useOrgStore()
 const notify = useNotify()
 
+const props = withDefaults(defineProps<{ logsSupported?: boolean }>(), { logsSupported: true })
+
 type SubTab = 'metric' | 'log'
 const subTab = ref<SubTab>('metric')
 
@@ -189,6 +191,9 @@ function fmtWindowSec(sec: number) { return sec >= 60 ? `${Math.round(sec / 60)}
     </template>
 
     <template v-else>
+      <div v-if="!props.logsSupported" class="unsupported-notice">
+        Log collection is not available on this server (Debian 9 / stretch). Log pattern rules can be created but will never fire — upgrade to Debian 10+ to enable log monitoring.
+      </div>
       <div v-if="logRules.length === 0" class="empty">
         <p class="empty-msg">No log rules for this server.</p>
         <button class="btn-add" @click="openNewLog">Create one</button>
@@ -239,6 +244,7 @@ function fmtWindowSec(sec: number) { return sec >= 60 ? `${Math.round(sec / 60)}
 
 <style scoped>
 .alerts-tab { padding: 4px 0 32px; }
+.unsupported-notice { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.35); border-radius: 6px; color: #f59e0b; font-size: 13px; padding: 10px 14px; margin-bottom: 14px; }
 
 .sub-tabbar {
   display: flex;

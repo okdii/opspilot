@@ -36,6 +36,7 @@ export interface Server {
   ssh_user: string
   ssh_auth_type: 'key' | 'password'
   os_distro: string | null
+  logs_supported: boolean
   kernel_version: string | null
   tags: string[]
   is_active: boolean

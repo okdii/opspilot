@@ -235,7 +235,7 @@ watch(() => orgStore.activeOrgId, (newId) => {
       </div>
     </div>
 
-    <component :is="TAB_COMPONENTS[activeTab]" />
+    <component :is="TAB_COMPONENTS[activeTab]" :logs-supported="server.logs_supported" />
 
     <AgentStatusFooter />
 

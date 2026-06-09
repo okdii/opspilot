@@ -8,6 +8,8 @@ import LogRow from '@/components/logs/LogRow.vue'
 import type { LogEntry, LogSeverity, LogSource, LogTimeRange } from '@/types'
 import { relativeTime } from '@/utils/time'
 
+const props = withDefaults(defineProps<{ logsSupported?: boolean }>(), { logsSupported: true })
+
 const metrics = useMetricsStore()
 const logs = useLogStore()
 
@@ -204,6 +206,9 @@ onUnmounted(() => {
 
 <template>
   <div class="logs-tab">
+    <div v-if="!props.logsSupported" class="unsupported-notice">
+      Log collection is not available on this server. Fluent Bit has no packages for Debian 9 (stretch) — upgrade to Debian 10+ to enable log monitoring.
+    </div>
     <!-- Severity summary panels -->
     <div class="summary-panels">
       <div
@@ -335,6 +340,7 @@ onUnmounted(() => {
 
 <style scoped>
 .logs-tab { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.unsupported-notice { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.35); border-radius: 6px; color: #f59e0b; font-size: 13px; padding: 10px 14px; margin-bottom: 14px; }
 
 .filter-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
 .fb-dd { position: relative; }

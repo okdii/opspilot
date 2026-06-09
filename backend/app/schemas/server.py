@@ -89,6 +89,7 @@ class ServerOut(BaseModel):
     status: str
     last_seen_at: datetime | None
     active_alert_count: int
+    logs_supported: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}
