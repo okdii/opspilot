@@ -5,6 +5,7 @@ import { useServerStore } from '@/stores/server'
 import { useJobsStore } from '@/stores/jobs'
 import type { MonitoredJob } from '@/stores/jobs'
 import { useNotify } from '@/composables/useNotify'
+import { fmtDuration } from '@/utils/time'
 import { PageHeader, EmptyState } from '@/components/ui'
 import JobRow from '@/components/cron-backup/JobRow.vue'
 import JobDetailSlideOver from '@/components/cron-backup/JobDetailSlideOver.vue'
@@ -106,14 +107,6 @@ const todayFailedCount = computed(() =>
 function fmtTime(iso: string | null): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
-}
-
-function fmtDuration(d: number | null | undefined): string {
-  if (d == null) return '—'
-  if (d < 60) return `${d}s`
-  const m = Math.floor(d / 60)
-  const s = d % 60
-  return s ? `${m}m ${s}s` : `${m}m`
 }
 
 // ── Subtitle ─────────────────────────────────────────────────────────────────

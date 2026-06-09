@@ -8,6 +8,7 @@ import { useJobsStore } from '@/stores/jobs'
 import type { MonitoredJob, JobRun } from '@/stores/jobs'
 import { cronToLabel } from './cronLabel'
 import CalendarHeatmap from './CalendarHeatmap.vue'
+import { relativeTime, fmtDuration } from '@/utils/time'
 
 /**
  * Job detail slide-over for the unified MonitoredJob system (spec §7.5).
@@ -53,18 +54,6 @@ const graceText = computed(() => {
 })
 
 const pingUrl = computed(() => props.job?.ping_url ?? '')
-
-function relativeTime(iso: string | null): string {
-  if (!iso) return 'never'
-  const diff = Date.now() - new Date(iso).getTime()
-  const s = Math.floor(diff / 1000)
-  if (s < 60) return `${s}s ago`
-  const m = Math.floor(s / 60)
-  if (m < 60) return `${m}m ago`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h ago`
-  return `${Math.floor(h / 24)}d ago`
-}
 
 const nextExpectedText = computed(() => {
   const iso = props.job?.next_expected_at
@@ -219,14 +208,6 @@ async function confirmRegenerate(): Promise<void> {
   } finally {
     regenerating.value = false
   }
-}
-
-function fmtDuration(d: number | null | undefined): string {
-  if (d == null) return '—'
-  if (d < 60) return `${d}s`
-  const m = Math.floor(d / 60)
-  const s = d % 60
-  return s ? `${m}m ${s}s` : `${m}m`
 }
 
 function fmtTime(iso: string | null | undefined): string {

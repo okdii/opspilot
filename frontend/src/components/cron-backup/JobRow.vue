@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { StatusBadge } from '@/components/ui'
 import { cronToLabel } from './cronLabel'
+import { relativeTime, fmtDuration } from '@/utils/time'
 import type { MonitoredJob } from '@/stores/jobs'
 
 const props = defineProps<{
@@ -32,18 +33,6 @@ const sizeText = computed(() => {
   return '—'
 })
 
-function relativeTime(iso: string | null): string {
-  if (!iso) return 'never'
-  const diff = Date.now() - new Date(iso).getTime()
-  const s = Math.floor(diff / 1000)
-  if (s < 60) return `${s}s ago`
-  const m = Math.floor(s / 60)
-  if (m < 60) return `${m}m ago`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h ago`
-  return `${Math.floor(h / 24)}d ago`
-}
-
 function fmtDate(iso: string | null): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('en-US', {
@@ -53,14 +42,6 @@ function fmtDate(iso: string | null): string {
     minute: '2-digit',
     hour12: false,
   })
-}
-
-function fmtDuration(sec: number | null | undefined): string {
-  if (sec == null) return '—'
-  if (sec < 60) return `${sec}s`
-  const m = Math.floor(sec / 60)
-  const s = sec % 60
-  return s ? `${m}m ${s}s` : `${m}m`
 }
 
 const lastRunStatus = computed(() => {

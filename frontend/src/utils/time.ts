@@ -13,6 +13,15 @@ export function relativeTime(iso: string | null): string {
   return `${Math.floor(h / 24)}d ago`
 }
 
+/** "5s", "3m 12s", "7m" — or "—" for null. */
+export function fmtDuration(sec: number | null | undefined): string {
+  if (sec == null) return '—'
+  if (sec < 60) return `${sec}s`
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  return s ? `${m}m ${s}s` : `${m}m`
+}
+
 /** "in 36h", "in 4d", "in 12m", "now", or "Expired" when the instant is in the past. */
 export function relativeFuture(iso: string | null): string {
   if (!iso) return '—'
