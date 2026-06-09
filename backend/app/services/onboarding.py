@@ -205,11 +205,14 @@ def _add_repos_script(os_info: OSInfo) -> str:
                 " https://packages.fluentbit.io/${ID}/${VERSION_CODENAME}"
                 ' ${VERSION_CODENAME} main" | sudo tee /etc/apt/sources.list.d/fluent-bit.list\n'
             )
+        sources = "sources.list.d/influxdata.list"
+        if fb_block:
+            sources += " sources.list.d/fluent-bit.list"
         return f"""set -e
 sudo install -d -m 0755 /etc/apt/keyrings
 curl -fsSL https://repos.influxdata.com/influxdata-archive.key | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/influxdata-archive.gpg
 echo "deb [signed-by=/etc/apt/keyrings/influxdata-archive.gpg] https://repos.influxdata.com/debian stable main" | sudo tee /etc/apt/sources.list.d/influxdata.list
-{fb_block}sudo apt-get update -y
+{fb_block}sudo apt-get update -o Dir::Etc::sourcelist="{sources}" -o Dir::Etc::sourcelistparts="" -o APT::Get::List-Cleanup="0"
 """
     # RHEL family
     return r"""
@@ -258,7 +261,13 @@ async def _step_add_repos(db, server, ssh: SSHSession, os_info: OSInfo):
         if os_info.family == "debian":
             telegraf_check = await ssh.run("dpkg-query -W -f='${Status}' telegraf 2>/dev/null | grep -q 'install ok installed'", sudo=False, timeout=10)
             if not telegraf_check.ok:
-                await ssh.run("apt-get update -y", sudo=True, timeout=240)
+                await ssh.run(
+                    "apt-get update"
+                    " -o Dir::Etc::sourcelist=sources.list.d/influxdata.list"
+                    " -o Dir::Etc::sourcelistparts=''"
+                    " -o APT::Get::List-Cleanup=0",
+                    sudo=True, timeout=60,
+                )
         await _finish_step(db, log, t0, status="done", message="package repositories already configured")
         return
     script = _add_repos_script(os_info)
