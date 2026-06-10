@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { EmptyState, StatusBadge } from '@/components/ui'
-import { getServerServices } from '@/services/api'
+import { getServerServices, muteServerService, unmuteServerService } from '@/services/api'
 import { useMetricsStore } from '@/stores/metrics'
 import type { ServerServiceEntry } from '@/types'
 
@@ -20,6 +20,23 @@ async function fetchServices() {
   } finally {
     loading.value = false
   }
+}
+
+async function toggleMute(svc: ServerServiceEntry) {
+  const id = metrics.activeServerId
+  if (!id) return
+  const prev = svc.muted
+  svc.muted = !prev
+  try {
+    if (svc.muted) {
+      await muteServerService(id, svc.name)
+    } else {
+      await unmuteServerService(id, svc.name)
+    }
+  } catch {
+    svc.muted = prev
+  }
+  await fetchServices()
 }
 
 function formatUptime(seconds: number | null): string {
@@ -61,17 +78,37 @@ watch(() => metrics.latestValues, () => void fetchServices(), { deep: false })
             <th class="t-num">CPU</th>
             <th class="t-num">Memory</th>
             <th class="t-num">Uptime</th>
+            <th class="t-bell"></th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="svc in services" :key="svc.name">
+          <tr v-for="svc in services" :key="svc.name" :class="{ 'is-muted': svc.muted }">
             <td class="t-name">{{ svc.name }}</td>
             <td class="t-status">
               <StatusBadge kind="process_service" :status="svc.status" />
+              <span v-if="svc.muted" class="muted-badge">muted</span>
             </td>
             <td class="t-num">{{ svc.cpu_pct != null ? svc.cpu_pct.toFixed(1) + '%' : '—' }}</td>
             <td class="t-num">{{ svc.mem_mb != null ? svc.mem_mb.toFixed(0) + ' MB' : '—' }}</td>
             <td class="t-num">{{ formatUptime(svc.uptime_seconds) }}</td>
+            <td class="t-bell">
+              <button
+                class="bell-btn"
+                :class="{ 'is-muted': svc.muted }"
+                :title="svc.muted ? 'Unmute alerts' : 'Mute alerts'"
+                @click="toggleMute(svc)"
+              >
+                <svg v-if="!svc.muted" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                  <line x1="1" y1="1" x2="23" y2="23"/>
+                </svg>
+              </button>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -84,7 +121,6 @@ watch(() => metrics.latestValues, () => void fetchServices(), { deep: false })
 
 .svc-head { display: flex; align-items: center; justify-content: space-between; }
 .svc-head h3 { font-size: 15px; color: var(--text); font-weight: 600; }
-
 
 .skeleton-wrap { display: flex; flex-direction: column; gap: 8px; }
 .skeleton-row {
@@ -113,4 +149,25 @@ watch(() => metrics.latestValues, () => void fetchServices(), { deep: false })
 .t-name { font-weight: 500; min-width: 100px; }
 .t-status { width: 130px; }
 .t-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); min-width: 80px; }
+.t-bell { width: 36px; text-align: center; padding: 0 8px !important; }
+
+/* Muted row — fade all cells except the bell column */
+tr.is-muted td:not(.t-bell) { opacity: 0.45; }
+
+.muted-badge {
+  display: inline-block; margin-left: 6px;
+  background: rgba(255,255,255,0.07); color: var(--muted);
+  font-size: 10px; font-weight: 500; text-transform: uppercase;
+  letter-spacing: 0.04em; padding: 1px 5px; border-radius: 3px;
+  vertical-align: middle;
+}
+
+.bell-btn {
+  background: none; border: none; cursor: pointer; padding: 4px;
+  border-radius: 4px; color: var(--muted); display: flex; align-items: center;
+  transition: color 0.15s, background 0.15s;
+}
+.bell-btn:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+.bell-btn.is-muted { color: rgba(255,255,255,0.25); }
+.bell-btn.is-muted:hover { color: var(--text); background: rgba(255,255,255,0.08); }
 </style>
