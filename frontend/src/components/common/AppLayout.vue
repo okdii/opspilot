@@ -252,5 +252,8 @@ async function logout() {
   :deep(.org-switcher .trigger .name),
   :deep(.org-switcher .trigger .chev) { display: none; }
   :deep(.org-switcher .trigger) { padding: 8px; justify-content: center; }
+  :deep(.bell-pop) { left: auto; right: 0; }
+  :deep(.org-switcher .dropdown) { left: auto; right: -6px; min-width: 240px; }
+  .user-menu { left: auto; right: -4px; min-width: 180px; }
 }
 </style>
