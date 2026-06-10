@@ -87,7 +87,7 @@ async def _query_mysql(host: str, port: int, user: str, password: str) -> dict:
             )
             largest_table = await cur.fetchone()
 
-        conn.close()
+        conn.close()  # sync in aiomysql, not awaitable
         ssl_cipher = status.get("Ssl_cipher", "")
         return {
             "reachable": True,
@@ -165,7 +165,7 @@ async def _query_postgres(host: str, port: int, user: str, password: str) -> dic
             "total_databases": int(db_count) if db_count is not None else None,
             "total_tables": int(table_count) if table_count is not None else None,
             "largest_db": {"name": largest_db["name"], "size_bytes": int(largest_db["sz"])} if largest_db else None,
-            "largest_table": {"name": largest_table["name"], "size_bytes": int(largest_table["sz"])} if largest_table else None,
+            "largest_table": {"name": largest_table["name"], "size_bytes": int(largest_table["sz"])} if largest_table and largest_table["sz"] else None,
         }
     except Exception:  # noqa: BLE001
         logger.warning("db_info: postgres query failed for %s:%s", host, port)
@@ -223,11 +223,11 @@ async def _get_conn_metrics(
     }
 
 
-async def _get_backup(db: AsyncSession, server_id: str) -> dict | None:
-    """Latest MonitoredJob record for this server (first by last_ping_at desc)."""
+async def _get_backup(db: AsyncSession, server_id: str, db_type: str) -> dict | None:
+    """Latest MonitoredJob record for this server scoped to db_type."""
     job = await db.scalar(
         select(MonitoredJob)
-        .where(MonitoredJob.server_id == server_id)
+        .where(MonitoredJob.server_id == server_id, MonitoredJob.db_type == db_type)
         .order_by(MonitoredJob.last_ping_at.desc().nulls_last())
         .limit(1)
     )
@@ -245,6 +245,8 @@ async def _get_replication(
 ) -> dict:
     """Replication status from Telegraf metrics."""
     if cred.db_type == "postgres":
+        # PostgreSQL exposes replication delay as a single numeric metric;
+        # we use it as both the lag value and the running indicator (non-null = running).
         metric_running = "postgresql.replication_delay"
         metric_lag = "postgresql.replication_delay"
     else:
@@ -290,12 +292,10 @@ async def get_db_info(
     db: AsyncSession = Depends(get_db),
 ):
     """Live database information snapshot for the Info tab."""
-    await _assert_server_access(server_id, user, db)
+    server = await _assert_server_access(server_id, user, db)
     cred = await _get_credential_by_id(credential_id, server_id, db)
     password = decrypt(cred.password_encrypted)
     label = _resolve_label(cred)
-
-    server = await db.scalar(select(Server).where(Server.id == server_id))
 
     if cred.db_type == "postgres":
         live = await _query_postgres(cred.host, cred.port, cred.username, password)
@@ -304,7 +304,7 @@ async def get_db_info(
 
     hw = await _get_server_hw(db, server_id)
     conn_metrics = await _get_conn_metrics(db, server_id, label, cred.db_type)
-    backup = await _get_backup(db, server_id)
+    backup = await _get_backup(db, server_id, cred.db_type)
     replication = await _get_replication(db, server_id, label, cred)
 
     return {
