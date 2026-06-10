@@ -47,6 +47,8 @@ const smtpFrom = ref('')
 const smtpRecipients = ref('')
 const smtpPassword = ref('') // blank = keep existing
 const hasPassword = ref(false)
+const smtpEnabled = ref(true)
+const testingDiscord = ref(false)
 
 const discordWebhookUrl = ref('')
 const discordEnabled = ref(false)
@@ -72,6 +74,7 @@ async function load() {
     smtpFrom.value = settings.smtp.fromAddress
     smtpRecipients.value = settings.smtp.recipients
     hasPassword.value = settings.smtp.hasPassword
+    smtpEnabled.value = settings.smtp.enabled
     discordWebhookUrl.value = settings.discord.webhookUrl
     discordEnabled.value = settings.discord.enabled
   } catch (err) {
@@ -111,6 +114,7 @@ async function saveSmtp() {
       smtp_username: smtpUsername.value.trim(),
       smtp_from_address: smtpFrom.value.trim(),
       smtp_recipients: smtpRecipients.value.trim(),
+      smtp_enabled: smtpEnabled.value,
     }
     // Only send the password when the admin typed a new one.
     if (smtpPassword.value) payload.smtp_password = smtpPassword.value
@@ -134,6 +138,18 @@ async function sendTest() {
     notify.error(getApiError(err) ?? 'Test email failed.')
   } finally {
     testing.value = false
+  }
+}
+
+async function sendDiscordTest() {
+  testingDiscord.value = true
+  try {
+    await settings.testDiscord()
+    notify.success('Test notification sent to Discord.')
+  } catch (err) {
+    notify.error(getApiError(err) ?? 'Discord test failed.')
+  } finally {
+    testingDiscord.value = false
   }
 }
 
@@ -186,6 +202,16 @@ async function saveDiscord() {
     <!-- SMTP -->
     <section class="card">
       <h2>Email (SMTP)</h2>
+      <div class="field toggle-row">
+        <div>
+          <span class="toggle-label">Send alert notifications via email</span>
+          <p class="hint">Uncheck to pause all email alerts without removing your SMTP configuration.</p>
+        </div>
+        <label class="switch">
+          <input v-model="smtpEnabled" type="checkbox" :disabled="loading" />
+          <span class="slider"></span>
+        </label>
+      </div>
       <div v-if="!loading && !smtpConfigured" class="banner amber">
         Email notifications are disabled — configure SMTP to receive alerts.
       </div>
@@ -267,9 +293,14 @@ async function saveDiscord() {
           In Discord: channel settings → Integrations → Webhooks → New Webhook → Copy Webhook URL.
         </p>
       </div>
-      <button class="primary" :disabled="savingDiscord || loading" @click="saveDiscord">
-        <span v-if="savingDiscord" class="spin"></span><span v-else>Save</span>
-      </button>
+      <div class="actions">
+        <button class="primary" :disabled="savingDiscord || loading" @click="saveDiscord">
+          <span v-if="savingDiscord" class="spin"></span><span v-else>Save</span>
+        </button>
+        <button class="ghost" :disabled="testingDiscord || loading || !discordWebhookUrl.trim()" @click="sendDiscordTest">
+          <span v-if="testingDiscord" class="spin dark"></span><span v-else>Send Test Notification</span>
+        </button>
+      </div>
     </section>
   </div>
 </template>
