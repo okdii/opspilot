@@ -203,6 +203,9 @@ async def send_alert_email(
         logger.warning("alert email skipped: no settings row")
         return False
 
+    if not s.smtp_enabled:
+        return False
+
     recipients = parse_recipients(s.smtp_recipients)
     base_url = s.base_url or "http://localhost"
 
