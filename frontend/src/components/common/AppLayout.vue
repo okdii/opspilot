@@ -19,6 +19,7 @@ const onboarding = useOnboardingStore()
 const alertStore = useAlertStore()
 const settingsStore = useSettingsStore()
 const userMenuOpen = ref(false)
+const mobileOpen = ref(false)
 
 const ALERT_EVENTS = ['alert_fired', 'alert_updated', 'alert_resolved'] as const
 
@@ -120,6 +121,8 @@ watch(() => orgStore.activeOrgId, () => {
   if (auth.isAuthenticated) subscribeActiveOrg()
 })
 
+watch(() => route.path, () => { mobileOpen.value = false })
+
 async function logout() {
   stopWs()
   await auth.logout()
@@ -129,7 +132,7 @@ async function logout() {
 
 <template>
   <div class="app-shell">
-    <aside class="sidebar">
+    <aside class="sidebar" :class="{ 'drawer-open': mobileOpen }">
       <div class="brand">
         <span class="logo">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -188,7 +191,27 @@ async function logout() {
       </div>
     </aside>
 
+    <div v-if="mobileOpen" class="drawer-backdrop" @click="mobileOpen = false" />
+
     <main class="content">
+      <div class="mobile-topbar">
+        <button class="hamburger" aria-label="Open menu" @click="mobileOpen = !mobileOpen">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+        <span class="mobile-brand-name">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" style="color: var(--accent-2)">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+          OpsPilot
+        </span>
+        <div class="mobile-bell">
+          <NotificationBell />
+        </div>
+      </div>
       <router-view />
     </main>
 
@@ -255,5 +278,49 @@ async function logout() {
   :deep(.bell-pop) { left: auto; right: 0; }
   :deep(.org-switcher .dropdown) { left: auto; right: -6px; min-width: 240px; }
   .user-menu { left: auto; right: -4px; min-width: 180px; }
+}
+
+/* ─── Mobile (<768px): hidden sidebar + top bar + slide-out drawer ──────── */
+.mobile-topbar { display: none; }
+.drawer-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 199;
+}
+.hamburger {
+  background: none; border: none; color: var(--text); cursor: pointer;
+  padding: 6px; border-radius: 6px; display: flex; align-items: center;
+  flex-shrink: 0;
+}
+.hamburger:hover { background: var(--surface-2); }
+.mobile-brand-name {
+  font-size: 15px; font-weight: 700; color: #fff; flex: 1;
+  display: flex; align-items: center; gap: 8px;
+}
+.mobile-bell { display: flex; align-items: center; }
+
+@media (max-width: 767px) {
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: 280px;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+  }
+  .sidebar.drawer-open { transform: translateX(0); }
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 52px;
+    padding: 0 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    flex-shrink: 0;
+  }
 }
 </style>
