@@ -109,6 +109,11 @@ function fmtTime(iso: string | null): string {
   return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function groupStatusCount(group: { jobs: MonitoredJob[] }, status: string): number {
+  return group.jobs.filter((j) => j.status === status).length
+}
+
 // ── Subtitle ─────────────────────────────────────────────────────────────────
 const subtitle = computed(() => {
   const total = store.jobs.length
@@ -184,19 +189,43 @@ const subtitle = computed(() => {
       </template>
     </EmptyState>
 
-    <!-- List -->
-    <div v-else class="job-list">
-      <JobRow
-        v-for="job in store.sortedJobs"
-        :key="job.id"
-        :job="job"
-        :can-edit="canEdit"
-        :menu-open="openMenuId === job.id"
-        @detail="openDetail(job)"
-        @edit="openEdit(job)"
-        @delete="remove(job)"
-        @toggle-menu="openMenuId = openMenuId === job.id ? null : job.id"
-      />
+    <!-- List grouped by server -->
+    <div v-else class="server-groups">
+      <div
+        v-for="group in store.jobsGroupedByServer"
+        :key="group.server_id"
+        class="server-group"
+        :class="`group-${group.worstStatus}`"
+      >
+        <div class="group-hd">
+          <span class="dot" :class="`dot-${group.worstStatus}`"></span>
+          <span class="group-name">{{ group.server_name }}</span>
+          <span class="group-count">{{ group.jobs.length }} job{{ group.jobs.length !== 1 ? 's' : '' }}</span>
+          <span
+            v-if="group.worstStatus === 'missing'"
+            class="group-badge badge-missing"
+          >{{ groupStatusCount(group, 'missing') }} missing</span>
+          <span
+            v-else-if="group.worstStatus === 'late'"
+            class="group-badge badge-late"
+          >{{ groupStatusCount(group, 'late') }} late</span>
+          <span v-else class="group-badge badge-healthy">all healthy</span>
+        </div>
+        <div class="group-jobs">
+          <JobRow
+            v-for="job in group.jobs"
+            :key="job.id"
+            :job="job"
+            :can-edit="canEdit"
+            :menu-open="openMenuId === job.id"
+            :hide-server="true"
+            @detail="openDetail(job)"
+            @edit="openEdit(job)"
+            @delete="remove(job)"
+            @toggle-menu="openMenuId = openMenuId === job.id ? null : job.id"
+          />
+        </div>
+      </div>
     </div>
 
     <!-- Detail slide-over -->
@@ -224,7 +253,74 @@ const subtitle = computed(() => {
 .muted-note { color: var(--muted); font-size: 13px; }
 .state-note { color: var(--muted); padding: 40px 0; text-align: center; }
 
-.job-list { display: flex; flex-direction: column; gap: 10px; }
+/* Server group cards */
+.server-groups { display: flex; flex-direction: column; gap: 14px; }
+
+.server-group {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.server-group.group-missing { border-color: rgba(239, 68, 68, 0.4); }
+.server-group.group-late    { border-color: rgba(245, 158, 11, 0.4); }
+
+.group-hd {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.group-hd .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.group-hd .dot-healthy { background: var(--green); box-shadow: 0 0 8px rgba(34, 197, 94, 0.5); }
+.group-hd .dot-late    { background: var(--amber); }
+.group-hd .dot-missing { background: var(--red);   box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); }
+.group-hd .dot-paused  { background: var(--grey); }
+
+.group-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+}
+.group-count {
+  font-size: 10px;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1px 7px;
+}
+.group-badge {
+  font-size: 10px;
+  border-radius: 10px;
+  padding: 2px 8px;
+}
+.badge-missing { color: #fca5a5; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); }
+.badge-late    { color: #fcd34d; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); }
+.badge-healthy { color: #86efac; background: rgba(34, 197, 94, 0.1);   border: 1px solid rgba(34, 197, 94, 0.3);  }
+
+.group-jobs {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* JobRows inside a server card: remove outer border-radius + side borders so rows blend into the card */
+.group-jobs :deep(.job-row) {
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  border-bottom: 1px solid var(--border);
+}
+.group-jobs :deep(.job-row):last-child {
+  border-bottom: none;
+}
+.group-jobs :deep(.job-row.missing) {
+  border-bottom-color: rgba(239, 68, 68, 0.2);
+}
 
 .primary { padding: 9px 18px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #fff; border: none; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; min-height: 38px; }
 .primary:disabled { opacity: 0.6; cursor: wait; }
