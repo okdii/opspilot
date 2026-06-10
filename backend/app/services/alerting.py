@@ -27,6 +27,7 @@ from app.models.other import (
 )
 from app.models.server import Server
 from app.services import alert_email
+from app.services import discord as discord_service
 from app.ws.manager import ws_manager
 
 logger = logging.getLogger(__name__)
@@ -232,6 +233,9 @@ async def fire_alert(
     await alert_email.send_alert_email(
         db, alert, kind="fire", server_name=server_name, email_meta=email_meta
     )
+    await discord_service.send_discord_alert(
+        db, alert, kind="fire", server_name=server_name
+    )
     await _broadcast("alert_fired", alert, org_id, server_name)
 
     if commit:
@@ -263,6 +267,9 @@ async def resolve_alert(
         await alert_email.send_alert_email(
             db, alert, kind="resolve", server_name=server_name
         )
+    await discord_service.send_discord_alert(
+        db, alert, kind="resolve", server_name=server_name
+    )
     await _broadcast("alert_resolved", alert, org_id, server_name)
 
     if commit:
