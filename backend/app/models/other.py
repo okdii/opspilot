@@ -281,3 +281,5 @@ class Settings(Base):
     alerts_retention_days: Mapped[int] = mapped_column(Integer, nullable=False, default=90)
     writer_password_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     timezone: Mapped[str] = mapped_column(String(60), nullable=False, server_default="UTC")
+    discord_webhook_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    discord_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
