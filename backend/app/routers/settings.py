@@ -107,6 +107,42 @@ async def smtp_test(_: AdminUser, db: AsyncSession = Depends(get_db)):
     return {"ok": True, "sent_to": recipients[0]}
 
 
+@router.post("/discord/test", status_code=200)
+async def discord_test(_: AdminUser, db: AsyncSession = Depends(get_db)):
+    s = await _get_settings_row(db)
+    if not s.discord_webhook_url:
+        raise HTTPException(
+            400,
+            detail={"error": "not_configured", "message": "Configure a Discord webhook URL first."},
+        )
+    from datetime import datetime, timezone
+    import httpx
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    payload = {
+        "embeds": [
+            {
+                "title": "🔔 OpsPilot Test Notification",
+                "description": "If you received this, your Discord webhook is configured correctly.",
+                "color": 0x5865F2,
+                "footer": {"text": f"{s.instance_name} · {ts}"},
+            }
+        ]
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(s.discord_webhook_url, json=payload)
+        if resp.status_code not in (200, 204):
+            raise HTTPException(
+                502,
+                detail={"error": "webhook_error", "message": resp.text[:400]},
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, detail={"error": "webhook_error", "message": str(e)})
+    return {"ok": True}
+
+
 @router.post("/rotate-writer-password")
 async def rotate_writer_password(body: RotateWriterPassword, _: AdminUser):
     rotation_id, total = await rotation_service.start(body.new_password)
