@@ -254,6 +254,8 @@ async function removeLog(r: LogRule) {
 
 <style scoped>
 .page { padding: 28px; }
+@media (max-width: 1023px) { .page { padding: 20px; } }
+@media (max-width: 767px)  { .page { padding: 14px; } }
 .back-link { color: var(--muted); font-size: 13px; text-decoration: none; }
 .back-link:hover { color: var(--text); }
 .btn { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); }

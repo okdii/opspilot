@@ -195,6 +195,8 @@ function rel(ts: string | null): string {
 
 <style scoped>
 .page { padding: 28px; }
+@media (max-width: 1023px) { .page { padding: 20px; } }
+@media (max-width: 767px)  { .page { padding: 14px; } }
 .rules-link {
   display: inline-flex; align-items: center; gap: 6px;
   background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
@@ -223,7 +225,7 @@ function rel(ts: string | null): string {
 .alert-list { list-style: none; padding: 0; margin: 0; }
 .loading { padding: 40px; text-align: center; color: var(--muted); font-size: 13px; }
 
-.history-bar { display: flex; gap: 8px; padding: 10px 0; }
+.history-bar { display: flex; gap: 8px; padding: 10px 0; flex-wrap: wrap; }
 .search-input {
   flex: 1; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
   color: var(--text); font-size: 13px; padding: 8px 12px;
