@@ -605,11 +605,15 @@ const summaryText = computed(() => {
 
 <style scoped>
 .page { padding: 28px; }
+@media (max-width: 1023px) { .page { padding: 20px; } }
+@media (max-width: 767px)  { .page { padding: 14px; } }
 .empty { text-align: center; padding: 80px 20px; }
 .empty .icon { font-size: 48px; margin-bottom: 12px; }
 .empty h2 { font-size: 18px; color: #fff; margin-bottom: 6px; }
 .empty p { color: var(--muted); margin-bottom: 20px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+@media (max-width: 900px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 479px) { .stat-grid { grid-template-columns: 1fr; } }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; transition: border-color 0.15s; cursor: pointer; }
 .card:hover { border-color: var(--accent); }
 .card.status-online { border-color: rgba(34,197,94,0.3); }
