@@ -11,9 +11,11 @@ with static fields only; never raises 5xx for a down database.
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
 import asyncpg
 import aiomysql
+import asyncssh
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,11 +25,32 @@ from app.database import get_db
 from app.deps import CurrentUser
 from app.models.other import DBCredential, MonitoredJob
 from app.routers.databases import _assert_server_access, _get_credential_by_id, _resolve_label
+from app.services.ssh import _connect_options
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["databases"])
 
 _LIVE_TIMEOUT = 5  # seconds
+
+
+# ── SSH tunnel ────────────────────────────────────────────────────────────────
+
+@asynccontextmanager
+async def _ssh_tunnel(server, remote_host: str, remote_port: int):
+    """Forward remote_host:remote_port through the server's SSH connection.
+
+    The DB credential host is used as the destination *as seen from the SSH server*,
+    so 127.0.0.1 works correctly — the tunnel lands on the server's own loopback.
+    Yields (tunnel_host, tunnel_port) for the caller to connect to locally.
+    """
+    opts = _connect_options(server)
+    opts["connect_timeout"] = _LIVE_TIMEOUT
+    async with asyncssh.connect(**opts) as conn:
+        listener = await conn.forward_local_port("127.0.0.1", 0, remote_host, remote_port)
+        try:
+            yield "127.0.0.1", listener.get_port()
+        finally:
+            listener.close()
 
 
 # ── Live query helpers ────────────────────────────────────────────────────────
@@ -296,10 +319,17 @@ async def get_db_info(
     password = decrypt(cred.password_encrypted)
     label = _resolve_label(cred)
 
-    if cred.db_type == "postgres":
-        live = await _query_postgres(cred.host, cred.port, cred.username, password)
-    else:
-        live = await _query_mysql(cred.host, cred.port, cred.username, password)
+    # Route the live DB query through SSH so it works even when the DB only
+    # listens on localhost (127.0.0.1) and the port is not publicly exposed.
+    live: dict = {"reachable": False}
+    try:
+        async with _ssh_tunnel(server, cred.host, cred.port) as (thost, tport):
+            if cred.db_type == "postgres":
+                live = await _query_postgres(thost, tport, cred.username, password)
+            else:
+                live = await _query_mysql(thost, tport, cred.username, password)
+    except Exception:
+        logger.warning("db_info: ssh tunnel failed for server %s", server_id)
 
     hw = await _get_server_hw(db, server_id)
     conn_metrics = await _get_conn_metrics(db, server_id, label, cred.db_type)
