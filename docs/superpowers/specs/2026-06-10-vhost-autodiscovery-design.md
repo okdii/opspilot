@@ -78,8 +78,8 @@ Try each in order; all detected servers are scanned (multiple web servers on one
 | Web Server  | Command                                          | Parser strategy |
 |-------------|--------------------------------------------------|-----------------|
 | nginx       | `nginx -T`                                       | Regex over merged config: `server_name` + `listen` directives |
-| apache      | `apache2ctl -S`                                  | Parse virtual host summary lines: `port 443 namevhost domain.com` |
-| caddy       | Read `/etc/caddy/Caddyfile`                      | Regex over site address blocks (e.g. `domain.com`, `:443 { }`) |
+| apache      | `apache2ctl -S` (Debian) or `httpd -S` (RHEL)   | Parse virtual host summary lines: `port 443 namevhost domain.com` |
+| caddy       | Read Caddyfile (try `/etc/caddy/Caddyfile`, then `/etc/caddy/conf.d/*.conf`) | Regex over site address blocks (e.g. `domain.com`, `:443 { }`) |
 | litespeed   | `cat /usr/local/lsws/conf/httpd_config.xml`      | XML parse `<virtualHost>` → `<serverName>` + `<listeners>` |
 
 ### Scheme Detection
@@ -91,7 +91,8 @@ Try each in order; all detected servers are scanned (multiple web servers on one
 
 After parsing, cross-check each discovered domain against existing `Service` rows
 joined through `Server.org_id` for the current org. Set `already_monitored: true`
-if a service with a matching URL exists.
+if a service with a URL that matches `{scheme}://{domain}` (exact, case-insensitive)
+already exists — HTTP and HTTPS variants are treated as distinct.
 
 ### Error Responses
 
