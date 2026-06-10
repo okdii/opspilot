@@ -13,6 +13,7 @@ export const useSettingsStore = defineStore('settings', () => {
     fromAddress: '',
     recipients: '',
     hasPassword: false,
+    enabled: true,
   })
   const retention = ref({
     metricsRetentionDays: 30,
@@ -47,6 +48,7 @@ export const useSettingsStore = defineStore('settings', () => {
       fromAddress: data.smtp_from_address ?? '',
       recipients: data.smtp_recipients ?? '',
       hasPassword: data.smtp_has_password,
+      enabled: data.smtp_enabled ?? true,
     }
     retention.value = {
       metricsRetentionDays: data.metrics_retention_days,
@@ -71,6 +73,10 @@ export const useSettingsStore = defineStore('settings', () => {
   async function testSmtp() {
     const { data } = await api.post('/api/settings/smtp/test')
     return data as { ok: boolean; sent_to: string }
+  }
+  async function testDiscord() {
+    const { data } = await api.post('/api/settings/discord/test')
+    return data as { ok: boolean }
   }
   async function saveRetention(p: Record<string, number>) {
     await api.patch('/api/settings', p)
@@ -153,6 +159,7 @@ export const useSettingsStore = defineStore('settings', () => {
     saveGeneral,
     saveSmtp,
     testSmtp,
+    testDiscord,
     saveRetention,
     saveDiscord,
     fetchSessions,
