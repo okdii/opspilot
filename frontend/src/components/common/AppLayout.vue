@@ -240,7 +240,7 @@ async function logout() {
 .user-btn { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; color: var(--text); transition: border-color 0.15s; }
 .user-btn:hover, .user-card.open .user-btn { border-color: var(--accent); }
 .avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 600; font-size: 13px; }
-.user-info { flex: 1; text-align: left; }
+.user-info { display: flex; flex-direction: column; flex: 1; text-align: left; }
 .user-name { font-size: 13px; color: var(--text); font-weight: 500; }
 .user-role { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
 .chev { color: var(--muted); font-size: 10px; }
@@ -309,6 +309,22 @@ async function logout() {
     transition: transform 0.25s ease;
   }
   .sidebar.drawer-open { transform: translateX(0); }
+
+  /* Restore full sidebar labels inside the drawer (tablet CSS hides them) */
+  .brand { padding: 18px 20px; justify-content: flex-start; }
+  .brand-text { display: flex; }
+  .nav-link { justify-content: flex-start; padding: 9px 12px; }
+  .nav-link span:last-child { display: inline; }
+  .nav-icon { width: 18px; height: 18px; }
+  .bell-wrap { padding: 8px 12px; justify-content: flex-start; display: block; }
+  .user-card { padding: 12px; }
+  .user-btn { padding: 8px 12px; justify-content: flex-start; }
+  .user-info, .chev { display: block; }
+  :deep(.org-switcher) { padding: 0 12px; }
+  :deep(.org-switcher .trigger) { padding: 10px 12px; justify-content: flex-start; }
+  :deep(.org-switcher .trigger .name),
+  :deep(.org-switcher .trigger .chev) { display: inline; }
+
   .mobile-topbar {
     display: flex;
     align-items: center;
