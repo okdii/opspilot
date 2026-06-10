@@ -41,6 +41,7 @@ def _to_response(s: Settings) -> SettingsResponse:
         smtp_from_address=s.smtp_from_address,
         smtp_recipients=s.smtp_recipients,
         smtp_has_password=s.smtp_password_encrypted is not None,
+        smtp_enabled=s.smtp_enabled,
         metrics_retention_days=s.metrics_retention_days,
         logs_retention_days=s.logs_retention_days,
         service_checks_retention_days=s.service_checks_retention_days,

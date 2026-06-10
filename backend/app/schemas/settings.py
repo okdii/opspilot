@@ -13,6 +13,7 @@ class SettingsResponse(BaseModel):
     smtp_from_address: str | None
     smtp_recipients: str | None
     smtp_has_password: bool
+    smtp_enabled: bool
     metrics_retention_days: int
     logs_retention_days: int
     service_checks_retention_days: int
@@ -32,6 +33,7 @@ class SettingsPatch(BaseModel):
     smtp_password: str | None = None  # plaintext in; encrypted at rest; blank/None keeps existing
     smtp_from_address: str | None = None
     smtp_recipients: str | None = None
+    smtp_enabled: bool | None = None
     metrics_retention_days: int | None = Field(default=None, ge=7, le=365)
     logs_retention_days: int | None = Field(default=None, ge=7, le=365)
     service_checks_retention_days: int | None = Field(default=None, ge=30, le=365)
