@@ -224,10 +224,10 @@ async def _get_conn_metrics(
 
 
 async def _get_backup(db: AsyncSession, server_id: str, db_type: str) -> dict | None:
-    """Latest MonitoredJob record for this server scoped to db_type."""
+    """Latest MonitoredJob record for this server."""
     job = await db.scalar(
         select(MonitoredJob)
-        .where(MonitoredJob.server_id == server_id, MonitoredJob.db_type == db_type)
+        .where(MonitoredJob.server_id == server_id)
         .order_by(MonitoredJob.last_ping_at.desc().nulls_last())
         .limit(1)
     )
