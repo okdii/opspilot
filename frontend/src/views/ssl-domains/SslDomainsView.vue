@@ -458,7 +458,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 
       <!-- Table -->
       <div class="table-wrap">
-        <table class="grid">
+        <div class="table-scroll">
+          <table class="grid">
           <thead>
             <tr>
               <th class="sortable" @click="toggleSort('name')">Name<span v-if="sortKey === 'name'" class="caret">{{ sortDir === 'asc' ? '▲' : '▼' }}</span></th>
@@ -532,6 +533,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
             </tr>
           </tbody>
         </table>
+        </div>
         <div v-if="sorted.length === 0" class="no-match">No items match your filters.</div>
       </div>
     </template>
@@ -646,6 +648,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 
 <style scoped>
 .page { padding: 28px; }
+@media (max-width: 1023px) { .page { padding: 20px; } }
+@media (max-width: 767px)  { .page { padding: 14px; } }
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 18px; }
 .panel-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px; }
 
@@ -656,6 +660,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 .search { flex: 1; min-width: 200px; }
 
 .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 thead th { text-align: left; padding: 12px 14px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--surface-2); white-space: nowrap; }
 th.sortable { cursor: pointer; user-select: none; }
