@@ -284,3 +284,6 @@ class Settings(Base):
     smtp_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     discord_webhook_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     discord_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    ai_provider: Mapped[str] = mapped_column(String(30), nullable=False, server_default="disabled")
+    ai_model: Mapped[str] = mapped_column(String(80), nullable=False, server_default="claude-sonnet-4-6")
+    ai_api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
