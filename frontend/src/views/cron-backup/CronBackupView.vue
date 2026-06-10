@@ -219,6 +219,8 @@ const subtitle = computed(() => {
 
 <style scoped>
 .page { padding: 28px; }
+@media (max-width: 1023px) { .page { padding: 20px; } }
+@media (max-width: 767px)  { .page { padding: 14px; } }
 .muted-note { color: var(--muted); font-size: 13px; }
 .state-note { color: var(--muted); padding: 40px 0; text-align: center; }
 

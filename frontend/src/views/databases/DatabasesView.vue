@@ -300,6 +300,8 @@ async function onRemove() {
 
 <style scoped>
 .page { padding: 28px; max-width: 1300px; }
+@media (max-width: 1023px) { .page { padding: 20px; } }
+@media (max-width: 767px)  { .page { padding: 14px; } }
 .link-btn {
   display: inline-block; background: var(--accent); color: #fff; text-decoration: none;
   padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
