@@ -89,6 +89,7 @@ def send_heartbeat(services):
         headers={
             "Authorization": "Bearer " + INGESTION_TOKEN,
             "Content-Type": "application/json",
+            "User-Agent": "OpsPilot-Agent/1.0",
         },
         method="POST",
     )
