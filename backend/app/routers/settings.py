@@ -49,6 +49,9 @@ def _to_response(s: Settings) -> SettingsResponse:
         timezone=s.timezone,
         discord_webhook_url=s.discord_webhook_url,
         discord_enabled=s.discord_enabled,
+        ai_provider=s.ai_provider,
+        ai_model=s.ai_model,
+        ai_has_key=s.ai_api_key_encrypted is not None,
     )
 
 
@@ -66,6 +69,10 @@ async def patch_settings(body: SettingsPatch, _: AdminUser, db: AsyncSession = D
     pw = data.pop("smtp_password", None)
     if pw:
         s.smtp_password_encrypted = crypto.encrypt(pw)
+
+    ai_key = data.pop("ai_api_key", None)
+    if ai_key:
+        s.ai_api_key_encrypted = crypto.encrypt(ai_key)
 
     changed_retention = {}
     for key, value in data.items():
@@ -166,3 +173,23 @@ async def rotation_status(rotation_id: str, _: AdminUser):
 @router.post("/rotation/{rotation_id}/retry/{server_id}", status_code=204)
 async def rotation_retry(rotation_id: str, server_id: str, _: AdminUser):
     await rotation_service.retry(rotation_id, server_id)
+
+
+@router.post("/ai/test", status_code=200)
+async def ai_test(_: AdminUser, db: AsyncSession = Depends(get_db)):
+    from app.services.ai.provider import get_provider
+    provider = await get_provider(db)
+    if provider is None:
+        raise HTTPException(
+            400,
+            detail={"error": "not_configured", "message": "Configure an AI provider and API key first."},
+        )
+    try:
+        text_out, pt, ct = await provider.complete(
+            system="You are a test assistant.",
+            user="Reply with exactly: OK",
+            max_tokens=10,
+        )
+    except Exception as exc:
+        raise HTTPException(502, detail={"error": "ai_error", "message": str(exc)})
+    return {"ok": True, "response": text_out.strip(), "prompt_tokens": pt, "completion_tokens": ct}
