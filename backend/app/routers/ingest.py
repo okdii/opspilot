@@ -105,7 +105,15 @@ async def _evaluate_agent_services(
     db: AsyncSession, server_id, server_name: str, services: list[_ServiceMetric]
 ) -> None:
     """Fire/resolve agent_service_down alerts based on heartbeat service statuses."""
+    muted_result = await db.execute(
+        text("SELECT service_name FROM server_service_mutes WHERE server_id = :sid"),
+        {"sid": server_id},
+    )
+    muted = {row.service_name for row in muted_result.all()}
+
     for svc in services:
+        if svc.name in muted:
+            continue
         alert_type = f"agent_service_down:{svc.name}"
         if svc.status == "stopped":
             await fire_alert(
