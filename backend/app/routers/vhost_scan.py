@@ -121,7 +121,7 @@ def _parse_caddy(content: str) -> list[dict]:
     entries: list[dict] = []
     seen: set[tuple] = set()
 
-    for m in re.finditer(r'^([^\s{#\n][^\n{]*)\{', content, re.MULTILINE):
+    for m in re.finditer(r'^([^\s{#\n][^{\n]*)\s*\{$', content, re.MULTILINE):
         addr_part = m.group(1).strip()
         for part in addr_part.split(','):
             part = part.strip()
@@ -218,7 +218,7 @@ async def scan_vhosts(
                 detected_any = True
                 for cmd in ("apache2ctl -S", "httpd -S"):
                     r = await ssh.run(cmd, timeout=30, sudo=True)
-                    if r.ok or r.stderr:
+                    if r.ok or (r.exit_code not in (127, 126) and r.stderr):
                         combined = r.stderr + '\n' + r.stdout
                         for e in _parse_apache(combined):
                             raw.append({**e, 'server_type': 'apache'})
@@ -272,6 +272,9 @@ async def scan_vhosts(
             continue
         seen.add(key)
         url = f"{e['scheme']}://{e['domain']}"
+        if not (e['scheme'] == 'https' and e['port'] == 443) and \
+           not (e['scheme'] == 'http' and e['port'] == 80):
+            url += f":{e['port']}"
         result.append(
             VhostEntry(
                 domain=e['domain'],
