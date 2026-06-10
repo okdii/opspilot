@@ -48,6 +48,10 @@ const smtpRecipients = ref('')
 const smtpPassword = ref('') // blank = keep existing
 const hasPassword = ref(false)
 
+const discordWebhookUrl = ref('')
+const discordEnabled = ref(false)
+const savingDiscord = ref(false)
+
 const savingIdentity = ref(false)
 const savingSmtp = ref(false)
 const testing = ref(false)
@@ -68,6 +72,8 @@ async function load() {
     smtpFrom.value = settings.smtp.fromAddress
     smtpRecipients.value = settings.smtp.recipients
     hasPassword.value = settings.smtp.hasPassword
+    discordWebhookUrl.value = settings.discord.webhookUrl
+    discordEnabled.value = settings.discord.enabled
   } catch (err) {
     notify.error(getApiError(err) ?? 'Unable to load settings.')
   } finally {
@@ -128,6 +134,21 @@ async function sendTest() {
     notify.error(getApiError(err) ?? 'Test email failed.')
   } finally {
     testing.value = false
+  }
+}
+
+async function saveDiscord() {
+  savingDiscord.value = true
+  try {
+    await settings.saveDiscord({
+      discord_webhook_url: discordWebhookUrl.value.trim(),
+      discord_enabled: discordEnabled.value,
+    })
+    notify.success('Discord settings saved.')
+  } catch (err) {
+    notify.error(getApiError(err) ?? 'Unable to save Discord settings.')
+  } finally {
+    savingDiscord.value = false
   }
 }
 </script>
@@ -220,6 +241,36 @@ async function sendTest() {
         </button>
       </div>
     </section>
+
+    <!-- Discord -->
+    <section class="card">
+      <h2>Discord Notifications</h2>
+      <div class="field toggle-row">
+        <div>
+          <span class="toggle-label">Send alert notifications to Discord</span>
+          <p class="hint">Fires a message to your Discord channel on every alert and resolve.</p>
+        </div>
+        <label class="switch">
+          <input v-model="discordEnabled" type="checkbox" :disabled="loading" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="field">
+        <label>Webhook URL</label>
+        <input
+          v-model="discordWebhookUrl"
+          type="url"
+          placeholder="https://discord.com/api/webhooks/…"
+          :disabled="loading"
+        />
+        <p class="hint">
+          In Discord: channel settings → Integrations → Webhooks → New Webhook → Copy Webhook URL.
+        </p>
+      </div>
+      <button class="primary" :disabled="savingDiscord || loading" @click="saveDiscord">
+        <span v-if="savingDiscord" class="spin"></span><span v-else>Save</span>
+      </button>
+    </section>
   </div>
 </template>
 
@@ -247,4 +298,13 @@ input:disabled, select:disabled { opacity: 0.6; }
 .spin { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
 .spin.dark { border-color: rgba(255,255,255,0.2); border-top-color: var(--text); }
 @keyframes spin { to { transform: rotate(360deg); } }
+.toggle-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.toggle-label { font-size: 14px; color: var(--text); }
+.switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; margin-top: 2px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; inset: 0; background: var(--border); border-radius: 24px; transition: 0.2s; }
+.slider::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: 0.2s; }
+input:checked + .slider { background: var(--accent); }
+input:checked + .slider::before { transform: translateX(20px); }
+input:disabled + .slider { opacity: 0.5; cursor: not-allowed; }
 </style>
