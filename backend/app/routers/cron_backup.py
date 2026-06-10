@@ -32,7 +32,7 @@ from app.schemas.job import (
     TodayRunOut,
 )
 from app.services.alerting import OPEN_STATES, fire_alert, resolve_alert
-from app.services.cron_schedule import next_fire_after
+from app.services.cron_schedule import _resolve_tz, next_fire_after
 
 router = APIRouter(tags=["cron-backup"])
 
@@ -71,6 +71,19 @@ async def _base_url(request: Request, db: AsyncSession) -> str:
     if app_settings.opspilot_base_url:
         return app_settings.opspilot_base_url.rstrip("/")
     return str(request.base_url).rstrip("/")
+
+
+async def _settings(request: Request, db: AsyncSession) -> tuple[str, object]:
+    """Return (base_url, tz) from Settings in one query."""
+    row = await db.scalar(select(Settings).where(Settings.id == 1))
+    if row and row.base_url:
+        base = row.base_url.rstrip("/")
+    elif app_settings.opspilot_base_url:
+        base = app_settings.opspilot_base_url.rstrip("/")
+    else:
+        base = str(request.base_url).rstrip("/")
+    tz = _resolve_tz(row.timezone if row else None)
+    return base, tz
 
 
 def _ping_url(base: str, token: UUID) -> str:
@@ -133,9 +146,11 @@ async def _resolve_job_alerts(db: AsyncSession, job_id) -> None:
 
 # ── serialization ──────────────────────────────────────────────────────────
 
-def _job_out(job: MonitoredJob, server_name: str, base: str) -> JobOut:
+def _job_out(job: MonitoredJob, server_name: str, base: str, tz=None) -> JobOut:
+    from datetime import timezone as _tz_mod
+    _tz = tz if tz is not None else _tz_mod.utc
     last = _aware(job.last_ping_at)
-    nxt = next_fire_after(job.schedule, last) if last else next_fire_after(job.schedule, _now())
+    nxt = next_fire_after(job.schedule, last, _tz) if last else next_fire_after(job.schedule, _now(), _tz)
     return JobOut(
         id=str(job.id),
         server_id=str(job.server_id),
@@ -358,7 +373,7 @@ async def list_jobs(
     db: AsyncSession = Depends(get_db),
 ):
     await _assert_org_access(org_id, user, db)
-    base = await _base_url(request, db)
+    base, tz = await _settings(request, db)
     rows = (
         await db.execute(
             select(MonitoredJob, Server.name)
@@ -367,7 +382,7 @@ async def list_jobs(
             .order_by(Server.name, MonitoredJob.name)
         )
     ).all()
-    return [_job_out(job, name, base) for job, name in rows]
+    return [_job_out(job, name, base, tz) for job, name in rows]
 
 
 @router.post("/api/jobs", response_model=JobOut, status_code=201)
@@ -389,8 +404,8 @@ async def create_job(
     db.add(job)
     await db.commit()
     await db.refresh(job)
-    base = await _base_url(request, db)
-    return _job_out(job, server.name, base)
+    base, tz = await _settings(request, db)
+    return _job_out(job, server.name, base, tz)
 
 
 @router.patch("/api/jobs/{job_id}", response_model=JobOut)
@@ -417,8 +432,8 @@ async def update_job(
 
     await db.commit()
     await db.refresh(job)
-    base = await _base_url(request, db)
-    return _job_out(job, server.name, base)
+    base, tz = await _settings(request, db)
+    return _job_out(job, server.name, base, tz)
 
 
 @router.delete("/api/jobs/{job_id}", status_code=204)
@@ -541,5 +556,5 @@ async def regenerate_token(
     job.ping_token = _uuid.uuid4()
     await db.commit()
     await db.refresh(job)
-    base = await _base_url(request, db)
-    return _job_out(job, server.name, base)
+    base, tz = await _settings(request, db)
+    return _job_out(job, server.name, base, tz)

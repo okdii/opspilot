@@ -15,9 +15,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
-from app.models.other import JobRun, MonitoredJob
+from app.models.other import JobRun, MonitoredJob, Settings
 from app.services.alerting import fire_alert
-from app.services.cron_schedule import next_fire_after
+from app.services.cron_schedule import _resolve_tz, next_fire_after
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +40,8 @@ def _base(job: MonitoredJob) -> datetime:
     return _aware(job.last_ping_at) or _aware(job.created_at) or _now()
 
 
-async def _evaluate_job(db: AsyncSession, job: MonitoredJob, now: datetime) -> None:
-    next_expected = next_fire_after(job.schedule, _base(job))
+async def _evaluate_job(db: AsyncSession, job: MonitoredJob, now: datetime, tz=timezone.utc) -> None:
+    next_expected = next_fire_after(job.schedule, _base(job), tz)
     if next_expected is None:
         # Invalid schedule — monitoring paused. Do not fire.
         return
@@ -87,13 +87,16 @@ async def run_watchdog(db: AsyncSession) -> None:
     """Core pass — separated so smoke tests can drive it with their own session."""
     now = _now()
 
+    settings_row = await db.scalar(select(Settings).where(Settings.id == 1))
+    tz = _resolve_tz(settings_row.timezone if settings_row else None)
+
     jobs = (
         await db.execute(select(MonitoredJob).where(MonitoredJob.status != "missing"))
     ).scalars().all()
 
     for job in jobs:
         try:
-            await _evaluate_job(db, job, now)
+            await _evaluate_job(db, job, now, tz)
         except Exception:  # noqa: BLE001 — one bad job must not stall the tick
             logger.warning("watchdog failed for job %s", job.id, exc_info=True)
 
