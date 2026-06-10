@@ -1,7 +1,7 @@
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select, text
+from sqlalchemy import and_, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import encrypt
@@ -14,6 +14,7 @@ from app.models.user import UserOrganization
 from app.schemas.onboarding import OnboardingResponse, OnboardingStepOut
 from app.schemas.server import ServerCreate, ServerOut, ServerUpdate
 from app.services import onboarding as onboarding_service
+from app.services.alerting import OPEN_STATES, resolve_alert
 from app.services.ssh import SSHAuthError, SSHConnectionError, SSHError, test_connection
 
 router = APIRouter(tags=["servers"])
@@ -311,12 +312,17 @@ async def get_server_services(
     await _get_accessible_server(server_id, user, db)
     rows = (await db.execute(
         text("""
-            SELECT DISTINCT ON (service_name)
-                service_name, status, cpu_pct, mem_mb, uptime_seconds
-            FROM server_service_metrics
-            WHERE server_id = :sid
-              AND (:include_ni OR status != 'not_installed')
-            ORDER BY service_name, time DESC
+            SELECT DISTINCT ON (ssm.service_name)
+                ssm.service_name, ssm.status, ssm.cpu_pct, ssm.mem_mb,
+                ssm.uptime_seconds,
+                (mutes.service_name IS NOT NULL) AS muted
+            FROM server_service_metrics ssm
+            LEFT JOIN server_service_mutes mutes
+                ON mutes.server_id = ssm.server_id
+               AND mutes.service_name = ssm.service_name
+            WHERE ssm.server_id = :sid
+              AND (:include_ni OR ssm.status != 'not_installed')
+            ORDER BY ssm.service_name, ssm.time DESC
         """),
         {"sid": server_id, "include_ni": include_not_installed},
     )).all()
@@ -327,9 +333,63 @@ async def get_server_services(
             "cpu_pct": row.cpu_pct,
             "mem_mb": row.mem_mb,
             "uptime_seconds": row.uptime_seconds,
+            "muted": bool(row.muted),
         }
         for row in rows
     ]
+
+
+@router.put("/api/servers/{server_id}/services/{service_name}/mute")
+async def mute_server_service(
+    server_id: str,
+    service_name: str,
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_accessible_server(server_id, user, db)
+    await db.execute(
+        text("""
+            INSERT INTO server_service_mutes (server_id, service_name)
+            VALUES (:sid, :sname)
+            ON CONFLICT (server_id, service_name) DO NOTHING
+        """),
+        {"sid": server_id, "sname": service_name},
+    )
+    alert_type = f"agent_service_down:{service_name}"
+    open_alert = (
+        await db.execute(
+            select(Alert).where(
+                and_(
+                    Alert.type == alert_type,
+                    Alert.server_id == server_id,
+                    Alert.state.in_(OPEN_STATES),
+                )
+            ).limit(1)
+        )
+    ).scalar_one_or_none()
+    if open_alert:
+        await resolve_alert(db, open_alert, commit=False)
+    await db.commit()
+    return {"ok": True}
+
+
+@router.delete("/api/servers/{server_id}/services/{service_name}/mute")
+async def unmute_server_service(
+    server_id: str,
+    service_name: str,
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_accessible_server(server_id, user, db)
+    await db.execute(
+        text(
+            "DELETE FROM server_service_mutes "
+            "WHERE server_id = :sid AND service_name = :sname"
+        ),
+        {"sid": server_id, "sname": service_name},
+    )
+    await db.commit()
+    return {"ok": True}
 
 
 async def _assert_server_access(server_id: str, user, db: AsyncSession) -> Server:
