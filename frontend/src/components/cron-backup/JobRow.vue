@@ -9,6 +9,7 @@ const props = defineProps<{
   job: MonitoredJob
   canEdit: boolean
   menuOpen: boolean
+  hideServer?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -74,8 +75,7 @@ const dotClass = computed(() => `dot-${props.job.status}`)
       <div class="row-id">
         <span class="job-name">{{ job.name }}</span>
         <span class="job-sub">
-          {{ job.server_name }}
-          <span class="sep">·</span>
+          <template v-if="!hideServer">{{ job.server_name }}<span class="sep">·</span></template>
           <span :class="{ 'sched-bad': scheduleInvalid }" :title="scheduleInvalid ? 'Invalid cron expression' : ''">
             {{ scheduleText }}
           </span>
