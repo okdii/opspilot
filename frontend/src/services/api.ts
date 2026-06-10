@@ -25,6 +25,7 @@ import type {
   LogRule,
   MetricRulePayload,
   LogRulePayload,
+  VhostEntry,
 } from '@/types'
 
 export const api = axios.create({
@@ -280,4 +281,9 @@ export async function patchLogRule(id: string, payload: LogRulePayload): Promise
 
 export async function deleteLogRule(id: string): Promise<void> {
   await api.delete(`/api/log-alert-rules/${id}`)
+}
+
+export async function scanVhosts(serverId: string): Promise<VhostEntry[]> {
+  const { data } = await api.post<VhostEntry[]>(`/api/servers/${serverId}/scan-vhosts`)
+  return data
 }

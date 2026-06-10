@@ -422,3 +422,14 @@ export interface AlertUpdatedData {
   acknowledged_at: string | null
   snoozed_until: string | null
 }
+
+// --- Vhost auto-discovery ---------------------------------------------------
+
+export interface VhostEntry {
+  domain: string
+  url: string
+  port: number
+  scheme: 'http' | 'https'
+  server_type: string
+  already_monitored: boolean
+}
