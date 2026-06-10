@@ -74,6 +74,7 @@ function switchToOrg(orgId: string) {
   gap: 12px;
   margin-bottom: 24px;
 }
+@media (max-width: 767px) { .stat-grid { grid-template-columns: 1fr; } }
 .org-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -87,6 +88,7 @@ function switchToOrg(orgId: string) {
   cursor: pointer;
   transition: border-color 0.15s;
   position: relative;
+  min-width: 0;
 }
 .org-card:hover { border-color: var(--accent); }
 .org-card.has-alerts { border-color: rgba(239,68,68,0.35); }

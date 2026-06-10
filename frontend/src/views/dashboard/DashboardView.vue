@@ -175,6 +175,8 @@ onUnmounted(() => {
 
 <style scoped>
 .page { padding: 28px; }
+@media (max-width: 1023px) { .page { padding: 20px; } }
+@media (max-width: 767px)  { .page { padding: 14px; } }
 .hdr h1 { font-size: 22px; color: #fff; letter-spacing: -0.3px; }
 .hdr p { color: var(--muted); font-size: 13px; margin-top: 4px; margin-bottom: 28px; }
 
@@ -208,4 +210,5 @@ onUnmounted(() => {
 .dash-loading, .dash-error { padding: 32px; text-align: center; color: var(--muted); font-size: 13px; }
 .dash-error { color: #ef4444; }
 @media (max-width: 900px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 479px) { .stat-grid { grid-template-columns: 1fr; } }
 </style>
