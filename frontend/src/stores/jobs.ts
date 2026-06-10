@@ -62,6 +62,13 @@ export interface JobPayload {
   description?: string | null
 }
 
+export interface ServerGroup {
+  server_id: string
+  server_name: string
+  jobs: MonitoredJob[]
+  worstStatus: string
+}
+
 interface RunsResponse {
   runs: JobRun[]
   next_cursor: string | null
@@ -93,6 +100,34 @@ export const useJobsStore = defineStore('jobs', () => {
   )
 
   const missingCount = computed(() => jobs.value.filter((j) => j.status === 'missing').length)
+
+  const jobsGroupedByServer = computed<ServerGroup[]>(() => {
+    const map = new Map<string, ServerGroup>()
+    for (const job of jobs.value) {
+      if (!map.has(job.server_id)) {
+        map.set(job.server_id, {
+          server_id: job.server_id,
+          server_name: job.server_name,
+          jobs: [],
+          worstStatus: 'healthy',
+        })
+      }
+      const group = map.get(job.server_id)!
+      group.jobs.push(job)
+      if ((STATUS_ORDER[job.status] ?? 99) < (STATUS_ORDER[group.worstStatus] ?? 99)) {
+        group.worstStatus = job.status
+      }
+    }
+    const groups = Array.from(map.values())
+    for (const group of groups) {
+      group.jobs.sort(bySeverityThenName)
+    }
+    return groups.sort((a, b) => {
+      const so = (STATUS_ORDER[a.worstStatus] ?? 99) - (STATUS_ORDER[b.worstStatus] ?? 99)
+      if (so !== 0) return so
+      return a.server_name.localeCompare(b.server_name)
+    })
+  })
 
   // ── Actions ──────────────────────────────────────────────────────────────
   async function fetchJobs(orgId: string): Promise<void> {
@@ -168,6 +203,7 @@ export const useJobsStore = defineStore('jobs', () => {
     todayRuns,
     sortedJobs,
     jobsByServer,
+    jobsGroupedByServer,
     missingCount,
     fetchJobs,
     fetchTodayRuns,
