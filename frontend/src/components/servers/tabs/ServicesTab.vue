@@ -3,9 +3,13 @@ import { onMounted, ref, watch } from 'vue'
 import { EmptyState, StatusBadge } from '@/components/ui'
 import { getServerServices, muteServerService, unmuteServerService } from '@/services/api'
 import { useMetricsStore } from '@/stores/metrics'
+import { useAuthStore } from '@/stores/auth'
+import VhostScanSlideOver from '@/components/servers/VhostScanSlideOver.vue'
 import type { ServerServiceEntry } from '@/types'
 
 const metrics = useMetricsStore()
+const auth = useAuthStore()
+const scanOpen = ref(false)
 const services = ref<ServerServiceEntry[]>([])
 const loading = ref(true)
 
@@ -39,6 +43,10 @@ async function toggleMute(svc: ServerServiceEntry) {
   await fetchServices()
 }
 
+function onRegistered(_count: number) {
+  void fetchServices()
+}
+
 function formatUptime(seconds: number | null): string {
   if (seconds == null) return '—'
   const d = Math.floor(seconds / 86400)
@@ -57,6 +65,12 @@ watch(() => metrics.latestValues, () => void fetchServices(), { deep: false })
   <div class="svc">
     <div class="svc-head">
       <h3>System Services</h3>
+      <button v-if="auth.isAdmin" class="scan-btn" @click="scanOpen = true">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        Scan Web Services
+      </button>
     </div>
 
     <div v-if="loading && !services.length" class="skeleton-wrap">
@@ -113,6 +127,13 @@ watch(() => metrics.latestValues, () => void fetchServices(), { deep: false })
         </tbody>
       </table>
     </div>
+
+    <VhostScanSlideOver
+      v-if="metrics.activeServerId"
+      v-model="scanOpen"
+      :server-id="metrics.activeServerId"
+      @registered="onRegistered"
+    />
   </div>
 </template>
 
@@ -121,6 +142,14 @@ watch(() => metrics.latestValues, () => void fetchServices(), { deep: false })
 
 .svc-head { display: flex; align-items: center; justify-content: space-between; }
 .svc-head h3 { font-size: 15px; color: var(--text); font-weight: 600; }
+
+.scan-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 500;
+  color: var(--muted); background: var(--surface-2); border: 1px solid var(--border);
+  cursor: pointer; transition: color 0.15s, border-color 0.15s;
+}
+.scan-btn:hover { color: var(--accent-2); border-color: var(--accent); }
 
 .skeleton-wrap { display: flex; flex-direction: column; gap: 8px; }
 .skeleton-row {
