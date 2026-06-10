@@ -132,6 +132,20 @@ export async function getServerServices(
   return data
 }
 
+export async function muteServerService(
+  serverId: string,
+  serviceName: string,
+): Promise<void> {
+  await api.put(`/api/servers/${serverId}/services/${encodeURIComponent(serviceName)}/mute`)
+}
+
+export async function unmuteServerService(
+  serverId: string,
+  serviceName: string,
+): Promise<void> {
+  await api.delete(`/api/servers/${serverId}/services/${encodeURIComponent(serviceName)}/mute`)
+}
+
 export async function getServerMonitoring(serverId: string): Promise<MonitoringService[]> {
   const { data } = await api.get<MonitoringService[]>(`/api/servers/${serverId}/monitoring`)
   return data

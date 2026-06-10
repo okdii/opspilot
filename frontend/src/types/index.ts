@@ -213,6 +213,7 @@ export interface ServerServiceEntry {
   cpu_pct: number | null
   mem_mb: number | null
   uptime_seconds: number | null
+  muted: boolean
 }
 
 // --- Monitoring checks (HTTP/TCP probes) ------------------------------------
