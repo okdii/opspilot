@@ -20,6 +20,10 @@ export const useSettingsStore = defineStore('settings', () => {
     serviceChecksRetentionDays: 90,
     alertsRetentionDays: 90,
   })
+  const discord = ref({
+    webhookUrl: '',
+    enabled: false,
+  })
   const sessions = ref<Session[]>([])
   const team = ref<{ members: TeamMember[]; pendingInvites: PendingInvite[] }>({
     members: [],
@@ -50,6 +54,10 @@ export const useSettingsStore = defineStore('settings', () => {
       serviceChecksRetentionDays: data.service_checks_retention_days,
       alertsRetentionDays: data.alerts_retention_days,
     }
+    discord.value = {
+      webhookUrl: data.discord_webhook_url ?? '',
+      enabled: data.discord_enabled ?? false,
+    }
   }
 
   async function saveGeneral(p: { instance_name: string; base_url: string; timezone: string }) {
@@ -65,6 +73,10 @@ export const useSettingsStore = defineStore('settings', () => {
     return data as { ok: boolean; sent_to: string }
   }
   async function saveRetention(p: Record<string, number>) {
+    await api.patch('/api/settings', p)
+    await fetchSettings()
+  }
+  async function saveDiscord(p: { discord_webhook_url: string; discord_enabled: boolean }) {
     await api.patch('/api/settings', p)
     await fetchSettings()
   }
@@ -132,6 +144,7 @@ export const useSettingsStore = defineStore('settings', () => {
     general,
     smtp,
     retention,
+    discord,
     sessions,
     team,
     isLoading,
@@ -141,6 +154,7 @@ export const useSettingsStore = defineStore('settings', () => {
     saveSmtp,
     testSmtp,
     saveRetention,
+    saveDiscord,
     fetchSessions,
     revokeSession,
     revokeAllOtherSessions,
