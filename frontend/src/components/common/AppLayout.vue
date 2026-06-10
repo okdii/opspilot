@@ -153,6 +153,7 @@ async function logout() {
           v-for="item in visibleNav"
           :key="item.route"
           :to="item.route"
+          :title="item.name"
           class="nav-link"
           active-class=""
           :class="{ active: item.route === '/' ? route.path === '/' : route.path.startsWith(item.route) }"
@@ -227,4 +228,29 @@ async function logout() {
 .menu-divider { height: 1px; background: var(--border); margin: 2px 0; }
 .content { flex: 1; overflow-y: auto; }
 .bell-wrap { padding: 8px 12px; border-bottom: 1px solid var(--border); position: relative; }
+
+/* ─── Small laptop (1024–1279px): narrow sidebar, labels still visible ─── */
+@media (max-width: 1279px) {
+  .sidebar { width: 200px; }
+  .nav-link { font-size: 12px; padding: 8px 10px; }
+  .brand .name { font-size: 14px; }
+}
+
+/* ─── Tablet (768–1023px): icon-only sidebar ──────────────────────────── */
+@media (max-width: 1023px) {
+  .sidebar { width: 52px; overflow: visible; }
+  .brand { padding: 14px 0; justify-content: center; }
+  .brand-text { display: none; }
+  .nav-link { justify-content: center; padding: 10px 0; }
+  .nav-link span:last-child { display: none; }
+  .nav-icon { width: 20px; height: 20px; }
+  .bell-wrap { padding: 8px 0; display: flex; justify-content: center; }
+  .user-card { padding: 8px 4px; }
+  .user-btn { padding: 8px; justify-content: center; }
+  .user-info, .chev { display: none; }
+  :deep(.org-switcher) { padding: 0 6px; }
+  :deep(.org-switcher .trigger .name),
+  :deep(.org-switcher .trigger .chev) { display: none; }
+  :deep(.org-switcher .trigger) { padding: 8px; justify-content: center; }
+}
 </style>
