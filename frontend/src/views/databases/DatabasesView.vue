@@ -8,6 +8,7 @@ import type { DbCredentialPayload, DbInstanceStatus } from '@/stores/databases'
 import DbNoCredentials from '@/components/databases/DbNoCredentials.vue'
 import DbCredentialModal from '@/components/databases/DbCredentialModal.vue'
 import DbHealthDashboard from '@/components/databases/DbHealthDashboard.vue'
+import DbInfoPanel from '@/components/databases/DbInfoPanel.vue'
 
 const orgStore = useOrgStore()
 const store = useDatabaseStore()
@@ -22,6 +23,7 @@ const modalOpen = ref(false)
 const editingInstance = ref<DbInstanceStatus | null>(null)
 const confirmRemove = ref(false)
 const removingInstance = ref<DbInstanceStatus | null>(null)
+const activePanel = ref<'metrics' | 'info'>('metrics')
 
 const servers = computed(() => store.servers)
 const selected = computed(() => servers.value.find((s) => s.server_id === selectedId.value) ?? null)
@@ -108,6 +110,8 @@ watch(orgId, () => {
   selectedInstanceId.value = null
   void load()
 })
+
+watch(selectedInstanceId, () => { activePanel.value = 'metrics' })
 
 // Keyboard: ← / → between server tabs
 function onKey(e: KeyboardEvent) {
@@ -230,9 +234,21 @@ async function onRemove() {
           @setup="openAddInstance"
         />
 
+        <!-- Metrics / Info tab bar -->
+        <div v-else-if="selectedInstance" class="panel-tabs">
+          <button
+            class="panel-tab" :class="{ active: activePanel === 'metrics' }"
+            type="button" @click="activePanel = 'metrics'"
+          >Metrics</button>
+          <button
+            class="panel-tab" :class="{ active: activePanel === 'info' }"
+            type="button" @click="activePanel = 'info'"
+          >Info</button>
+        </div>
+
         <!-- Health dashboard for selected instance -->
         <DbHealthDashboard
-          v-else-if="selectedInstance"
+          v-if="selectedInstance && activePanel === 'metrics'"
           :key="`hd-${selectedInstance.credential_id}`"
           :server-id="selected.server_id"
           :server-name="selected.server_name"
@@ -242,6 +258,14 @@ async function onRemove() {
           :credential-id="selectedInstance.credential_id"
           @edit="openEditInstance(selectedInstance)"
           @remove="promptRemove(selectedInstance)"
+        />
+
+        <!-- Info panel for selected instance -->
+        <DbInfoPanel
+          v-else-if="selectedInstance && activePanel === 'info'"
+          :key="`info-${selectedInstance.credential_id}`"
+          :server-id="selected.server_id"
+          :credential-id="selectedInstance.credential_id"
         />
       </div>
     </template>
@@ -336,4 +360,17 @@ async function onRemove() {
 .inst-dot.ok { color: var(--green); }
 .inst-dot.warn { color: var(--amber); }
 .inst-dot.pending { color: var(--accent-2); }
+
+.panel-tabs {
+  display: flex; gap: 0; border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+.panel-tab {
+  padding: 9px 20px; font-size: 13px; font-weight: 600;
+  color: var(--text-muted); background: none; border: none;
+  border-bottom: 2px solid transparent; cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.panel-tab:hover { color: var(--text); }
+.panel-tab.active { color: #60a5fa; border-bottom-color: #3b82f6; }
 </style>
