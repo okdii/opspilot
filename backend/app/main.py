@@ -29,6 +29,7 @@ from app.routers.services import router as services_router
 from app.routers.ssl_domains import router as ssl_domains_router
 from app.routers.databases import router as databases_router
 from app.routers.db_info import router as db_info_router
+from app.routers.vhost_scan import router as vhost_scan_router
 from app.routers.cron_backup import router as cron_backup_router
 from app.services.metric_evaluator import metric_alert_evaluator
 from app.services.log_evaluator import log_alert_evaluator
@@ -121,6 +122,7 @@ app.include_router(services_router)
 app.include_router(ssl_domains_router)
 app.include_router(databases_router)
 app.include_router(db_info_router)
+app.include_router(vhost_scan_router)
 app.include_router(cron_backup_router)
 
 
