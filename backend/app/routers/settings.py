@@ -46,6 +46,8 @@ def _to_response(s: Settings) -> SettingsResponse:
         service_checks_retention_days=s.service_checks_retention_days,
         alerts_retention_days=s.alerts_retention_days,
         timezone=s.timezone,
+        discord_webhook_url=s.discord_webhook_url,
+        discord_enabled=s.discord_enabled,
     )
 
 

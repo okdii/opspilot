@@ -18,6 +18,8 @@ class SettingsResponse(BaseModel):
     service_checks_retention_days: int
     alerts_retention_days: int
     timezone: str
+    discord_webhook_url: str | None
+    discord_enabled: bool
 
 
 class SettingsPatch(BaseModel):
@@ -35,6 +37,8 @@ class SettingsPatch(BaseModel):
     service_checks_retention_days: int | None = Field(default=None, ge=30, le=365)
     alerts_retention_days: int | None = Field(default=None, ge=30, le=730)
     timezone: str | None = None
+    discord_webhook_url: str | None = None
+    discord_enabled: bool | None = None
 
     @field_validator("timezone")
     @classmethod
