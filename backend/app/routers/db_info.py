@@ -22,7 +22,6 @@ from app.core.crypto import decrypt
 from app.database import get_db
 from app.deps import CurrentUser
 from app.models.other import DBCredential, MonitoredJob
-from app.models.server import Server
 from app.routers.databases import _assert_server_access, _get_credential_by_id, _resolve_label
 
 logger = logging.getLogger(__name__)
