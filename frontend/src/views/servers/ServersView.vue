@@ -612,8 +612,6 @@ const summaryText = computed(() => {
 .empty h2 { font-size: 18px; color: #fff; margin-bottom: 6px; }
 .empty p { color: var(--muted); margin-bottom: 20px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
-@media (max-width: 900px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 479px) { .stat-grid { grid-template-columns: 1fr; } }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; transition: border-color 0.15s; cursor: pointer; }
 .card:hover { border-color: var(--accent); }
 .card.status-online { border-color: rgba(34,197,94,0.3); }

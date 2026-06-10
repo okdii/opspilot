@@ -74,7 +74,6 @@ function switchToOrg(orgId: string) {
   gap: 12px;
   margin-bottom: 24px;
 }
-@media (max-width: 767px) { .stat-grid { grid-template-columns: 1fr; } }
 .org-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -106,4 +105,5 @@ function switchToOrg(orgId: string) {
 .org-card:hover .org-arrow { color: var(--accent-2); }
 .empty { color: var(--muted); font-size: 13px; text-align: center; padding: 40px; }
 @media (max-width: 900px) { .stat-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 767px) { .stat-grid { grid-template-columns: 1fr; } }
 </style>
