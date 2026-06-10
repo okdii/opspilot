@@ -68,6 +68,55 @@ export interface DbSeriesResponse {
   connections_max?: number | null
 }
 
+/** Detailed database info response (GET …/db-info). */
+export interface DbInfoData {
+  reachable: boolean
+  db: {
+    type: string
+    version: string | null
+    host: string
+    port: number
+    uptime_seconds: number | null
+    data_directory: string | null
+    character_set: string | null
+    collation: string | null
+    time_zone: string | null
+    size_bytes: number | null
+  }
+  server: {
+    name: string | null
+    os: string | null
+    cpu_cores: number | null
+    ram_bytes: number | null
+    disk_total_bytes: number | null
+    disk_free_bytes: number | null
+  }
+  connections: {
+    current: number | null
+    max: number | null
+    ssl_enabled: boolean
+    ssl_version: string | null
+  }
+  storage: {
+    total_databases: number | null
+    total_tables: number | null
+    largest_db: { name: string; size_bytes: number } | null
+    largest_table: { name: string; size_bytes: number } | null
+    used_bytes: number | null
+    free_bytes: number | null
+  }
+  replication: {
+    role: string
+    running: boolean | null
+    lag_sec: number | null
+  }
+  backup: {
+    last_run_at: string | null
+    status: string | null
+    size_bytes: number | null
+  } | null
+}
+
 /** Create/update payload. `password` optional on PATCH (blank = keep existing). */
 export interface DbCredentialPayload {
   host: string
@@ -219,6 +268,13 @@ export const useDatabaseStore = defineStore('databases', () => {
     return data.password
   }
 
+  async function fetchDbInfo(serverId: string, credentialId: string): Promise<DbInfoData> {
+    const { data } = await api.get<DbInfoData>(`/api/servers/${serverId}/db-info`, {
+      params: { credential_id: credentialId },
+    })
+    return data
+  }
+
   function reset(): void {
     servers.value = []
     latest.value = {}
@@ -245,6 +301,7 @@ export const useDatabaseStore = defineStore('databases', () => {
     fetchLatest,
     fetchSeries,
     fetchPassword,
+    fetchDbInfo,
     reset,
   }
 })
