@@ -258,6 +258,8 @@ onUnmounted(() => {
 
 <style scoped>
 .page { padding: 28px; display: flex; flex-direction: column; gap: 20px; }
+@media (max-width: 1023px) { .page { padding: 20px; } }
+@media (max-width: 767px)  { .page { padding: 14px; } }
 .hint { color: var(--muted); font-size: 13px; padding: 40px; text-align: center; }
 
 /* Header bar */

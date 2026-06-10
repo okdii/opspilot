@@ -227,6 +227,8 @@ onUnmounted(() => {
 
 <style scoped>
 .page { padding: 28px; }
+@media (max-width: 1023px) { .page { padding: 20px; } }
+@media (max-width: 767px)  { .page { padding: 14px; } }
 .filters { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
 .filters select, .search { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; color: var(--text); font-size: 13px; outline: none; }
 .filters select:focus, .search:focus { border-color: var(--accent); }
