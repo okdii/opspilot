@@ -6,6 +6,7 @@ import { getServer } from '@/services/api'
 import { formatUptime, humanBytes, scalarValue, toApexSeries } from '@/utils/metrics'
 import type { MetricRange, Server } from '@/types'
 import RangePicker from './RangePicker.vue'
+import KernelEventsCard from './KernelEventsCard.vue'
 
 const metrics = useMetricsStore()
 
@@ -111,6 +112,12 @@ const info = computed(() => ({
         <dd>{{ info.ram }}</dd>
       </dl>
     </section>
+
+    <KernelEventsCard
+      v-if="metrics.activeServerId"
+      :server-id="metrics.activeServerId"
+      :range="metrics.rangeFor('System')"
+    />
   </div>
 </template>
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { useMetricsStore } from '@/stores/metrics'
 import { useLogStore, ALL_SOURCES, ALL_SEVERITIES } from '@/stores/logs'
 import { wsClient } from '@/utils/ws'
@@ -12,6 +13,7 @@ const props = withDefaults(defineProps<{ logsSupported?: boolean }>(), { logsSup
 
 const metrics = useMetricsStore()
 const logs = useLogStore()
+const route = useRoute()
 
 const serverId = computed(() => metrics.activeServerId ?? '')
 
@@ -194,6 +196,9 @@ onMounted(async () => {
   logs.reset()
   if (!serverId.value) return
   logs.setFilter('serverIds', [serverId.value])
+  if (route.query.source === 'kernel') {
+    logs.setFilter('sources', ['kernel'])
+  }
   await reload()
 })
 
