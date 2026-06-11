@@ -26,6 +26,7 @@ import type {
   MetricRulePayload,
   LogRulePayload,
   VhostEntry,
+  DailyReport,
 } from '@/types'
 
 export const api = axios.create({
@@ -285,5 +286,31 @@ export async function deleteLogRule(id: string): Promise<void> {
 
 export async function scanVhosts(serverId: string): Promise<VhostEntry[]> {
   const { data } = await api.post<VhostEntry[]>(`/api/servers/${serverId}/scan-vhosts`)
+  return data
+}
+
+// --- Daily Report ----------------------------------------------------------
+
+export async function getDailyReport(
+  serverId: string,
+  reportDate?: string,
+): Promise<DailyReport> {
+  const params: Record<string, string> = {}
+  if (reportDate) params.report_date = reportDate
+  const { data } = await api.get<DailyReport>(
+    `/api/servers/${serverId}/daily-report`,
+    { params },
+  )
+  return data
+}
+
+export async function regenerateDailyReport(
+  serverId: string,
+  reportDate: string,
+): Promise<DailyReport> {
+  const { data } = await api.post<DailyReport>(
+    `/api/servers/${serverId}/daily-report/regenerate`,
+    { date: reportDate },
+  )
   return data
 }

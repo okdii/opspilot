@@ -433,3 +433,65 @@ export interface VhostEntry {
   server_type: string
   already_monitored: boolean
 }
+
+// --- Daily Report -----------------------------------------------------------
+
+export interface DailyReportFinding {
+  id: string
+  group: string
+  severity: 'danger' | 'warn' | 'info' | 'ok'
+  icon: string
+  title: string
+  description: string
+  fix: string
+}
+
+export interface DailyReportMetrics {
+  cpu_avg_pct: number | null
+  cpu_peak_pct: number | null
+  cpu_peak_at: string | null
+  iowait_avg_pct: number | null
+  iowait_max_pct: number | null
+  ram_avg_pct: number | null
+  ram_max_pct: number | null
+  disk_eod_pct: number | null
+}
+
+export interface DailyReportDataSnapshot {
+  metrics: DailyReportMetrics
+  alerts: Array<{
+    severity: string; message: string; type: string; state: string
+    fired_at: string; resolved_at: string | null; duration_min: number | null
+  }>
+  services: Array<{
+    name: string; type: string; url: string | null
+    uptime_pct: number; incident_count: number; total_down_min: number
+  }>
+  jobs: Array<{
+    name: string; schedule: string; status: string
+    runs: Array<{ outcome: string; ran_at: string; duration_sec: number | null }>
+  }>
+  logs: {
+    total_lines: number
+    severity_counts: { fatal: number; error: number; warn: number; info: number }
+    top_errors: Array<{ message: string; count: number; source: string }>
+    failed_logins: Array<{ count: number; remote_host: string | null }>
+    slow_queries: { count: number; avg_sec: number; max_sec: number } | null
+    sources: Array<{ source: string; count: number }>
+  }
+}
+
+export interface DailyReport {
+  status: 'ok' | 'ai_not_configured' | 'not_generated'
+  report_date: string | null
+  score: number | null
+  band: 'excellent' | 'good' | 'needs-attention' | 'poor' | 'critical' | null
+  narrative: string | null
+  findings: DailyReportFinding[]
+  data_snapshot: DailyReportDataSnapshot
+  ai_provider: string | null
+  ai_model: string | null
+  generated_at: string | null
+  prompt_tokens: number | null
+  completion_tokens: number | null
+}
