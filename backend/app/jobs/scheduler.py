@@ -76,3 +76,9 @@ async def daily_report_nightly() -> None:
                 log.info("Daily report generated for server %s (%s)", server.name, yesterday)
             except Exception:
                 log.exception("Failed to generate daily report for server %s", server.name)
+
+
+async def dmesg_collector() -> None:
+    """Every 15 min: poll dmesg on each active server for kernel events."""
+    from app.services.dmesg_collector import collect_dmesg
+    await collect_dmesg()
