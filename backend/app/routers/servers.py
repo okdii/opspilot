@@ -417,29 +417,29 @@ async def get_kernel_events(
     interval = RANGE_INTERVAL[range]
 
     counts_result = await db.execute(
-        text("""
+        text(f"""
             SELECT severity, COUNT(*) AS cnt
             FROM server_logs
             WHERE server_id = :sid
               AND source = 'kernel'
-              AND time >= now() - INTERVAL :interval
+              AND time >= now() - INTERVAL '{interval}'
             GROUP BY severity
         """),
-        {"sid": server_id, "interval": interval},
+        {"sid": server_id},
     )
     raw_counts: dict[str, int] = {row.severity: int(row.cnt) for row in counts_result}
 
     events_result = await db.execute(
-        text("""
+        text(f"""
             SELECT time, severity, message
             FROM server_logs
             WHERE server_id = :sid
               AND source = 'kernel'
-              AND time >= now() - INTERVAL :interval
+              AND time >= now() - INTERVAL '{interval}'
             ORDER BY time DESC
             LIMIT 50
         """),
-        {"sid": server_id, "interval": interval},
+        {"sid": server_id},
     )
 
     return {
