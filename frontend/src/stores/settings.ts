@@ -26,9 +26,10 @@ export const useSettingsStore = defineStore('settings', () => {
     enabled: false,
   })
   const ai = ref({
-    provider: 'disabled' as 'disabled' | 'anthropic' | 'openai' | 'gemini',
+    provider: 'disabled' as 'disabled' | 'anthropic' | 'openai' | 'gemini' | 'custom',
     model: 'claude-sonnet-4-6',
     hasKey: false,
+    baseUrl: '',
   })
   const sessions = ref<Session[]>([])
   const team = ref<{ members: TeamMember[]; pendingInvites: PendingInvite[] }>({
@@ -69,6 +70,7 @@ export const useSettingsStore = defineStore('settings', () => {
       provider: data.ai_provider ?? 'disabled',
       model: data.ai_model ?? 'claude-sonnet-4-6',
       hasKey: data.ai_has_key ?? false,
+      baseUrl: data.ai_base_url ?? '',
     }
   }
 

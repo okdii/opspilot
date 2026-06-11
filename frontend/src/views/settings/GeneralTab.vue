@@ -54,8 +54,9 @@ const discordWebhookUrl = ref('')
 const discordEnabled = ref(false)
 const savingDiscord = ref(false)
 
-const aiProvider = ref<'disabled' | 'anthropic' | 'openai' | 'gemini'>('disabled')
+const aiProvider = ref<'disabled' | 'anthropic' | 'openai' | 'gemini' | 'custom'>('disabled')
 const aiModel = ref('claude-sonnet-4-6')
+const aiBaseUrl = ref('')
 const aiApiKey = ref('')
 const aiHasKey = ref(false)
 const aiTestStatus = ref<'idle' | 'testing' | 'ok' | 'error'>('idle')
@@ -88,6 +89,7 @@ async function load() {
     aiProvider.value = settings.ai.provider
     aiModel.value = settings.ai.model
     aiHasKey.value = settings.ai.hasKey
+    aiBaseUrl.value = settings.ai.baseUrl
   } catch (err) {
     notify.error(getApiError(err) ?? 'Unable to load settings.')
   } finally {
@@ -185,6 +187,7 @@ async function saveAi() {
     const patch: Record<string, unknown> = {
       ai_provider: aiProvider.value,
       ai_model: aiModel.value,
+      ai_base_url: aiBaseUrl.value.trim() || null,
     }
     if (aiApiKey.value) patch.ai_api_key = aiApiKey.value
     await api.patch('/api/settings', patch)
@@ -359,19 +362,30 @@ async function testAi() {
           <option value="anthropic">Anthropic (Claude)</option>
           <option value="openai">OpenAI (GPT)</option>
           <option value="gemini">Google Gemini</option>
+          <option value="custom">Custom (LiteLLM / OpenAI-compatible)</option>
         </select>
       </div>
       <template v-if="aiProvider !== 'disabled'">
+        <div v-if="aiProvider === 'custom'" class="field">
+          <label>Base URL</label>
+          <input
+            v-model="aiBaseUrl"
+            type="url"
+            placeholder="http://localhost:4000"
+            :disabled="loading"
+          />
+          <p class="hint">LiteLLM proxy URL, e.g. <code>http://localhost:4000</code>. Must include scheme and port.</p>
+        </div>
         <div class="field">
           <label>Model</label>
           <input v-model="aiModel" type="text" placeholder="claude-sonnet-4-6" :disabled="loading" />
         </div>
         <div class="field">
-          <label>API Key</label>
+          <label>API Key{{ aiProvider === 'custom' ? ' (optional)' : '' }}</label>
           <input
             v-model="aiApiKey"
             type="password"
-            :placeholder="aiHasKey ? '••••••••  (leave blank to keep)' : 'Paste API key'"
+            :placeholder="aiHasKey ? '••••••••  (leave blank to keep)' : aiProvider === 'custom' ? 'Leave blank if not required' : 'Paste API key'"
             autocomplete="new-password"
             :disabled="loading"
           />
@@ -434,6 +448,7 @@ input:checked + .slider { background: var(--accent); }
 input:checked + .slider::before { transform: translateX(20px); }
 input:disabled + .slider { opacity: 0.5; cursor: not-allowed; }
 .section-desc { font-size: 13px; color: var(--muted); margin-bottom: 16px; margin-top: -10px; }
+.hint code { background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 11px; font-family: monospace; }
 .test-result { font-size: 13px; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; }
 .test-result.ok      { background: rgba(34,197,94,.1);  color: var(--green); border: 1px solid rgba(34,197,94,.2); }
 .test-result.error   { background: rgba(239,68,68,.1);  color: var(--red);   border: 1px solid rgba(239,68,68,.2); }

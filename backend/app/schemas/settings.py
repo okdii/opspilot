@@ -24,6 +24,7 @@ class SettingsResponse(BaseModel):
     ai_provider: str
     ai_model: str
     ai_has_key: bool
+    ai_base_url: str | None
 
 
 class SettingsPatch(BaseModel):
@@ -47,6 +48,7 @@ class SettingsPatch(BaseModel):
     ai_provider: str | None = None
     ai_model: str | None = None
     ai_api_key: str | None = None  # plaintext in; encrypted at rest; blank/None keeps existing
+    ai_base_url: str | None = None
 
     @field_validator("timezone")
     @classmethod

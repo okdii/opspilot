@@ -55,6 +55,30 @@ class OpenAIProvider(BaseAIProvider):
         )
 
 
+class CustomProvider(BaseAIProvider):
+    """OpenAI-compatible endpoint — LiteLLM, Ollama, vLLM, etc."""
+
+    def __init__(self, base_url: str, model: str, api_key: str = "not-required") -> None:
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.api_key = api_key or "not-required"
+
+    async def complete(self, system: str, user: str, max_tokens: int = 4000) -> tuple[str, int, int]:
+        import openai  # noqa: PLC0415
+        client = openai.AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
+        resp = await client.chat.completions.create(
+            model=self.model,
+            max_tokens=max_tokens,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        )
+        pt = resp.usage.prompt_tokens if resp.usage else 0
+        ct = resp.usage.completion_tokens if resp.usage else 0
+        return resp.choices[0].message.content or "", pt, ct
+
+
 class GeminiProvider(BaseAIProvider):
     def __init__(self, api_key: str, model: str) -> None:
         self.api_key = api_key
@@ -79,7 +103,18 @@ async def get_provider(db) -> BaseAIProvider | None:
     from app.core import crypto
 
     s = await db.scalar(select(Settings).where(Settings.id == 1))
-    if not s or s.ai_provider == "disabled" or not s.ai_api_key_encrypted:
+    if not s or s.ai_provider == "disabled":
+        return None
+
+    # Custom provider only needs a base_url; API key is optional
+    if s.ai_provider == "custom":
+        if not s.ai_base_url:
+            return None
+        api_key = crypto.decrypt(s.ai_api_key_encrypted) if s.ai_api_key_encrypted else "not-required"
+        return CustomProvider(s.ai_base_url, s.ai_model, api_key)
+
+    # All other providers require an API key
+    if not s.ai_api_key_encrypted:
         return None
 
     api_key = crypto.decrypt(s.ai_api_key_encrypted)

@@ -52,6 +52,7 @@ def _to_response(s: Settings) -> SettingsResponse:
         ai_provider=s.ai_provider,
         ai_model=s.ai_model,
         ai_has_key=s.ai_api_key_encrypted is not None,
+        ai_base_url=s.ai_base_url,
     )
 
 
