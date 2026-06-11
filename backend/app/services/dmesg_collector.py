@@ -16,8 +16,8 @@ from app.services.ssh import SSHSession
 log = logging.getLogger(__name__)
 
 _DMESG_CMD = "dmesg -T -l warn,err,crit,alert,emerg 2>/dev/null || true"
-# Matches: [Wed Jun 11 03:14:22 2026] message text
-_LINE_RE = re.compile(r"^\[(\w{3} \w{3}\s+\d+ \d{2}:\d{2}:\d{2} \d{4})\]\s+(.+)$")
+# Matches: [Wed Jun 11 03:14:22 2026] or [Wed Jun 11 03:14:22.123456 2026] message text
+_LINE_RE = re.compile(r"^\[(\w{3} \w{3}\s+\d+ \d{2}:\d{2}:\d{2})(?:\.\d+)? (\d{4})\]\s+(.+)$")
 
 _SEVERITY_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"Out of memory|oom_kill|Killed process", re.I), "crit"),
@@ -41,12 +41,12 @@ def _parse_dmesg(output: str) -> list[dict]:
             continue
         try:
             # dmesg -T uses local time; assume UTC (most servers run UTC)
-            ts = datetime.strptime(m.group(1).strip(), "%a %b %d %H:%M:%S %Y").replace(
+            ts = datetime.strptime(f"{m.group(1).strip()} {m.group(2)}", "%a %b %d %H:%M:%S %Y").replace(
                 tzinfo=timezone.utc
             )
         except ValueError:
             continue
-        message = m.group(2).strip()
+        message = m.group(3).strip()
         rows.append(
             {"logged_at": ts, "severity": _classify_severity(message), "message": message}
         )
@@ -100,9 +100,9 @@ async def _collect_one(server: Server) -> None:
                     "message": row["message"],
                 },
             )
+            await db.commit()
             inserted += 1
         if inserted:
-            await db.commit()
             log.info("dmesg: inserted %d kernel events for server %s", inserted, server.id)
 
 
