@@ -1,12 +1,32 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useMetricsStore } from '@/stores/metrics'
+import { useServerStore } from '@/stores/server'
+import { useAuthStore } from '@/stores/auth'
 import { getServer } from '@/services/api'
 import { formatUptime, humanBytes, labeledList, realMounts, scalarValue, usageColor } from '@/utils/metrics'
 import type { Server } from '@/types'
 
 const metrics = useMetricsStore()
+const serverStore = useServerStore()
+const auth = useAuthStore()
 const server = ref<Server | null>(null)
+const redeploying = ref(false)
+const redeployDone = ref(false)
+const isAdmin = computed(() => auth.user?.role === 'admin')
+
+async function redeployAgents() {
+  const id = metrics.activeServerId
+  if (!id) return
+  redeploying.value = true
+  redeployDone.value = false
+  try {
+    await serverStore.redeploy(id)
+    redeployDone.value = true
+  } finally {
+    redeploying.value = false
+  }
+}
 
 onMounted(async () => {
   const id = metrics.activeServerId
@@ -257,6 +277,14 @@ function fmtLoad(v: number | null): string {
       <p v-else class="empty">No network interface data available.</p>
     </section>
 
+    <section v-if="isAdmin" class="card">
+      <h3>Agent Management</h3>
+      <p class="agent-desc">Re-pushes Telegraf and Fluent Bit configuration to this server. Use after upgrading OpsPilot to enable new collection features (e.g. kernel log collection).</p>
+      <button class="agent-btn" :disabled="redeploying" @click="redeployAgents">
+        {{ redeploying ? 'Reconfiguring…' : redeployDone ? 'Done ✓' : 'Reconfigure Agents' }}
+      </button>
+    </section>
+
   </div>
 </template>
 
@@ -338,4 +366,8 @@ function fmtLoad(v: number | null): string {
   font-size: 11px;
   font-weight: 500;
 }
+.agent-desc { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
+.agent-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 7px 14px; font-size: 12px; cursor: pointer; }
+.agent-btn:hover:not(:disabled) { border-color: var(--accent-2); color: var(--accent-2); }
+.agent-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
