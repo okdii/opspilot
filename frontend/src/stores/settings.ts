@@ -25,6 +25,11 @@ export const useSettingsStore = defineStore('settings', () => {
     webhookUrl: '',
     enabled: false,
   })
+  const ai = ref({
+    provider: 'disabled' as 'disabled' | 'anthropic' | 'openai' | 'gemini',
+    model: 'claude-sonnet-4-6',
+    hasKey: false,
+  })
   const sessions = ref<Session[]>([])
   const team = ref<{ members: TeamMember[]; pendingInvites: PendingInvite[] }>({
     members: [],
@@ -59,6 +64,11 @@ export const useSettingsStore = defineStore('settings', () => {
     discord.value = {
       webhookUrl: data.discord_webhook_url ?? '',
       enabled: data.discord_enabled ?? false,
+    }
+    ai.value = {
+      provider: data.ai_provider ?? 'disabled',
+      model: data.ai_model ?? 'claude-sonnet-4-6',
+      hasKey: data.ai_has_key ?? false,
     }
   }
 
@@ -151,6 +161,7 @@ export const useSettingsStore = defineStore('settings', () => {
     smtp,
     retention,
     discord,
+    ai,
     sessions,
     team,
     isLoading,

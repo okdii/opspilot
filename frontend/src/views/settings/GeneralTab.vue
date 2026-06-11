@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useNotify } from '@/composables/useNotify'
-import { getApiError } from '@/services/api'
+import { api, getApiError } from '@/services/api'
 
 const settings = useSettingsStore()
 const notify = useNotify()
@@ -54,6 +54,14 @@ const discordWebhookUrl = ref('')
 const discordEnabled = ref(false)
 const savingDiscord = ref(false)
 
+const aiProvider = ref<'disabled' | 'anthropic' | 'openai' | 'gemini'>('disabled')
+const aiModel = ref('claude-sonnet-4-6')
+const aiApiKey = ref('')
+const aiHasKey = ref(false)
+const aiTestStatus = ref<'idle' | 'testing' | 'ok' | 'error'>('idle')
+const aiTestMsg = ref('')
+const savingAi = ref(false)
+
 const savingIdentity = ref(false)
 const savingSmtp = ref(false)
 const testing = ref(false)
@@ -77,6 +85,9 @@ async function load() {
     smtpEnabled.value = settings.smtp.enabled
     discordWebhookUrl.value = settings.discord.webhookUrl
     discordEnabled.value = settings.discord.enabled
+    aiProvider.value = settings.ai.provider
+    aiModel.value = settings.ai.model
+    aiHasKey.value = settings.ai.hasKey
   } catch (err) {
     notify.error(getApiError(err) ?? 'Unable to load settings.')
   } finally {
@@ -165,6 +176,40 @@ async function saveDiscord() {
     notify.error(getApiError(err) ?? 'Unable to save Discord settings.')
   } finally {
     savingDiscord.value = false
+  }
+}
+
+async function saveAi() {
+  savingAi.value = true
+  try {
+    const patch: Record<string, unknown> = {
+      ai_provider: aiProvider.value,
+      ai_model: aiModel.value,
+    }
+    if (aiApiKey.value) patch.ai_api_key = aiApiKey.value
+    await api.patch('/api/settings', patch)
+    await settings.fetchSettings()
+    aiHasKey.value = settings.ai.hasKey
+    aiApiKey.value = ''
+    aiTestStatus.value = 'idle'
+    notify.success('AI settings saved.')
+  } catch (err) {
+    notify.error(getApiError(err) ?? 'Unable to save AI settings.')
+  } finally {
+    savingAi.value = false
+  }
+}
+
+async function testAi() {
+  aiTestStatus.value = 'testing'
+  aiTestMsg.value = ''
+  try {
+    const { data } = await api.post('/api/settings/ai/test')
+    aiTestStatus.value = 'ok'
+    aiTestMsg.value = `Connected — model responded: "${data.response}"`
+  } catch (err) {
+    aiTestStatus.value = 'error'
+    aiTestMsg.value = getApiError(err)?.message ?? 'Connection failed'
   }
 }
 </script>
@@ -302,6 +347,56 @@ async function saveDiscord() {
         </button>
       </div>
     </section>
+
+    <!-- AI Provider -->
+    <section class="card">
+      <h2>AI Provider</h2>
+      <p class="section-desc">Used for Daily Report generation on each server's detail page.</p>
+      <div class="field">
+        <label>Provider</label>
+        <select v-model="aiProvider" :disabled="loading">
+          <option value="disabled">Disabled</option>
+          <option value="anthropic">Anthropic (Claude)</option>
+          <option value="openai">OpenAI (GPT)</option>
+          <option value="gemini">Google Gemini</option>
+        </select>
+      </div>
+      <template v-if="aiProvider !== 'disabled'">
+        <div class="field">
+          <label>Model</label>
+          <input v-model="aiModel" type="text" placeholder="claude-sonnet-4-6" :disabled="loading" />
+        </div>
+        <div class="field">
+          <label>API Key</label>
+          <input
+            v-model="aiApiKey"
+            type="password"
+            :placeholder="aiHasKey ? '••••••••  (leave blank to keep)' : 'Paste API key'"
+            autocomplete="new-password"
+            :disabled="loading"
+          />
+        </div>
+        <div v-if="aiTestStatus !== 'idle'" class="test-result" :class="aiTestStatus">
+          {{ aiTestMsg }}
+        </div>
+        <div class="actions">
+          <button class="primary" :disabled="savingAi || loading" @click="saveAi">
+            <span v-if="savingAi" class="spin"></span><span v-else>Save AI Settings</span>
+          </button>
+          <button class="ghost" :disabled="aiTestStatus === 'testing' || loading" @click="testAi">
+            <span v-if="aiTestStatus === 'testing'" class="spin dark"></span>
+            <span v-else>Test Connection</span>
+          </button>
+        </div>
+      </template>
+      <template v-else>
+        <div class="actions">
+          <button class="primary" :disabled="savingAi || loading" @click="saveAi">
+            <span v-if="savingAi" class="spin"></span><span v-else>Save</span>
+          </button>
+        </div>
+      </template>
+    </section>
   </div>
 </template>
 
@@ -338,4 +433,9 @@ input:disabled, select:disabled { opacity: 0.6; }
 input:checked + .slider { background: var(--accent); }
 input:checked + .slider::before { transform: translateX(20px); }
 input:disabled + .slider { opacity: 0.5; cursor: not-allowed; }
+.section-desc { font-size: 13px; color: var(--muted); margin-bottom: 16px; margin-top: -10px; }
+.test-result { font-size: 13px; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; }
+.test-result.ok      { background: rgba(34,197,94,.1);  color: var(--green); border: 1px solid rgba(34,197,94,.2); }
+.test-result.error   { background: rgba(239,68,68,.1);  color: var(--red);   border: 1px solid rgba(239,68,68,.2); }
+.test-result.testing { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
 </style>
