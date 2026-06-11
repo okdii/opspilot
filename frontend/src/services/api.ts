@@ -314,3 +314,21 @@ export async function regenerateDailyReport(
   )
   return data
 }
+
+// --- Kernel Events -----------------------------------------------------------
+
+export interface KernelEventsResponse {
+  counts: { emerg: number; alert: number; crit: number; err: number; warn: number }
+  events: Array<{ ts: string; severity: string; message: string }>
+}
+
+export async function getKernelEvents(
+  serverId: string,
+  range: string,
+): Promise<KernelEventsResponse> {
+  const { data } = await api.get<KernelEventsResponse>(
+    `/api/servers/${serverId}/kernel-events`,
+    { params: { range } },
+  )
+  return data
+}
