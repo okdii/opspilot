@@ -1,6 +1,6 @@
 from datetime import datetime, timezone, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +15,7 @@ from app.schemas.onboarding import OnboardingResponse, OnboardingStepOut
 from app.schemas.server import ServerCreate, ServerOut, ServerUpdate
 from app.services import onboarding as onboarding_service
 from app.services.alerting import OPEN_STATES, resolve_alert
+from app.services.metric_catalog import RANGE_INTERVAL
 from app.services.ssh import SSHAuthError, SSHConnectionError, SSHError, test_connection
 
 router = APIRouter(tags=["servers"])
@@ -396,3 +397,65 @@ async def _assert_server_access(server_id: str, user, db: AsyncSession) -> Serve
     """Shared guard for server-detail routes (metrics, maintenance).
     Reuses the org-membership rule and returns the server row."""
     return await _get_accessible_server(server_id, user, db)
+
+
+@router.get("/api/servers/{server_id}/kernel-events")
+async def get_kernel_events(
+    server_id: str,
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+    range: str = Query("24h"),
+):
+    await _get_accessible_server(server_id, user, db)
+
+    if range not in RANGE_INTERVAL:
+        raise HTTPException(
+            400,
+            detail={"error": "bad_range", "message": f"range must be one of {sorted(RANGE_INTERVAL)}"},
+        )
+
+    interval = RANGE_INTERVAL[range]
+
+    counts_result = await db.execute(
+        text("""
+            SELECT severity, COUNT(*) AS cnt
+            FROM server_logs
+            WHERE server_id = :sid
+              AND source = 'kernel'
+              AND time >= now() - INTERVAL :interval
+            GROUP BY severity
+        """),
+        {"sid": server_id, "interval": interval},
+    )
+    raw_counts: dict[str, int] = {row.severity: int(row.cnt) for row in counts_result}
+
+    events_result = await db.execute(
+        text("""
+            SELECT time, severity, message
+            FROM server_logs
+            WHERE server_id = :sid
+              AND source = 'kernel'
+              AND time >= now() - INTERVAL :interval
+            ORDER BY time DESC
+            LIMIT 50
+        """),
+        {"sid": server_id, "interval": interval},
+    )
+
+    return {
+        "counts": {
+            "emerg": raw_counts.get("emerg", 0),
+            "alert": raw_counts.get("alert", 0),
+            "crit": raw_counts.get("crit", 0),
+            "err": raw_counts.get("err", 0),
+            "warn": raw_counts.get("warn", 0),
+        },
+        "events": [
+            {
+                "ts": row.time.isoformat(),
+                "severity": row.severity or "warn",
+                "message": row.message or "",
+            }
+            for row in events_result
+        ],
+    }
