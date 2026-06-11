@@ -59,6 +59,11 @@ onMounted(() => {
     activeTab.value = tab as Tab
   }
 })
+watch(() => route.query.tab, (tab) => {
+  if (tab && (TABS as readonly string[]).includes(tab as string)) {
+    activeTab.value = tab as Tab
+  }
+})
 // --- Header / status -------------------------------------------------------
 const displayStatus = computed(() =>
   metrics.maintenance.active ? 'maintenance' : (server.value?.status ?? 'pending'),

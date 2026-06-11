@@ -2,7 +2,7 @@
 
 **Legend:** ✅ Done · 🔄 In Progress · ⬜ Pending · 🚫 Blocked
 
-Last updated: 2026-06-04
+Last updated: 2026-06-11
 
 ---
 
@@ -513,4 +513,60 @@ Last updated: 2026-06-04
 | Phase 14 — Service SSL on SSL & Domains Page | ✅ Complete | 3 / 3 |
 | Phase 15 — Global Timezone Setting | ✅ Complete | 8 / 8 |
 | Phase 16 — HTTP Security Audit | ✅ Complete | 9 / 9 |
-| **Total** | ✅ Complete | **231 / 231** |
+| Phase 17 — Kernel Events (dmesg) | ✅ Complete | 9 / 9 |
+| **Total** | ✅ Complete | **240 / 240** |
+
+---
+
+## Phase 17 — Kernel Events (dmesg)
+
+### Task 1: Add kmsg INPUT to Fluent Bit template
+- ✅ Added `[INPUT] Name kmsg Prio_Level warning` block to `fluent-bit.conf.j2`
+- ✅ **Smoke test: template renders with kmsg block**
+
+### Task 2: dmesg SSH poll collector
+- ✅ `dmesg_collector.py` created with SSHSession, dmesg parse, severity mapping, ±2s dedup
+- ✅ Fractional-second timestamp regex (`(?:\.\d+)?`)
+- ✅ Per-row commit inside loop (prevents partial-insert rollback)
+- ✅ **Smoke test: import verified in container**
+
+### Task 3: Register scheduler job
+- ✅ `dmesg_collector` job added to `scheduler.py` (every 15 min)
+- ✅ Registered in `main.py` with `replace_existing=True`
+- ✅ **Smoke test: manual trigger runs, gracefully handles SSH failure**
+
+### Task 4: Kernel events API endpoint
+- ✅ `GET /api/servers/{id}/kernel-events?range=` endpoint added to `servers.py`
+- ✅ Returns `{counts: {emerg,alert,crit,err,warn}, events: [{ts,severity,message}]}`
+- ✅ Fixed: INTERVAL uses f-string interpolation (PostgreSQL cannot bind INTERVAL params)
+- ✅ **Smoke test: endpoint returns correct JSON with test data**
+
+### Task 5: Frontend API function + types
+- ✅ `KernelEventsResponse` interface and `getKernelEvents()` added to `api.ts`
+- ✅ **Smoke test: TypeScript types match backend response shape**
+
+### Task 6: KernelEventsCard.vue component
+- ✅ 4-tile summary strip (emerg/alert, crit, err, warn) with severity colors
+- ✅ Event list with severity badge, timestamp, message (newest-first)
+- ✅ Loading / empty / error states
+- ✅ `watch(() => [props.serverId, props.range], load)` watches both props
+- ✅ `viewAll()` uses named route push with `{ tab: 'Logs', source: 'kernel' }`
+- ✅ **Smoke test: card renders with 5 test events at 24h range**
+
+### Task 7: Wire SystemTab + pre-select LogsTab
+- ✅ `KernelEventsCard` appended to `SystemTab.vue` as 5th card
+- ✅ `LogsTab.vue` reads `route.query.source` on mount to pre-select kernel source
+- ✅ **Smoke test: card visible in System tab; Logs tab pre-filters to kernel on navigate**
+
+### Task 8: Reconfigure Agents button in InfoTab
+- ✅ Admin-only "Agent Management" section added to `InfoTab.vue`
+- ✅ Button cycles: Reconfigure Agents → Reconfiguring… → Done ✓ / error state
+- ✅ **Smoke test: button calls redeploy API, transitions to Done ✓**
+
+### Task 9: Smoke test + release
+- ✅ Backend API `/kernel-events` returns counts and events correctly
+- ✅ Kernel Events card renders in System tab with 24h test data
+- ✅ "View all in Logs →" navigates to Logs tab (fixed: added `watch(route.query.tab)` to ServerDetail)
+- ✅ Reconfigure Agents button functional
+- ✅ PROGRESS.md and DASHBOARD.html updated
+- ✅ **Release: v1.2.14**

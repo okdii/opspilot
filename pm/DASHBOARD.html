@@ -65,7 +65,7 @@
 <body>
 <div class="header">
   <div><h1>OpsPilot &mdash; Dev Progress</h1><p>13 phases &middot; 212 tasks &middot; Python + FastAPI + Vue 3 + TimescaleDB</p></div>
-  <div class="badge">Updated: <span>2026-06-05</span></div>
+  <div class="badge">Updated: <span>2026-06-11</span></div>
 </div>
 <div class="overall">
   <div>
@@ -341,6 +341,17 @@ const phases = [
     { text: "ServiceDetail.vue: Security Audit card after SSL card (HTTPS only), loadSecurity() on mount, service_security_updated WS handler", status: "done", smoke: true },
     { text: "SslDomainsView.vue: Security column with grade badge for service rows, dash for domain/ssl rows, sort by score, grade legend popover", status: "done", smoke: true },
     { text: "Smoke test: live scan triggered (mphtj.gov.my → grade C, score 64), API endpoint verified in OpenAPI, ServiceSslOut schema has security_grade/score, SecurityFinding + ServiceSecurityOut schemas present", status: "done", smoke: true },
+  ]},
+  { id: 17, title: "Kernel Events (dmesg)", subtitle: "Real-time kernel message collection via Fluent Bit kmsg + SSH dmesg poll every 15 min. Kernel Events card in System tab with severity summary strip and event list. View all navigates to Logs tab with kernel filter.", tasks: [
+    { text: "Add kmsg INPUT block to fluent-bit.conf.j2 (Prio_Level warning, kernel.db state file)", status: "done", smoke: true },
+    { text: "dmesg_collector.py: SSH poll service, fractional-second timestamp parsing, severity mapping, ±2s dedup, per-row commit", status: "done", smoke: true },
+    { text: "Register dmesg_collector APScheduler job (every 15 min, replace_existing=True) in scheduler.py + main.py", status: "done", smoke: true },
+    { text: "GET /api/servers/{id}/kernel-events?range= endpoint: counts by severity + events list (newest-first, cap 50); INTERVAL f-string fix", status: "done", smoke: true },
+    { text: "KernelEventsResponse type + getKernelEvents() API function in api.ts", status: "done", smoke: true },
+    { text: "KernelEventsCard.vue: 4-tile summary strip, event list, loading/empty/error states, severity color mapping", status: "done", smoke: true },
+    { text: "Wire KernelEventsCard into SystemTab.vue as 5th card; LogsTab.vue reads route.query.source on mount to pre-select kernel chip", status: "done", smoke: true },
+    { text: "Admin-only Agent Management section in InfoTab.vue with Reconfigure Agents button (Reconfiguring… → Done ✓ / error)", status: "done", smoke: true },
+    { text: "Smoke test: card renders with 24h test data, View all navigates to Logs tab, Reconfigure Agents queues redeploy. Fixed: ServerDetail tab-switch watcher (watch route.query.tab)", status: "done", smoke: true },
   ]},
 ];
 

@@ -20,6 +20,10 @@ services:
       - --reload
     user: root   # volume mount needs write access for .pyc cache
 
+  migrate:
+    volumes:
+      - ./backend:/app
+
   frontend:
     build:
       context: ./frontend
