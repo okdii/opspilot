@@ -135,7 +135,7 @@ async def _services(
                     and_(
                         Incident.service_id == svc.id,
                         Incident.started_at < day_end,
-                        (Incident.resolved_at == None) | (Incident.resolved_at >= day_start),
+                        (Incident.resolved_at.is_(None)) | (Incident.resolved_at >= day_start),
                     )
                 )
             )
