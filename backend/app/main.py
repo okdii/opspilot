@@ -10,7 +10,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import settings
 from app.core.rate_limit import limiter
-from app.jobs.scheduler import maintenance_expiry, scheduler, session_cleanup, ticket_sweep
+from app.jobs.scheduler import maintenance_expiry, scheduler, session_cleanup, ticket_sweep, daily_report_nightly
 from app.routers.auth import invite_router, router as auth_router, ws_router
 from app.routers.ingest import router as ingest_router
 from app.routers.organizations import router as org_router
@@ -31,6 +31,7 @@ from app.routers.databases import router as databases_router
 from app.routers.db_info import router as db_info_router
 from app.routers.vhost_scan import router as vhost_scan_router
 from app.routers.cron_backup import router as cron_backup_router
+from app.routers.daily_report import router as daily_report_router
 from app.services.metric_evaluator import metric_alert_evaluator
 from app.services.log_evaluator import log_alert_evaluator
 from app.services.ssl_checker import ssl_checker_daily, domain_checker_daily
@@ -56,6 +57,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(domain_checker_daily, "cron", hour=3, minute=0, id="domain_checker_daily", replace_existing=True)
     scheduler.add_job(db_deadlock_evaluator, "interval", seconds=60, id="db_deadlock_evaluator", replace_existing=True)
     scheduler.add_job(cron_backup_watchdog, "interval", seconds=60, id="cron_backup_watchdog", replace_existing=True)
+    scheduler.add_job(daily_report_nightly, "cron", hour=0, minute=5, id="daily_report_nightly", replace_existing=True)
     scheduler.start()
     asyncio.create_task(schedule_all_active())
     flush_task = asyncio.create_task(live_bus.flush_loop())
@@ -124,6 +126,7 @@ app.include_router(databases_router)
 app.include_router(db_info_router)
 app.include_router(vhost_scan_router)
 app.include_router(cron_backup_router)
+app.include_router(daily_report_router)
 
 
 @app.get("/api/health")

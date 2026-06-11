@@ -39,3 +39,40 @@ async def maintenance_expiry() -> None:
     This tick exists per spec for future alert re-evaluation / un-suppression
     (Phase 8 owns alert re-fire)."""
     return None
+
+
+async def daily_report_nightly() -> None:
+    """00:05 daily: generate AI daily reports for all active servers."""
+    import logging
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import select
+    from app.database import AsyncSessionLocal
+    from app.models.server import Server
+    from app.models.other import Settings
+    from app.services.ai.provider import get_provider
+    from app.services.daily_report_generator import generate_and_store
+
+    log = logging.getLogger(__name__)
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date()
+
+    async with AsyncSessionLocal() as db:
+        provider = await get_provider(db)
+        if provider is None:
+            return
+        s = await db.scalar(select(Settings).where(Settings.id == 1))
+        servers = (await db.execute(select(Server).where(Server.is_active == True))).scalars().all()
+
+    for server in servers:
+        async with AsyncSessionLocal() as db:
+            try:
+                await generate_and_store(
+                    db=db,
+                    server_id=server.id,
+                    report_date=yesterday,
+                    provider=provider,
+                    provider_name=s.ai_provider,
+                    model_name=s.ai_model,
+                )
+                log.info("Daily report generated for server %s (%s)", server.name, yesterday)
+            except Exception:
+                log.exception("Failed to generate daily report for server %s", server.name)
