@@ -25,10 +25,10 @@ async function load() {
 }
 
 onMounted(load)
-watch(() => props.range, load)
+watch(() => [props.serverId, props.range], load)
 
 function viewAll() {
-  router.push({ query: { tab: 'Logs', source: 'kernel' } })
+  router.push({ name: 'server-detail', params: { id: props.serverId }, query: { tab: 'Logs', source: 'kernel' } })
 }
 
 const rangeLabel = computed(() => props.range)

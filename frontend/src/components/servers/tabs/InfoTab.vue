@@ -13,6 +13,7 @@ const auth = useAuthStore()
 const server = ref<Server | null>(null)
 const redeploying = ref(false)
 const redeployDone = ref(false)
+const redeployError = ref(false)
 const isAdmin = computed(() => auth.user?.role === 'admin')
 
 async function redeployAgents() {
@@ -20,9 +21,12 @@ async function redeployAgents() {
   if (!id) return
   redeploying.value = true
   redeployDone.value = false
+  redeployError.value = false
   try {
     await serverStore.redeploy(id)
     redeployDone.value = true
+  } catch {
+    redeployError.value = true
   } finally {
     redeploying.value = false
   }
@@ -283,6 +287,7 @@ function fmtLoad(v: number | null): string {
       <button class="agent-btn" :disabled="redeploying" @click="redeployAgents">
         {{ redeploying ? 'Reconfiguring…' : redeployDone ? 'Done ✓' : 'Reconfigure Agents' }}
       </button>
+      <p v-if="redeployError" class="agent-error">Reconfiguration failed — check backend logs.</p>
     </section>
 
   </div>
@@ -370,4 +375,5 @@ function fmtLoad(v: number | null): string {
 .agent-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 7px 14px; font-size: 12px; cursor: pointer; }
 .agent-btn:hover:not(:disabled) { border-color: var(--accent-2); color: var(--accent-2); }
 .agent-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.agent-error { font-size: 12px; color: var(--red, #e74c3c); margin-top: 8px; margin-bottom: 0; }
 </style>
