@@ -6,7 +6,7 @@ Permission requirement: the SSH user must be in the fail2ban group on the target
 import asyncio
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from sqlalchemy import select, text
@@ -46,16 +46,29 @@ def _parse_jail_status(output: str) -> dict:
     }
 
 
-def _parse_fail2ban_log(output: str) -> list[dict]:
+def _parse_tz_offset(offset_str: str) -> timezone:
+    """Parse `date +%z` output (e.g. '+0800', '-0530') into a timezone object."""
+    try:
+        s = offset_str.strip()
+        sign = 1 if s[0] == "+" else -1
+        hours, minutes = int(s[1:3]), int(s[3:5])
+        return timezone(timedelta(hours=sign * hours, minutes=sign * minutes))
+    except Exception:
+        return timezone.utc
+
+
+def _parse_fail2ban_log(output: str, server_tz: timezone = timezone.utc) -> list[dict]:
     events = []
     for line in output.splitlines():
         m = _LOG_LINE_RE.match(line.strip())
         if not m:
             continue
         try:
-            ts = datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-            # Assumes server runs UTC (same as dmesg_collector). Non-UTC servers will
-            # store incorrect event_at timestamps — set TZ=UTC on target servers.
+            ts = (
+                datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S")
+                .replace(tzinfo=server_tz)
+                .astimezone(timezone.utc)
+            )
         except ValueError:
             continue
         events.append({
@@ -125,11 +138,15 @@ async def _collect_one(server: Server) -> None:
                 if r.ok:
                     jail_data[jail] = _parse_jail_status(r.stdout)
 
+            # Server local timezone (for correct log timestamp parsing)
+            tz_result = await ssh.run("date +%z", timeout=5)
+            server_tz = _parse_tz_offset(tz_result.stdout) if tz_result.ok else timezone.utc
+
             # Ban event log
             log_result = await ssh.run(
                 "tail -n 5000 /var/log/fail2ban.log 2>/dev/null || true", timeout=15
             )
-            log_events = _parse_fail2ban_log(log_result.stdout) if log_result.ok else []
+            log_events = _parse_fail2ban_log(log_result.stdout, server_tz) if log_result.ok else []
     except Exception as e:
         msg = str(e).lower()
         if "permission denied" in msg or "permission" in msg:
