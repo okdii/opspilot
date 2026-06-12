@@ -45,6 +45,10 @@ async def get_fail2ban_status(
         text("SELECT COUNT(*) FROM fail2ban_jails WHERE server_id = :sid"),
         {"sid": server_id},
     ) or 0
+    total_banned_ever = await db.scalar(
+        text("SELECT COALESCE(SUM(total_banned), 0) FROM fail2ban_jails WHERE server_id = :sid"),
+        {"sid": server_id},
+    ) or 0
     settings_row = await db.scalar(select(Settings).where(Settings.id == 1))
     tz = _resolve_tz(settings_row.timezone if settings_row else None)
     now_local = datetime.now(tz)
@@ -62,6 +66,7 @@ async def get_fail2ban_status(
         "jail_count": int(jail_count),
         "currently_banned": int(currently_banned),
         "bans_today": int(bans_today),
+        "total_banned_ever": int(total_banned_ever),
         "last_checked": last_checked,
     }
 

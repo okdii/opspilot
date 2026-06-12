@@ -25,6 +25,10 @@ defineProps<{ status: Fail2banStatus | null }>()
       <div class="label">BANS TODAY</div>
       <div class="value">{{ status?.bans_today ?? '—' }}</div>
     </div>
+    <div class="stat-card">
+      <div class="label">TOTAL BANS</div>
+      <div class="value">{{ status?.total_banned_ever?.toLocaleString() ?? '—' }}</div>
+    </div>
   </div>
 </template>
 

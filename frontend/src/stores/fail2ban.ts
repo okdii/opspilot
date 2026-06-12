@@ -7,6 +7,7 @@ export interface Fail2banStatus {
   jail_count: number
   currently_banned: number
   bans_today: number
+  total_banned_ever: number
   last_checked: string | null
 }
 
