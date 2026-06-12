@@ -76,7 +76,8 @@ async def get_fail2ban_jails(
 
     rows = await db.execute(
         text("""
-            SELECT jail_name, currently_banned, total_banned, currently_failed, checked_at
+            SELECT jail_name, currently_banned, total_banned, currently_failed,
+                   bantime_seconds, findtime_seconds, maxretry, checked_at
             FROM fail2ban_jails WHERE server_id = :sid
             ORDER BY currently_banned DESC
         """),
@@ -88,6 +89,9 @@ async def get_fail2ban_jails(
             "currently_banned": r.currently_banned,
             "total_banned": r.total_banned,
             "currently_failed": r.currently_failed,
+            "bantime_seconds": r.bantime_seconds,
+            "findtime_seconds": r.findtime_seconds,
+            "maxretry": r.maxretry,
             "checked_at": r.checked_at,
         }
         for r in rows.fetchall()

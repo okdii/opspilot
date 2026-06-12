@@ -131,12 +131,33 @@ async def _collect_one(server: Server) -> None:
                 if re.fullmatch(r'[a-zA-Z0-9_-]+', j)
             ]
 
-            # Per-jail status
+            # Per-jail status + config
             jail_data: dict[str, dict] = {}
             for jail in jail_names:
                 r = await ssh.run(f"fail2ban-client status {jail} 2>&1", timeout=10)
-                if r.ok:
-                    jail_data[jail] = _parse_jail_status(r.stdout)
+                if not r.ok:
+                    continue
+                data = _parse_jail_status(r.stdout)
+                # Fetch config values in one compound command
+                cfg = await ssh.run(
+                    f"fail2ban-client get {jail} bantime 2>/dev/null; "
+                    f"fail2ban-client get {jail} findtime 2>/dev/null; "
+                    f"fail2ban-client get {jail} maxretry 2>/dev/null",
+                    timeout=10,
+                )
+                if cfg.ok:
+                    lines = [l.strip() for l in cfg.stdout.splitlines() if l.strip()]
+                    def _int(s: str) -> int | None:
+                        try:
+                            return int(s)
+                        except ValueError:
+                            return None
+                    data["bantime_seconds"] = _int(lines[0]) if len(lines) > 0 else None
+                    data["findtime_seconds"] = _int(lines[1]) if len(lines) > 1 else None
+                    data["maxretry"] = _int(lines[2]) if len(lines) > 2 else None
+                else:
+                    data["bantime_seconds"] = data["findtime_seconds"] = data["maxretry"] = None
+                jail_data[jail] = data
 
             # Server local timezone (for correct log timestamp parsing)
             tz_result = await ssh.run("date +%z", timeout=5)
@@ -167,18 +188,24 @@ async def _collect_one(server: Server) -> None:
             await db.execute(
                 text("""
                     INSERT INTO fail2ban_jails
-                        (server_id, jail_name, currently_banned, total_banned, currently_failed, checked_at)
-                    VALUES (:sid, :jail, :cb, :tb, :cf, :now)
+                        (server_id, jail_name, currently_banned, total_banned, currently_failed,
+                         bantime_seconds, findtime_seconds, maxretry, checked_at)
+                    VALUES (:sid, :jail, :cb, :tb, :cf, :bt, :ft, :mr, :now)
                     ON CONFLICT (server_id, jail_name) DO UPDATE SET
                         currently_banned = EXCLUDED.currently_banned,
                         total_banned     = EXCLUDED.total_banned,
                         currently_failed = EXCLUDED.currently_failed,
+                        bantime_seconds  = EXCLUDED.bantime_seconds,
+                        findtime_seconds = EXCLUDED.findtime_seconds,
+                        maxretry         = EXCLUDED.maxretry,
                         checked_at       = EXCLUDED.checked_at
                 """),
                 {
                     "sid": str(server.id), "jail": jail,
                     "cb": data["currently_banned"], "tb": data["total_banned"],
-                    "cf": data["currently_failed"], "now": now,
+                    "cf": data["currently_failed"],
+                    "bt": data["bantime_seconds"], "ft": data["findtime_seconds"],
+                    "mr": data["maxretry"], "now": now,
                 },
             )
             await db.commit()

@@ -15,6 +15,9 @@ export interface Fail2banJail {
   currently_banned: number
   total_banned: number
   currently_failed: number
+  bantime_seconds: number | null
+  findtime_seconds: number | null
+  maxretry: number | null
   checked_at: string
 }
 
