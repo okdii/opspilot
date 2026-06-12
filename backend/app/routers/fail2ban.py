@@ -9,11 +9,13 @@ GET /api/servers/{server_id}/fail2ban/top-countries
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.deps import CurrentUser
+from app.models.other import Settings
+from app.services.cron_schedule import _resolve_tz
 
 router = APIRouter(prefix="/api/servers", tags=["fail2ban"])
 
@@ -43,7 +45,10 @@ async def get_fail2ban_status(
         text("SELECT COUNT(*) FROM fail2ban_jails WHERE server_id = :sid"),
         {"sid": server_id},
     ) or 0
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    settings_row = await db.scalar(select(Settings).where(Settings.id == 1))
+    tz = _resolve_tz(settings_row.timezone if settings_row else None)
+    now_local = datetime.now(tz)
+    today_start = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
     bans_today = await db.scalar(
         text("""
             SELECT COUNT(*) FROM fail2ban_ban_events
