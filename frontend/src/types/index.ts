@@ -240,7 +240,7 @@ export type LogSource =
 
 export type LogSeverity = 'debug' | 'info' | 'warn' | 'error' | 'fatal'
 
-export type LogTimeRange = '15m' | '1h' | '6h' | '24h' | '7d' | 'custom'
+export type LogTimeRange = '15m' | '1h' | '6h' | '24h' | '7d' | '30d' | 'custom'
 
 export interface LogEntry {
   id: string

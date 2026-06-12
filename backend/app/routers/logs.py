@@ -39,6 +39,7 @@ _DEFAULT_BUCKET = [
     (timedelta(hours=6), 900),
     (timedelta(hours=24), 3600),
     (timedelta(days=7), 21600),
+    (timedelta(days=30), 86400),
 ]
 
 

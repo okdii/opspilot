@@ -20,6 +20,7 @@ const RANGE_OFFSET_MS: Record<Exclude<LogTimeRange, 'custom'>, number> = {
   '6h': 6 * 60 * 60_000,
   '24h': 24 * 60 * 60_000,
   '7d': 7 * 24 * 60 * 60_000,
+  '30d': 30 * 24 * 60 * 60_000,
 }
 
 function defaultFilters(): LogFilters {
