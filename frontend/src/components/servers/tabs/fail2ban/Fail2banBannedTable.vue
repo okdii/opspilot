@@ -17,6 +17,7 @@ async function goPage(p: number) {
 function relTime(ts: string | null): string {
   if (!ts) return '—'
   const diff = Date.now() - new Date(ts).getTime()
+  if (diff <= 0) return 'just now'
   const mins = Math.floor(diff / 60000)
   if (mins < 60) return `${mins}m ago`
   const hrs = Math.floor(mins / 60)
