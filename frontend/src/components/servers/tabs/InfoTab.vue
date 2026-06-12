@@ -13,7 +13,7 @@ const auth = useAuthStore()
 const server = ref<Server | null>(null)
 const redeploying = ref(false)
 const redeployDone = ref(false)
-const redeployError = ref(false)
+const redeployErrorMsg = ref('')
 const isAdmin = computed(() => auth.user?.role === 'admin')
 
 async function redeployAgents() {
@@ -21,12 +21,14 @@ async function redeployAgents() {
   if (!id) return
   redeploying.value = true
   redeployDone.value = false
-  redeployError.value = false
+  redeployErrorMsg.value = ''
   try {
     await serverStore.redeploy(id)
     redeployDone.value = true
-  } catch {
-    redeployError.value = true
+  } catch (err: unknown) {
+    const detail = (err as { response?: { data?: { detail?: { message?: string } | string } } })
+      ?.response?.data?.detail
+    redeployErrorMsg.value = typeof detail === 'object' ? (detail?.message ?? 'Unknown error') : (detail ?? 'Request failed')
   } finally {
     redeploying.value = false
   }
@@ -287,7 +289,7 @@ function fmtLoad(v: number | null): string {
       <button class="agent-btn" :disabled="redeploying" @click="redeployAgents">
         {{ redeploying ? 'Reconfiguring…' : redeployDone ? 'Done ✓' : 'Reconfigure Agents' }}
       </button>
-      <p v-if="redeployError" class="agent-error">Reconfiguration failed — check backend logs.</p>
+      <p v-if="redeployErrorMsg" class="agent-error">Reconfiguration failed: {{ redeployErrorMsg }}</p>
     </section>
 
   </div>
