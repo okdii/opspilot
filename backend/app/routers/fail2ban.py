@@ -111,12 +111,19 @@ async def get_fail2ban_banned_ips(
     offset = (page - 1) * per_page
     rows = await db.execute(
         text("""
-            SELECT b.ip, b.jail, b.banned_since, b.checked_at,
-                   g.country_code, g.country_name, g.isp
+            SELECT b.ip, b.jail, b.checked_at,
+                   g.country_code, g.country_name, g.isp,
+                   e.event_at AS banned_since
             FROM fail2ban_banned_ips b
             LEFT JOIN ip_geodata g ON g.ip = b.ip
+            LEFT JOIN LATERAL (
+                SELECT event_at FROM fail2ban_ban_events
+                WHERE server_id = b.server_id AND ip = b.ip
+                  AND jail = b.jail AND action = 'ban'
+                ORDER BY event_at DESC LIMIT 1
+            ) e ON true
             WHERE b.server_id = :sid
-            ORDER BY b.checked_at DESC
+            ORDER BY e.event_at DESC NULLS LAST
             LIMIT :limit OFFSET :offset
         """),
         {"sid": server_id, "limit": per_page, "offset": offset},
