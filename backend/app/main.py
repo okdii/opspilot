@@ -10,7 +10,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import settings
 from app.core.rate_limit import limiter
-from app.jobs.scheduler import maintenance_expiry, scheduler, session_cleanup, ticket_sweep, daily_report_nightly, dmesg_collector
+from app.jobs.scheduler import maintenance_expiry, scheduler, session_cleanup, ticket_sweep, daily_report_nightly, dmesg_collector, fail2ban_retention
 from app.routers.auth import invite_router, router as auth_router, ws_router
 from app.routers.ingest import router as ingest_router
 from app.routers.organizations import router as org_router
@@ -59,6 +59,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(cron_backup_watchdog, "interval", seconds=60, id="cron_backup_watchdog", replace_existing=True)
     scheduler.add_job(daily_report_nightly, "cron", hour=0, minute=5, id="daily_report_nightly", replace_existing=True)
     scheduler.add_job(dmesg_collector, "interval", minutes=15, id="dmesg_collector", replace_existing=True)
+    scheduler.add_job(fail2ban_retention, "cron", hour=4, minute=30, id="fail2ban_retention", replace_existing=True)
     scheduler.start()
     asyncio.create_task(schedule_all_active())
     flush_task = asyncio.create_task(live_bus.flush_loop())

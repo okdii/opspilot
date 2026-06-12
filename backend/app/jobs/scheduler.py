@@ -82,3 +82,17 @@ async def dmesg_collector() -> None:
     """Every 15 min: poll dmesg on each active server for kernel events."""
     from app.services.dmesg_collector import collect_dmesg
     await collect_dmesg()
+
+
+async def fail2ban_retention() -> None:
+    """Daily 04:30: delete fail2ban ban events older than 30 days."""
+    import logging
+    from app.database import AsyncSessionLocal
+    from sqlalchemy import text
+    log = logging.getLogger(__name__)
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            text("DELETE FROM fail2ban_ban_events WHERE event_at < NOW() - INTERVAL '30 days'")
+        )
+        await db.commit()
+        log.info("fail2ban retention: deleted %d old ban events", result.rowcount)
