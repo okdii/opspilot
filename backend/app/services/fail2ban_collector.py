@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 _CURRENTLY_BANNED_RE = re.compile(r"Currently banned:\s+(\d+)")
 _TOTAL_BANNED_RE = re.compile(r"Total banned:\s+(\d+)")
 _CURRENTLY_FAILED_RE = re.compile(r"Currently failed:\s+(\d+)")
-_BANNED_IP_LIST_RE = re.compile(r"Banned IP list:\s*(.*?)(?:\n\S|$)", re.DOTALL)
+_BANNED_IP_LIST_RE = re.compile(r"Banned IP list:\s*([^\n]*)")
 
 # /var/log/fail2ban.log line format:
 # 2026-06-12 07:23:45,678 fail2ban.actions [1234]: NOTICE  [sshd] Ban 103.107.60.45
@@ -54,6 +54,8 @@ def _parse_fail2ban_log(output: str) -> list[dict]:
             continue
         try:
             ts = datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            # Assumes server runs UTC (same as dmesg_collector). Non-UTC servers will
+            # store incorrect event_at timestamps — set TZ=UTC on target servers.
         except ValueError:
             continue
         events.append({
@@ -65,10 +67,10 @@ def _parse_fail2ban_log(output: str) -> list[dict]:
     return events
 
 
-async def _geo_lookup_batch(db, ips: list[str]) -> None:
-    for ip in ips:
-        try:
-            async with httpx.AsyncClient(timeout=5) as client:
+async def _geo_lookup_batch(ips: list[str]) -> None:
+    async with httpx.AsyncClient(timeout=5) as client:
+        for ip in ips:
+            try:
                 r = await client.get(
                     f"http://ip-api.com/json/{ip}",
                     params={"fields": "status,country,countryCode,city,isp"},
@@ -76,24 +78,25 @@ async def _geo_lookup_batch(db, ips: list[str]) -> None:
                 if r.status_code == 200:
                     data = r.json()
                     if data.get("status") == "success":
-                        await db.execute(
-                            text("""
-                                INSERT INTO ip_geodata (ip, country_code, country_name, city, isp, cached_at)
-                                VALUES (:ip, :cc, :cn, :city, :isp, NOW())
-                                ON CONFLICT (ip) DO NOTHING
-                            """),
-                            {
-                                "ip": ip,
-                                "cc": data.get("countryCode"),
-                                "cn": data.get("country"),
-                                "city": data.get("city"),
-                                "isp": data.get("isp"),
-                            },
-                        )
-                        await db.commit()
-        except Exception:
-            log.warning("geo lookup failed for %s", ip)
-        await asyncio.sleep(1.5)  # respect 45 req/min free tier
+                        async with AsyncSessionLocal() as db:
+                            await db.execute(
+                                text("""
+                                    INSERT INTO ip_geodata (ip, country_code, country_name, city, isp, cached_at)
+                                    VALUES (:ip, :cc, :cn, :city, :isp, NOW())
+                                    ON CONFLICT (ip) DO NOTHING
+                                """),
+                                {
+                                    "ip": ip,
+                                    "cc": data.get("countryCode"),
+                                    "cn": data.get("country"),
+                                    "city": data.get("city"),
+                                    "isp": data.get("isp"),
+                                },
+                            )
+                            await db.commit()
+            except Exception:
+                log.warning("geo lookup failed for %s", ip)
+            await asyncio.sleep(1.5)  # respect 45 req/min free tier
 
 
 async def _collect_one(server: Server) -> None:
@@ -109,6 +112,11 @@ async def _collect_one(server: Server) -> None:
                 log.info("fail2ban: no jails on server %s", server.id)
                 return
             jail_names = [j.strip() for j in jail_match.group(1).split(",") if j.strip()]
+            # Fix 1 — reject any jail name with unsafe characters to prevent shell injection
+            jail_names = [
+                j for j in jail_names
+                if re.fullmatch(r'[a-zA-Z0-9_-]+', j)
+            ]
 
             # Per-jail status
             jail_data: dict[str, dict] = {}
@@ -158,7 +166,7 @@ async def _collect_one(server: Server) -> None:
             )
             await db.commit()
 
-            # Replace banned IPs for this jail with live list
+            # Replace banned IPs for this jail with live list — single transaction
             await db.execute(
                 text("DELETE FROM fail2ban_banned_ips WHERE server_id = :sid AND jail = :jail"),
                 {"sid": str(server.id), "jail": jail},
@@ -173,9 +181,10 @@ async def _collect_one(server: Server) -> None:
                     {"sid": str(server.id), "jail": jail, "ip": ip, "now": now},
                 )
                 all_new_ips.add(ip)
-            await db.commit()
+            await db.commit()  # single commit for the entire jail's banned IP set
 
         # Insert ban events (UNIQUE constraint silently skips duplicates)
+        inserted = 0
         for event in log_events:
             try:
                 await db.execute(
@@ -189,22 +198,29 @@ async def _collect_one(server: Server) -> None:
                         "action": event["action"], "event_at": event["event_at"],
                     },
                 )
-            except Exception:
-                pass
+                inserted += 1
+            except Exception as insert_err:
+                log.warning("fail2ban: ban event insert failed: %s", insert_err)
         await db.commit()
 
-        # Geo-lookup IPs not yet cached
-        if all_new_ips:
+    # Geo-lookup IPs not yet cached — done outside the main DB session
+    if all_new_ips:
+        async with AsyncSessionLocal() as db:
             rows = await db.execute(
                 text("SELECT ip FROM ip_geodata WHERE ip = ANY(:ips)"),
                 {"ips": list(all_new_ips)},
             )
             existing = {r[0] for r in rows.fetchall()}
-            await _geo_lookup_batch(db, list(all_new_ips - existing))
+        ips_to_lookup = list(all_new_ips - existing)
+    else:
+        ips_to_lookup = []
+
+    if ips_to_lookup:
+        await _geo_lookup_batch(ips_to_lookup)
 
     log.info(
-        "fail2ban: server %s — %d jails, %d events ingested",
-        server.id, len(jail_data), len(log_events),
+        "fail2ban: server %s — %d jails, %d/%d events inserted",
+        server.id, len(jail_data), inserted, len(log_events),
     )
 
 
