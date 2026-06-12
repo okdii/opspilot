@@ -96,3 +96,9 @@ async def fail2ban_retention() -> None:
         )
         await db.commit()
         log.info("fail2ban retention: deleted %d old ban events", result.rowcount)
+
+
+async def fail2ban_collector() -> None:
+    """Every 5 min: poll fail2ban status on each active server."""
+    from app.services.fail2ban_collector import collect_fail2ban
+    await collect_fail2ban()
