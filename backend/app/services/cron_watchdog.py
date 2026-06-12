@@ -47,6 +47,14 @@ async def _evaluate_job(db: AsyncSession, job: MonitoredJob, now: datetime, tz=t
         return
 
     grace = timedelta(minutes=job.grace_period_min)
+
+    # If a run is in progress (start ping received, completion pending), don't
+    # declare missing. Cap at 12 hours to catch genuinely hung jobs.
+    start = _aware(job.start_ping_at)
+    if start is not None and now - start < timedelta(hours=12):
+        job.status = "late" if now >= next_expected else "healthy"
+        return
+
     if now < next_expected:
         new_status = "healthy"
     elif now < next_expected + grace:
