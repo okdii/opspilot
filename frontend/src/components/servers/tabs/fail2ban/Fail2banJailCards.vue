@@ -20,9 +20,15 @@ function fmtDuration(seconds: number | null): string {
       <div class="jail-stat failed">{{ jail.currently_failed }} failing</div>
       <div class="jail-total">{{ jail.total_banned.toLocaleString() }} total</div>
       <div v-if="jail.bantime_seconds !== null" class="jail-config">
-        <span class="cfg-item"><span class="cfg-label">Ban</span> {{ fmtDuration(jail.bantime_seconds) }}</span>
-        <span class="cfg-item"><span class="cfg-label">Window</span> {{ fmtDuration(jail.findtime_seconds) }}</span>
-        <span class="cfg-item"><span class="cfg-label">Max</span> {{ jail.maxretry ?? '—' }} tries</span>
+        <span class="cfg-item" title="How long an IP stays banned">
+          <span class="cfg-label">Ban duration</span> {{ fmtDuration(jail.bantime_seconds) }}
+        </span>
+        <span class="cfg-item" title="Time window fail2ban watches for repeated failures">
+          <span class="cfg-label">Detection window</span> {{ fmtDuration(jail.findtime_seconds) }}
+        </span>
+        <span class="cfg-item" title="Number of failures within the window before an IP gets banned">
+          <span class="cfg-label">Max retries</span> {{ jail.maxretry ?? '—' }}
+        </span>
       </div>
     </div>
   </div>
