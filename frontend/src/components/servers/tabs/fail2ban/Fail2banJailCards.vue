@@ -20,9 +20,9 @@ function fmtDuration(seconds: number | null): string {
       <div class="jail-stat failed">{{ jail.currently_failed }} failing</div>
       <div class="jail-total">{{ jail.total_banned.toLocaleString() }} total</div>
       <div v-if="jail.bantime_seconds !== null" class="jail-config">
-        <span class="cfg-item" title="Ban duration">⏱ {{ fmtDuration(jail.bantime_seconds) }}</span>
-        <span class="cfg-item" title="Detection window">🔍 {{ fmtDuration(jail.findtime_seconds) }}</span>
-        <span class="cfg-item" title="Max retries before ban">✕ {{ jail.maxretry ?? '—' }}</span>
+        <span class="cfg-item"><span class="cfg-label">Ban</span> {{ fmtDuration(jail.bantime_seconds) }}</span>
+        <span class="cfg-item"><span class="cfg-label">Window</span> {{ fmtDuration(jail.findtime_seconds) }}</span>
+        <span class="cfg-item"><span class="cfg-label">Max</span> {{ jail.maxretry ?? '—' }} tries</span>
       </div>
     </div>
   </div>
@@ -43,5 +43,6 @@ function fmtDuration(seconds: number | null): string {
   display: flex; gap: 8px; margin-top: 8px;
   padding-top: 8px; border-top: 1px solid var(--border);
 }
-.cfg-item { font-size: 11px; color: var(--muted); }
+.cfg-item { font-size: 11px; color: var(--text); }
+.cfg-label { color: var(--muted); margin-right: 2px; }
 </style>
