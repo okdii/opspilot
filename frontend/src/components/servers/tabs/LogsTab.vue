@@ -198,6 +198,7 @@ onMounted(async () => {
   logs.setFilter('serverIds', [serverId.value])
   if (route.query.source === 'kernel') {
     logs.setFilter('sources', ['kernel'])
+    logs.setFilter('range', '7d')
   }
   await reload()
 })
