@@ -30,14 +30,6 @@
     Skip_Long_Lines   On
     Refresh_Interval  5
 
-# ── Kernel messages ──────────────────────────────────────────────────────────
-[INPUT]
-    Name              kmsg
-    Tag               kernel
-    Prio_Level        warning
-    DB                /var/lib/fluent-bit/kernel.db
-    Skip_Long_Lines   On
-
 # ── Nginx access ─────────────────────────────────────────────────────────────
 [INPUT]
     Name              tail
