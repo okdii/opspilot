@@ -1,18 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Fail2banCountry } from '@/stores/fail2ban'
+import { flagEmoji } from '@/utils/countryFlag'
 
 const props = defineProps<{ countries: Fail2banCountry[] }>()
 
 const top = computed(() => props.countries.slice(0, 10))
 const maxCount = computed(() => Math.max(...top.value.map(c => c.count), 1))
-
-function flagEmoji(code: string): string {
-  if (!code || code === 'XX') return '🏳'
-  return code.toUpperCase().replace(/./g, ch =>
-    String.fromCodePoint(0x1F1E6 + ch.charCodeAt(0) - 65)
-  )
-}
 </script>
 
 <template>

@@ -71,8 +71,9 @@ export const useFail2banStore = defineStore('fail2ban', () => {
       bannedIps.value = b
       events.value = e
       topCountries.value = c
-    } catch (err: any) {
-      error.value = err?.response?.data?.detail || 'Failed to load fail2ban data'
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: string } } }
+      error.value = e?.response?.data?.detail || 'Failed to load fail2ban data'
     } finally {
       loading.value = false
     }

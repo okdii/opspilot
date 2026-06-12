@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useFail2banStore } from '@/stores/fail2ban'
+import { flagEmoji } from '@/utils/countryFlag'
 
 const props = defineProps<{ serverId: string }>()
 const store = useFail2banStore()
@@ -13,13 +14,6 @@ async function goPage(p: number) {
   await store.fetchBannedIps(props.serverId, p)
 }
 
-function flagEmoji(code: string | null): string {
-  if (!code || code === 'XX') return '🏳'
-  return code.toUpperCase().replace(/./g, ch =>
-    String.fromCodePoint(0x1F1E6 + ch.charCodeAt(0) - 65)
-  )
-}
-
 function relTime(ts: string | null): string {
   if (!ts) return '—'
   const diff = Date.now() - new Date(ts).getTime()
@@ -30,7 +24,7 @@ function relTime(ts: string | null): string {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-const totalPages = () => Math.ceil((store.bannedIps?.total ?? 0) / (store.bannedIps?.per_page ?? 50))
+const totalPages = computed(() => Math.ceil((store.bannedIps?.total ?? 0) / (store.bannedIps?.per_page ?? 50)))
 </script>
 
 <template>
@@ -63,15 +57,15 @@ const totalPages = () => Math.ceil((store.bannedIps?.total ?? 0) / (store.banned
           </td>
           <td class="isp-cell">{{ item.isp ?? '—' }}</td>
           <td><span class="jail-badge">{{ item.jail }}</span></td>
-          <td class="time-cell">{{ relTime(item.checked_at) }}</td>
+          <td class="time-cell">{{ relTime(item.banned_since) }}</td>
         </tr>
       </tbody>
     </table>
 
-    <div v-if="totalPages() > 1" class="pagination">
+    <div v-if="totalPages > 1" class="pagination">
       <button :disabled="page <= 1" @click="goPage(page - 1)">← Prev</button>
-      <span>{{ page }} / {{ totalPages() }}</span>
-      <button :disabled="page >= totalPages()" @click="goPage(page + 1)">Next →</button>
+      <span>{{ page }} / {{ totalPages }}</span>
+      <button :disabled="page >= totalPages" @click="goPage(page + 1)">Next →</button>
     </div>
   </section>
 </template>
