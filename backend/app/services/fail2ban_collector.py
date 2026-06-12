@@ -146,7 +146,7 @@ async def _collect_one(server: Server) -> None:
                     timeout=10,
                 )
                 if cfg.ok:
-                    lines = [l.strip() for l in cfg.stdout.splitlines() if l.strip()]
+                    lines = [ln.strip() for ln in cfg.stdout.splitlines() if ln.strip()]
                     def _int(s: str) -> int | None:
                         try:
                             return int(s)
