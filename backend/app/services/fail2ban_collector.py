@@ -1,0 +1,222 @@
+"""fail2ban SSH poll — collect jail status and ban events every 5 min per active server.
+
+Permission requirement: the SSH user must be in the fail2ban group on the target server:
+    sudo usermod -aG fail2ban opspilot
+"""
+import asyncio
+import logging
+import re
+from datetime import datetime, timezone
+
+import httpx
+from sqlalchemy import select, text
+
+from app.database import AsyncSessionLocal
+from app.models.server import Server
+from app.services.ssh import SSHSession
+
+log = logging.getLogger(__name__)
+
+# fail2ban-client status <jail> parsing
+_CURRENTLY_BANNED_RE = re.compile(r"Currently banned:\s+(\d+)")
+_TOTAL_BANNED_RE = re.compile(r"Total banned:\s+(\d+)")
+_CURRENTLY_FAILED_RE = re.compile(r"Currently failed:\s+(\d+)")
+_BANNED_IP_LIST_RE = re.compile(r"Banned IP list:\s*(.*?)(?:\n\S|$)", re.DOTALL)
+
+# /var/log/fail2ban.log line format:
+# 2026-06-12 07:23:45,678 fail2ban.actions [1234]: NOTICE  [sshd] Ban 103.107.60.45
+_LOG_LINE_RE = re.compile(
+    r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ fail2ban\.actions.*?NOTICE\s+\[(.+?)\] (Ban|Unban) (\S+)$"
+)
+
+
+def _parse_jail_status(output: str) -> dict:
+    currently_banned = int(m.group(1)) if (m := _CURRENTLY_BANNED_RE.search(output)) else 0
+    total_banned = int(m.group(1)) if (m := _TOTAL_BANNED_RE.search(output)) else 0
+    currently_failed = int(m.group(1)) if (m := _CURRENTLY_FAILED_RE.search(output)) else 0
+    banned_ips: list[str] = []
+    if m := _BANNED_IP_LIST_RE.search(output):
+        raw = m.group(1).strip()
+        banned_ips = [ip.strip() for ip in raw.split() if ip.strip()]
+    return {
+        "currently_banned": currently_banned,
+        "total_banned": total_banned,
+        "currently_failed": currently_failed,
+        "banned_ips": banned_ips,
+    }
+
+
+def _parse_fail2ban_log(output: str) -> list[dict]:
+    events = []
+    for line in output.splitlines():
+        m = _LOG_LINE_RE.match(line.strip())
+        if not m:
+            continue
+        try:
+            ts = datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        events.append({
+            "event_at": ts,
+            "jail": m.group(2),
+            "action": m.group(3).lower(),
+            "ip": m.group(4),
+        })
+    return events
+
+
+async def _geo_lookup_batch(db, ips: list[str]) -> None:
+    for ip in ips:
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                r = await client.get(
+                    f"http://ip-api.com/json/{ip}",
+                    params={"fields": "status,country,countryCode,city,isp"},
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    if data.get("status") == "success":
+                        await db.execute(
+                            text("""
+                                INSERT INTO ip_geodata (ip, country_code, country_name, city, isp, cached_at)
+                                VALUES (:ip, :cc, :cn, :city, :isp, NOW())
+                                ON CONFLICT (ip) DO NOTHING
+                            """),
+                            {
+                                "ip": ip,
+                                "cc": data.get("countryCode"),
+                                "cn": data.get("country"),
+                                "city": data.get("city"),
+                                "isp": data.get("isp"),
+                            },
+                        )
+                        await db.commit()
+        except Exception:
+            log.warning("geo lookup failed for %s", ip)
+        await asyncio.sleep(1.5)  # respect 45 req/min free tier
+
+
+async def _collect_one(server: Server) -> None:
+    try:
+        async with SSHSession(server) as ssh:
+            # Get jail list
+            status_result = await ssh.run("fail2ban-client status 2>&1", timeout=10)
+            if not status_result.ok:
+                log.warning("fail2ban: status check failed on %s: %s", server.id, status_result.stderr)
+                return
+            jail_match = re.search(r"Jail list:\s*(.+)", status_result.stdout)
+            if not jail_match:
+                log.info("fail2ban: no jails on server %s", server.id)
+                return
+            jail_names = [j.strip() for j in jail_match.group(1).split(",") if j.strip()]
+
+            # Per-jail status
+            jail_data: dict[str, dict] = {}
+            for jail in jail_names:
+                r = await ssh.run(f"fail2ban-client status {jail} 2>&1", timeout=10)
+                if r.ok:
+                    jail_data[jail] = _parse_jail_status(r.stdout)
+
+            # Ban event log
+            log_result = await ssh.run(
+                "tail -n 5000 /var/log/fail2ban.log 2>/dev/null || true", timeout=15
+            )
+            log_events = _parse_fail2ban_log(log_result.stdout) if log_result.ok else []
+    except Exception as e:
+        msg = str(e).lower()
+        if "permission denied" in msg or "permission" in msg:
+            log.warning(
+                "fail2ban: permission denied on %s — run: sudo usermod -aG fail2ban opspilot",
+                server.id,
+            )
+        else:
+            log.exception("fail2ban: SSH failed for server %s", server.id)
+        return
+
+    now = datetime.now(timezone.utc)
+    all_new_ips: set[str] = set()
+
+    async with AsyncSessionLocal() as db:
+        for jail, data in jail_data.items():
+            # Upsert jail snapshot
+            await db.execute(
+                text("""
+                    INSERT INTO fail2ban_jails
+                        (server_id, jail_name, currently_banned, total_banned, currently_failed, checked_at)
+                    VALUES (:sid, :jail, :cb, :tb, :cf, :now)
+                    ON CONFLICT (server_id, jail_name) DO UPDATE SET
+                        currently_banned = EXCLUDED.currently_banned,
+                        total_banned     = EXCLUDED.total_banned,
+                        currently_failed = EXCLUDED.currently_failed,
+                        checked_at       = EXCLUDED.checked_at
+                """),
+                {
+                    "sid": str(server.id), "jail": jail,
+                    "cb": data["currently_banned"], "tb": data["total_banned"],
+                    "cf": data["currently_failed"], "now": now,
+                },
+            )
+            await db.commit()
+
+            # Replace banned IPs for this jail with live list
+            await db.execute(
+                text("DELETE FROM fail2ban_banned_ips WHERE server_id = :sid AND jail = :jail"),
+                {"sid": str(server.id), "jail": jail},
+            )
+            for ip in data["banned_ips"]:
+                await db.execute(
+                    text("""
+                        INSERT INTO fail2ban_banned_ips (server_id, jail, ip, checked_at)
+                        VALUES (:sid, :jail, :ip, :now)
+                        ON CONFLICT (server_id, jail, ip) DO UPDATE SET checked_at = EXCLUDED.checked_at
+                    """),
+                    {"sid": str(server.id), "jail": jail, "ip": ip, "now": now},
+                )
+                all_new_ips.add(ip)
+            await db.commit()
+
+        # Insert ban events (UNIQUE constraint silently skips duplicates)
+        for event in log_events:
+            try:
+                await db.execute(
+                    text("""
+                        INSERT INTO fail2ban_ban_events (server_id, ip, jail, action, event_at)
+                        VALUES (:sid, :ip, :jail, :action, :event_at)
+                        ON CONFLICT (server_id, ip, jail, event_at, action) DO NOTHING
+                    """),
+                    {
+                        "sid": str(server.id), "ip": event["ip"], "jail": event["jail"],
+                        "action": event["action"], "event_at": event["event_at"],
+                    },
+                )
+            except Exception:
+                pass
+        await db.commit()
+
+        # Geo-lookup IPs not yet cached
+        if all_new_ips:
+            rows = await db.execute(
+                text("SELECT ip FROM ip_geodata WHERE ip = ANY(:ips)"),
+                {"ips": list(all_new_ips)},
+            )
+            existing = {r[0] for r in rows.fetchall()}
+            await _geo_lookup_batch(db, list(all_new_ips - existing))
+
+    log.info(
+        "fail2ban: server %s — %d jails, %d events ingested",
+        server.id, len(jail_data), len(log_events),
+    )
+
+
+async def collect_fail2ban() -> None:
+    """Entry point called by APScheduler every 5 minutes."""
+    async with AsyncSessionLocal() as db:
+        servers = (
+            await db.execute(select(Server).where(Server.is_active == True))
+        ).scalars().all()
+
+    for server in servers:
+        try:
+            await _collect_one(server)
+        except Exception:
+            log.exception("fail2ban: collection failed for server %s", server.id)
