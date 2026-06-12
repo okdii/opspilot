@@ -17,6 +17,7 @@ import InfoTab from '@/components/servers/tabs/InfoTab.vue'
 import LogsTab from '@/components/servers/tabs/LogsTab.vue'
 import MonitoringTab from '@/components/servers/tabs/MonitoringTab.vue'
 import BackupTab from '@/components/servers/tabs/BackupTab.vue'
+import SecurityTab from '@/components/servers/tabs/SecurityTab.vue'
 import DailyReportTab from '@/components/servers/tabs/DailyReportTab.vue'
 import DatabaseTab from '@/components/servers/tabs/DatabaseTab.vue'
 import AgentStatusFooter from '@/components/servers/AgentStatusFooter.vue'
@@ -43,13 +44,14 @@ const maintenanceOpen = ref(false)
 const menuOpen = ref(false)
 
 // --- Tabs ------------------------------------------------------------------
-const TABS = ['Info', 'Overview', 'CPU', 'Memory', 'Disk', 'Network', 'System', 'Processes', 'Services', 'Database', 'Monitoring', 'Alerts', 'Logs', 'Backup', 'Daily Report ✦'] as const
+const TABS = ['Info', 'Overview', 'CPU', 'Memory', 'Disk', 'Network', 'System', 'Processes', 'Services', 'Database', 'Monitoring', 'Alerts', 'Logs', 'Backup', 'Security', 'Daily Report ✦'] as const
 type Tab = (typeof TABS)[number]
 const TAB_COMPONENTS = {
   Info: InfoTab, Overview: OverviewTab, CPU: CpuTab, Memory: MemoryTab,
   Disk: DiskTab, Network: NetworkTab, System: SystemTab, Processes: ProcessesTab,
   Services: ServicesTab, Database: DatabaseTab, Monitoring: MonitoringTab,
   Alerts: AlertsTab, Logs: LogsTab, Backup: BackupTab,
+  Security: SecurityTab,
   'Daily Report ✦': DailyReportTab,
 }
 const activeTab = ref<Tab>('Info')
