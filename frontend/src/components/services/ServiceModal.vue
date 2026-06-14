@@ -44,6 +44,9 @@ interface FormState {
   ignore_ssl_errors: boolean
   ssl_warn_days: number
   ssl_critical_days: number
+  // content monitoring (http only)
+  expected_keyword: string
+  forbidden_keywords_enabled: boolean
   // tcp
   host: string
   port: number | null
@@ -63,6 +66,8 @@ function blank(): FormState {
     ignore_ssl_errors: false,
     ssl_warn_days: 30,
     ssl_critical_days: 7,
+    expected_keyword: '',
+    forbidden_keywords_enabled: true,
     host: '',
     port: null,
   }
@@ -91,6 +96,8 @@ function hydrate(): void {
     form.ignore_ssl_errors = s.ignore_ssl_errors
     form.ssl_warn_days = s.ssl_warn_days ?? 30
     form.ssl_critical_days = s.ssl_critical_days ?? 7
+    form.expected_keyword = s.expected_keyword ?? ''
+    form.forbidden_keywords_enabled = s.forbidden_keywords_enabled ?? true
   } else {
     form.host = s.url ?? ''
     form.port = s.port
@@ -130,6 +137,8 @@ function validate(): boolean {
       if (form.ssl_critical_days < 1 || form.ssl_critical_days >= form.ssl_warn_days)
         errors.ssl_critical_days = 'Must be ≥ 1 and less than warn threshold'
     }
+    if (form.expected_keyword.trim().length > 200)
+      errors.expected_keyword = 'Must be ≤ 200 characters'
   } else {
     if (!form.host.trim()) errors.host = 'Host is required'
     else if (/^https?:\/\//.test(form.host.trim())) errors.host = 'Enter a hostname or IP without protocol'
@@ -156,6 +165,8 @@ async function submit(): Promise<void> {
         payload.ignore_ssl_errors = form.ignore_ssl_errors
         payload.ssl_warn_days = form.ssl_warn_days
         payload.ssl_critical_days = form.ssl_critical_days
+        payload.expected_keyword = form.expected_keyword.trim() || null
+        payload.forbidden_keywords_enabled = form.forbidden_keywords_enabled
       } else {
         payload.url = form.host.trim()
         payload.port = form.port
@@ -180,6 +191,8 @@ async function submit(): Promise<void> {
           payload.ssl_warn_days = form.ssl_warn_days
           payload.ssl_critical_days = form.ssl_critical_days
         }
+        payload.expected_keyword = form.expected_keyword.trim() || null
+        payload.forbidden_keywords_enabled = form.forbidden_keywords_enabled
       } else {
         payload.url = form.host.trim()
         payload.port = form.port
@@ -285,6 +298,28 @@ function intervalLabel(s: number): string {
             </div>
           </div>
         </template>
+
+        <!-- Content Monitoring -->
+        <div class="section-divider"></div>
+        <p class="section-label">Content Monitoring</p>
+
+        <label class="toggle">
+          <input v-model="form.forbidden_keywords_enabled" type="checkbox" />
+          <span>Block malicious content</span>
+        </label>
+        <p v-if="form.forbidden_keywords_enabled" class="info-chip">
+          Alerts if gambling or defacement keywords (e.g. "judi", "casino", "togel") are found in the response body.
+        </p>
+
+        <label class="fl">Expected keyword <span class="optional">(optional)</span></label>
+        <input
+          v-model="form.expected_keyword"
+          placeholder="e.g. Kementerian Pertanian"
+          :class="{ invalid: errors.expected_keyword }"
+          maxlength="200"
+        />
+        <p v-if="errors.expected_keyword" class="err">{{ errors.expected_keyword }}</p>
+        <small v-else class="hint">Alert if this text is missing from the response body.</small>
       </template>
 
       <!-- TCP / DB fields -->
@@ -377,4 +412,6 @@ input:disabled, select:disabled { opacity: 0.6; cursor: not-allowed; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .section-divider { height: 1px; background: var(--border); margin: 12px 0; }
 .ssl-hint { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.section-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.optional { font-size: 11px; color: var(--muted); font-weight: 400; }
 </style>
