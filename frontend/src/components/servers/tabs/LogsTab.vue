@@ -72,6 +72,12 @@ const entryCountLabel = computed(() => {
   return `Showing ${n} ${n === 1 ? 'entry' : 'entries'}`
 })
 
+const totalLogCount = computed(() => {
+  if (!intel.data) return null
+  const s = intel.data.summary
+  return s.fatal + s.error + s.warn + s.info + s.debug
+})
+
 const sourcesSelected = (group: LogSource[]) =>
   group.every((s) => logs.filters.sources.includes(s))
 
@@ -378,6 +384,8 @@ onUnmounted(() => {
         {{ logs.liveTailActive ? 'Live Tail ON' : 'Live Tail OFF' }}
       </button>
       <div class="sub-right">
+        <span v-if="totalLogCount !== null" class="total-count">{{ totalLogCount.toLocaleString() }} total logs</span>
+        <span class="count-sep" v-if="totalLogCount !== null">·</span>
         <span class="count">{{ entryCountLabel }}</span>
         <button v-if="filtersActive" class="link-btn" @click="clearFilters">Clear filters</button>
       </div>
@@ -465,7 +473,9 @@ onUnmounted(() => {
 .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .live-dot.pulse { background: var(--green); animation: pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.5); } 50% { box-shadow: 0 0 0 5px rgba(34,197,94,0); } }
-.sub-right { display: flex; align-items: center; gap: 16px; }
+.sub-right { display: flex; align-items: center; gap: 10px; }
+.total-count { color: var(--text); font-size: 12.5px; font-weight: 600; }
+.count-sep { color: var(--muted); font-size: 12px; }
 .count { color: var(--muted); font-size: 12.5px; }
 .link-btn { background: none; border: none; color: var(--accent-2); font-size: 12.5px; cursor: pointer; padding: 0; }
 .link-btn:hover { text-decoration: underline; }
