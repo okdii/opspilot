@@ -319,7 +319,7 @@ function intervalLabel(s: number): string {
           maxlength="200"
         />
         <p v-if="errors.expected_keyword" class="err">{{ errors.expected_keyword }}</p>
-        <small v-else class="hint">Alert if this text is missing from the response body.</small>
+        <small v-else-if="!form.expected_keyword.trim()" class="hint">Alert if this text is missing from the response body.</small>
       </template>
 
       <!-- TCP / DB fields -->
