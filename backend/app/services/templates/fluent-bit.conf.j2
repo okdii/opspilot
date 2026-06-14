@@ -54,13 +54,15 @@
     DB                /var/lib/fluent-bit/php_fpm.db
     Skip_Long_Lines   On
 
+{% if php_app_log_path %}
 # ── PHP app errors ───────────────────────────────────────────────────────────
 [INPUT]
     Name              tail
-    Path              /var/log/php_errors.log
+    Path              {{ php_app_log_path }}
     Tag               php_app
     DB                /var/lib/fluent-bit/php_app.db
     Skip_Long_Lines   On
+{% endif %}
 
 # ── MariaDB error ────────────────────────────────────────────────────────────
 [INPUT]

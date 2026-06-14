@@ -369,6 +369,16 @@ async def _step_configure_fluent_bit(db, server, ssh: SSHSession, os_info: OSInf
     _php_result = await ssh.run(_php_detect, timeout=10)
     php_fpm_log_path = (_php_result or "").strip() or "/var/log/php*-fpm.log"
 
+    # Detect PHP app error_log from php.ini (empty string = omit INPUT block).
+    _php_app_detect = (
+        "p=$(grep -rh '^error_log[[:space:]]*=' "
+        "/etc/php/*/fpm/php.ini /etc/php/*/cli/php.ini /etc/php.ini 2>/dev/null "
+        "| awk -F= '{gsub(/^[ \\t]+|[ \\t]+$/,\"\",$2); print $2}' | head -1); "
+        "[ -n \"$p\" ] && echo \"$p\" || echo ''"
+    )
+    _php_app_result = await ssh.run(_php_app_detect, timeout=10)
+    php_app_log_path = (_php_app_result or "").strip()
+
     tmpl = _template_env.get_template("fluent-bit.conf.j2")
     conf = tmpl.render(
         server_id=str(server.id),
@@ -378,6 +388,7 @@ async def _step_configure_fluent_bit(db, server, ssh: SSHSession, os_info: OSInf
         ingest_tls=ingest_tls,
         ingestion_token=str(server.ingestion_token),
         php_fpm_log_path=php_fpm_log_path,
+        php_app_log_path=php_app_log_path,
         **paths,
     )
     # Multiline/parser definitions must live in a separate parsers file
