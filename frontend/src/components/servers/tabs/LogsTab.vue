@@ -73,9 +73,11 @@ const entryCountLabel = computed(() => {
 })
 
 const totalLogCount = computed(() => {
-  if (!intel.data) return null
-  const s = intel.data.summary
-  return s.fatal + s.error + s.warn + s.info + s.debug
+  if (!logs.volumeData.length) return null
+  return logs.volumeData.reduce(
+    (sum, b) => sum + (b.debug || 0) + (b.info || 0) + (b.warn || 0) + (b.error || 0) + (b.fatal || 0),
+    0,
+  )
 })
 
 const sourcesSelected = (group: LogSource[]) =>
