@@ -495,7 +495,7 @@ async def log_intelligence(
     success_top = (await db.execute(text(r"""
         SELECT
             (regexp_match(message, 'from (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'))[1] AS ip,
-            (regexp_match(message, 'Accepted (?:password|publickey) for (\S+)'))[1] AS username,
+            (regexp_match(message, 'Accepted \S+ for (\S+)'))[1] AS username,
             COUNT(*) AS n
         FROM server_logs
         WHERE server_id IN :sids AND time >= :frm AND source = 'auth'
