@@ -172,6 +172,8 @@ export interface LogIntelligenceData {
   auth_events: {
     failed_logins: number
     top_ips: { ip: string; count: number }[]
+    successful_logins: number
+    successful_top: { user: string; ip: string; count: number }[]
   } | null
   per_server: {
     server_id: string

@@ -188,11 +188,19 @@ onUnmounted(() => {
               <span class="card-icon auth-icon">🔒</span>
               <h3>Auth Events</h3>
             </div>
-            <div v-if="!intel.data.auth_events" class="card-empty">No auth failure data</div>
+            <div v-if="!intel.data.auth_events" class="card-empty">No auth data</div>
             <template v-else>
-              <div class="auth-total">
-                <span class="stat-val warn-text">{{ intel.data.auth_events.failed_logins }}</span>
-                <span class="stat-label"> failed logins</span>
+              <div class="auth-stats">
+                <div class="auth-stat-row">
+                  <span class="stat-val warn-text">{{ intel.data.auth_events.failed_logins }}</span>
+                  <span class="stat-label"> failed logins</span>
+                </div>
+                <div class="auth-stat-row" :class="{ 'auth-success-alert': intel.data.auth_events.successful_logins > 0 }">
+                  <span class="stat-val" :class="intel.data.auth_events.successful_logins > 0 ? 'danger-text' : 'clean-text'">
+                    {{ intel.data.auth_events.successful_logins }}
+                  </span>
+                  <span class="stat-label">{{ intel.data.auth_events.successful_logins === 0 ? ' successful — clean ✓' : ' successful logins !' }}</span>
+                </div>
               </div>
               <div class="ip-list">
                 <div v-for="(ip, i) in intel.data.auth_events.top_ips" :key="i" class="ip-row"
@@ -202,6 +210,16 @@ onUnmounted(() => {
                   <span v-if="ip.count > 10" class="ip-flag">⚠</span>
                 </div>
               </div>
+              <template v-if="intel.data.auth_events.successful_logins > 0">
+                <div class="success-divider">Successful logins</div>
+                <div class="success-list">
+                  <div v-for="(s, i) in intel.data.auth_events.successful_top" :key="i" class="success-row">
+                    <span class="success-user">{{ s.user }}</span>
+                    <span class="success-ip">{{ s.ip }}</span>
+                    <span class="success-count">×{{ s.count }}</span>
+                  </div>
+                </div>
+              </template>
             </template>
           </div>
         </div>
@@ -318,13 +336,23 @@ onUnmounted(() => {
 .slow-query { background: #0f1117; border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: #e2e8f0; font-family: ui-monospace, monospace; font-size: 11px; white-space: pre-wrap; word-break: break-all; margin: 0; max-height: 80px; overflow: hidden; }
 
 /* Auth events */
-.auth-total { font-size: 13px; }
+.auth-stats { display: flex; flex-direction: column; gap: 4px; }
+.auth-stat-row { display: flex; align-items: baseline; gap: 0; font-size: 13px; }
+.auth-success-alert { background: rgba(239,68,68,0.08); border-radius: 6px; padding: 2px 6px; margin: 0 -6px; }
+.clean-text { color: #4ade80 !important; font-size: 22px; font-weight: 700; }
+.danger-text { color: #f87171 !important; font-size: 22px; font-weight: 700; }
 .ip-list { display: flex; flex-direction: column; gap: 4px; }
 .ip-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .ip-addr { flex: 1; font-family: ui-monospace, monospace; color: var(--text); }
 .ip-count { color: var(--muted); font-size: 11px; }
 .ip-flag { color: #fbbf24; }
 .ip-row.flagged .ip-addr { color: #fbbf24; }
+.success-divider { font-size: 10.5px; font-weight: 600; color: #f87171; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+.success-list { display: flex; flex-direction: column; gap: 3px; }
+.success-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; }
+.success-user { font-weight: 600; color: #f87171; font-family: ui-monospace, monospace; }
+.success-ip { flex: 1; color: var(--muted); font-family: ui-monospace, monospace; }
+.success-count { color: var(--muted); font-size: 11px; }
 
 /* Source badge — shared across error-list and fatals */
 .src-badge { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; flex-shrink: 0; text-transform: lowercase; }

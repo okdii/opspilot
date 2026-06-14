@@ -469,9 +469,10 @@ async def log_intelligence(
             "server_name": server_map.get(str(row[3]), str(row[3])),
         }
 
-    # 5. Auth failures
+    # 5. Auth events (failures + successful logins)
     auth_events = None
-    stmt = text("""
+
+    fail_top = (await db.execute(text("""
         SELECT raw->>'source_ip' AS ip, COUNT(*) AS n
         FROM server_logs
         WHERE server_id IN :sids AND time >= :frm AND source = 'auth'
@@ -479,25 +480,46 @@ async def log_intelligence(
                OR message ILIKE '%authentication failure%'
                OR message ILIKE '%invalid user%')
         GROUP BY raw->>'source_ip'
-        ORDER BY n DESC
-        LIMIT 5
-    """).bindparams(bindparam("sids", expanding=True))
-    rows = (await db.execute(stmt, {"sids": server_ids, "frm": frm})).all()
-    total_stmt = text("""
-        SELECT COUNT(*) AS n
-        FROM server_logs
+        ORDER BY n DESC LIMIT 5
+    """).bindparams(bindparam("sids", expanding=True)), {"sids": server_ids, "frm": frm})).all()
+
+    fail_total_row = (await db.execute(text("""
+        SELECT COUNT(*) FROM server_logs
         WHERE server_id IN :sids AND time >= :frm AND source = 'auth'
           AND (message ILIKE '%failed password%'
                OR message ILIKE '%authentication failure%'
                OR message ILIKE '%invalid user%')
-    """).bindparams(bindparam("sids", expanding=True))
-    total_row = (await db.execute(total_stmt, {"sids": server_ids, "frm": frm})).one_or_none()
-    total_failed = int(total_row[0]) if total_row else 0
+    """).bindparams(bindparam("sids", expanding=True)), {"sids": server_ids, "frm": frm})).one_or_none()
+    total_failed = int(fail_total_row[0]) if fail_total_row else 0
 
-    if total_failed > 0:
+    success_top = (await db.execute(text(r"""
+        SELECT
+            (regexp_match(message, 'from (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'))[1] AS ip,
+            (regexp_match(message, 'Accepted (?:password|publickey) for (\S+)'))[1] AS username,
+            COUNT(*) AS n
+        FROM server_logs
+        WHERE server_id IN :sids AND time >= :frm AND source = 'auth'
+          AND (message ILIKE '%Accepted password%' OR message ILIKE '%Accepted publickey%')
+        GROUP BY ip, username
+        ORDER BY n DESC LIMIT 5
+    """).bindparams(bindparam("sids", expanding=True)), {"sids": server_ids, "frm": frm})).all()
+
+    success_total_row = (await db.execute(text("""
+        SELECT COUNT(*) FROM server_logs
+        WHERE server_id IN :sids AND time >= :frm AND source = 'auth'
+          AND (message ILIKE '%Accepted password%' OR message ILIKE '%Accepted publickey%')
+    """).bindparams(bindparam("sids", expanding=True)), {"sids": server_ids, "frm": frm})).one_or_none()
+    total_successful = int(success_total_row[0]) if success_total_row else 0
+
+    if total_failed > 0 or total_successful > 0:
         auth_events = {
             "failed_logins": total_failed,
-            "top_ips": [{"ip": r[0] or "unknown", "count": int(r[1])} for r in rows],
+            "top_ips": [{"ip": r[0] or "unknown", "count": int(r[1])} for r in fail_top],
+            "successful_logins": total_successful,
+            "successful_top": [
+                {"user": r[1] or "unknown", "ip": r[0] or "unknown", "count": int(r[2])}
+                for r in success_top
+            ],
         }
 
     # 6. Per-server breakdown + sparkline

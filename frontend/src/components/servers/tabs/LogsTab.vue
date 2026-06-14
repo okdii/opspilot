@@ -316,11 +316,19 @@ onUnmounted(() => {
           <span class="icard-icon auth-icon">🔒</span>
           <h4>Auth Events</h4>
         </div>
-        <div v-if="!intel.data.auth_events" class="icard-empty">No auth failure data</div>
+        <div v-if="!intel.data.auth_events" class="icard-empty">No auth data</div>
         <template v-else>
-          <div class="iauth-total">
-            <span class="istat-val warn-text">{{ intel.data.auth_events.failed_logins }}</span>
-            <span class="istat-label"> failed logins</span>
+          <div class="iauth-stats">
+            <div class="iauth-stat-row">
+              <span class="istat-val warn-text">{{ intel.data.auth_events.failed_logins }}</span>
+              <span class="istat-label"> failed logins</span>
+            </div>
+            <div class="iauth-stat-row" :class="{ 'iauth-success-alert': intel.data.auth_events.successful_logins > 0 }">
+              <span class="istat-val" :class="intel.data.auth_events.successful_logins > 0 ? 'idanger-text' : 'iclean-text'">
+                {{ intel.data.auth_events.successful_logins }}
+              </span>
+              <span class="istat-label">{{ intel.data.auth_events.successful_logins === 0 ? ' successful — clean ✓' : ' successful logins !' }}</span>
+            </div>
           </div>
           <div class="iip-list">
             <div v-for="(ip, i) in intel.data.auth_events.top_ips" :key="i" class="iip-row" :class="{ flagged: ip.count > 10 }">
@@ -329,6 +337,16 @@ onUnmounted(() => {
               <span v-if="ip.count > 10" class="iip-flag">⚠</span>
             </div>
           </div>
+          <template v-if="intel.data.auth_events.successful_logins > 0">
+            <div class="isuccess-divider">Successful logins</div>
+            <div class="isuccess-list">
+              <div v-for="(s, i) in intel.data.auth_events.successful_top" :key="i" class="isuccess-row">
+                <span class="isuccess-user">{{ s.user }}</span>
+                <span class="isuccess-ip">{{ s.ip }}</span>
+                <span class="isuccess-count">×{{ s.count }}</span>
+              </div>
+            </div>
+          </template>
         </template>
       </div>
     </div>
@@ -545,13 +563,23 @@ onUnmounted(() => {
 .islow-query { background: #0f1117; border: 1px solid var(--border); border-radius: 5px; padding: 6px 8px; color: #e2e8f0; font-family: ui-monospace, monospace; font-size: 10.5px; white-space: pre-wrap; word-break: break-all; margin: 0; max-height: 60px; overflow: hidden; }
 
 /* Auth */
-.iauth-total { font-size: 12px; }
+.iauth-stats { display: flex; flex-direction: column; gap: 3px; }
+.iauth-stat-row { display: flex; align-items: baseline; gap: 0; font-size: 12px; }
+.iauth-success-alert { background: rgba(239,68,68,0.08); border-radius: 5px; padding: 2px 5px; margin: 0 -5px; }
+.iclean-text { color: #4ade80 !important; font-size: 20px; font-weight: 700; }
+.idanger-text { color: #f87171 !important; font-size: 20px; font-weight: 700; }
 .iip-list { display: flex; flex-direction: column; gap: 3px; max-height: 80px; overflow-y: auto; }
 .iip-row { display: flex; align-items: center; gap: 6px; font-size: 11px; }
 .iip-addr { flex: 1; font-family: ui-monospace, monospace; color: var(--text); }
 .iip-count { color: var(--muted); font-size: 10.5px; }
 .iip-flag { color: #fbbf24; font-size: 10px; }
 .iip-row.flagged .iip-addr { color: #fbbf24; }
+.isuccess-divider { font-size: 10px; font-weight: 600; color: #f87171; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 3px; }
+.isuccess-list { display: flex; flex-direction: column; gap: 2px; }
+.isuccess-row { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.isuccess-user { font-weight: 600; color: #f87171; font-family: ui-monospace, monospace; }
+.isuccess-ip { flex: 1; color: var(--muted); font-family: ui-monospace, monospace; font-size: 10.5px; }
+.isuccess-count { color: var(--muted); font-size: 10px; }
 
 /* Source badges */
 .isrc-badge { font-size: 9.5px; font-weight: 600; padding: 1px 5px; border-radius: 4px; flex-shrink: 0; text-transform: lowercase; }
