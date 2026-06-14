@@ -49,7 +49,7 @@
 # ── PHP-FPM ──────────────────────────────────────────────────────────────────
 [INPUT]
     Name              tail
-    Path              /var/log/php*-fpm.log
+    Path              {{ php_fpm_log_path }}
     Tag               php_fpm
     DB                /var/lib/fluent-bit/php_fpm.db
     Skip_Long_Lines   On

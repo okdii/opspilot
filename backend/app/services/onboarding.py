@@ -355,6 +355,20 @@ async def _step_configure_fluent_bit(db, server, ssh: SSHSession, os_info: OSInf
     ingest_port = parsed.port or (443 if parsed.scheme == "https" else 80)
     ingest_tls = "On" if parsed.scheme == "https" else "Off"
 
+    # Detect the actual PHP-FPM log path on the target server.
+    # Priority: 1) configured error_log in php-fpm.conf, 2) Debian glob, 3) RHEL glob, 4) default glob.
+    _php_detect = (
+        "p=$(grep -rh '^error_log[[:space:]]*=' "
+        "/etc/php/*/fpm/php-fpm.conf /etc/php-fpm.conf /etc/php-fpm.d/*.conf 2>/dev/null "
+        "| awk -F= '{gsub(/^[ \\t]+|[ \\t]+$/,\"\",$2); print $2}' | head -1); "
+        "[ -n \"$p\" ] && echo \"$p\" && exit 0; "
+        "ls /var/log/php*-fpm.log >/dev/null 2>&1 && echo '/var/log/php*-fpm.log' && exit 0; "
+        "ls /var/log/php-fpm/ >/dev/null 2>&1 && echo '/var/log/php-fpm/*.log' && exit 0; "
+        "echo '/var/log/php*-fpm.log'"
+    )
+    _php_result = await ssh.run(_php_detect, timeout=10)
+    php_fpm_log_path = (_php_result or "").strip() or "/var/log/php*-fpm.log"
+
     tmpl = _template_env.get_template("fluent-bit.conf.j2")
     conf = tmpl.render(
         server_id=str(server.id),
@@ -363,6 +377,7 @@ async def _step_configure_fluent_bit(db, server, ssh: SSHSession, os_info: OSInf
         ingest_port=ingest_port,
         ingest_tls=ingest_tls,
         ingestion_token=str(server.ingestion_token),
+        php_fpm_log_path=php_fpm_log_path,
         **paths,
     )
     # Multiline/parser definitions must live in a separate parsers file
