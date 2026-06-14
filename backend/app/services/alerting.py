@@ -50,6 +50,9 @@ _FK_BY_TYPE: dict[str, str] = {
     "security_weak_cipher": "service_id",
     "security_self_signed": "service_id",
     "security_grade_f": "service_id",
+    # Content validation alert types (all keyed on service_id)
+    "content_mismatch": "service_id",
+    "malicious_content": "service_id",
 }
 
 
