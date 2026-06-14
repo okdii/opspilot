@@ -100,7 +100,7 @@ onUnmounted(() => {
             <span class="count-item muted">Loading…</span>
           </template>
           <template v-else-if="intel.data">
-            <span v-for="sev in (['fatal', 'error', 'warn', 'info'] as LogSeverity[])" :key="sev"
+            <span v-for="sev in (['error', 'warn', 'info'] as LogSeverity[])" :key="sev"
               class="count-item" :style="{ '--dot': SEV_COLORS[sev] }">
               <span class="count-dot"></span>
               <span class="count-label">{{ sev.charAt(0).toUpperCase() + sev.slice(1) }}:</span>
