@@ -40,6 +40,11 @@ _semaphore = asyncio.Semaphore(50)
 
 FAILURE_THRESHOLD = 2  # open incident / fire alert on the 2nd consecutive failure
 
+FORBIDDEN_KEYWORDS: frozenset[str] = frozenset([
+    "judi", "casino", "togel", "taruhan", "sportsbook",
+    "jackpot", "gambling", "betting", "poker",
+])
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -182,23 +187,31 @@ async def _probe_http(service: Service) -> tuple[str, int | None, str | None]:
         async with httpx.AsyncClient(
             verify=verify, timeout=timeout, follow_redirects=True
         ) as client:
-            # Model has no method column → GET (spec default).
             resp = await client.get(url)
         elapsed_ms = int((time.perf_counter() - start) * 1000)
-        if resp.status_code == expected:
-            return "up", elapsed_ms, None
-        return "down", elapsed_ms, "wrong_status_code"
+        if resp.status_code != expected:
+            return "down", elapsed_ms, "wrong_status_code"
+
+        body_lower = resp.text[:50_000].lower()
+        if service.expected_keyword:
+            if service.expected_keyword.lower() not in body_lower:
+                return "down", elapsed_ms, "content_mismatch"
+        if service.forbidden_keywords_enabled:
+            for kw in FORBIDDEN_KEYWORDS:
+                if kw in body_lower:
+                    return "down", elapsed_ms, "malicious_content"
+
+        return "up", elapsed_ms, None
     except httpx.TimeoutException:
         return "timeout", None, "timeout"
     except httpx.ConnectError as e:
-        # DNS failures + refused connections both surface here.
         msg = str(e).lower()
         if "refused" in msg:
             return "down", None, "connection_refused"
         return "down", None, "connection_refused"
     except httpx.HTTPError:
         return "down", None, "http_error"
-    except Exception:  # noqa: BLE001 — probe must never raise into the scheduler
+    except Exception:  # noqa: BLE001
         logger.warning("HTTP probe error for service %s", service.id, exc_info=True)
         return "down", None, "http_error"
 
@@ -308,11 +321,22 @@ async def evaluate_result(
                 "cause": cause or "http_error",
             },
         )
+        _content_causes = {"content_mismatch", "malicious_content"}
+        if cause in _content_causes:
+            _alert_type = cause
+            _alert_msg = (
+                f"Malicious content detected on '{service.name}': forbidden keyword found in response body."
+                if cause == "malicious_content"
+                else f"Content check failed for '{service.name}': expected keyword not found in response body."
+            )
+        else:
+            _alert_type = "service_down"
+            _alert_msg = f"Service '{service.name}' is down ({cause or 'unreachable'})."
         await alerting.fire_alert(
             db,
-            type="service_down",
+            type=_alert_type,
             severity="critical",
-            message=f"Service '{service.name}' is down ({cause or 'unreachable'}).",
+            message=_alert_msg,
             server_id=service.server_id,
             service_id=service.id,
             commit=False,
@@ -332,14 +356,14 @@ async def evaluate_result(
                 "duration_sec": open_incident.duration_sec,
             },
         )
-        # Resolve any open service_down alert(s) for this service.
+        # Resolve any open service_down / content alert(s) for this service.
         from app.models.other import Alert
 
         open_alerts = (
             await db.execute(
                 select(Alert).where(
                     Alert.service_id == service.id,
-                    Alert.type == "service_down",
+                    Alert.type.in_(["service_down", "content_mismatch", "malicious_content"]),
                     Alert.state.in_(alerting.OPEN_STATES),
                 )
             )
