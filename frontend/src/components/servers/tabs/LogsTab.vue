@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useMetricsStore } from '@/stores/metrics'
 import { useLogStore, ALL_SOURCES, ALL_SEVERITIES } from '@/stores/logs'
+import { useLogIntelligenceStore } from '@/stores/logIntelligence'
 import { wsClient } from '@/utils/ws'
 import { EmptyState } from '@/components/ui'
 import LogRow from '@/components/logs/LogRow.vue'
@@ -13,7 +14,14 @@ const props = withDefaults(defineProps<{ logsSupported?: boolean }>(), { logsSup
 
 const metrics = useMetricsStore()
 const logs = useLogStore()
+const intel = useLogIntelligenceStore()
 const route = useRoute()
+
+const INTEL_RANGE_OPTIONS = [
+  { value: '1h', label: 'Last 1 hour' },
+  { value: '6h', label: 'Last 6 hours' },
+  { value: '24h', label: 'Last 24 hours' },
+]
 
 const serverId = computed(() => metrics.activeServerId ?? '')
 
@@ -118,6 +126,10 @@ function clickBand(sev: 'error' | 'warn'): void {
   reload()
 }
 
+async function setIntelRange(r: string): Promise<void> {
+  if (serverId.value) await intel.fetchIntelligence(null, r, serverId.value)
+}
+
 async function reload(): Promise<void> {
   await logs.refresh()
   expanded.value = new Set()
@@ -201,13 +213,17 @@ onMounted(async () => {
     logs.setFilter('sources', ['kernel'])
     logs.setFilter('range', '7d')
   }
-  await reload()
+  await Promise.all([
+    reload(),
+    intel.fetchIntelligence(null, intel.range, serverId.value),
+  ])
 })
 
 onUnmounted(() => {
   unbindWs?.(); unbindWs = null
   stopLiveTail()
   logs.reset()
+  intel.reset()
 })
 </script>
 
@@ -216,26 +232,96 @@ onUnmounted(() => {
     <div v-if="!props.logsSupported" class="unsupported-notice">
       Log collection is not available on this server. Fluent Bit has no packages for Debian 9 (stretch) — upgrade to Debian 10+ to enable log monitoring.
     </div>
-    <!-- Severity summary panels -->
-    <div class="summary-panels">
-      <div
-        v-for="band in (['error', 'warn'] as const)"
-        :key="band"
-        class="summary-card"
-        :class="band"
-        @click="clickBand(band)"
-      >
-        <div class="sc-header">
-          <span class="sc-dot"></span>
-          <span class="sc-label">{{ band.toUpperCase() }}</span>
-          <span class="sc-count">{{ logs.summary?.[band]?.count ?? '—' }}</span>
+    <!-- Intelligence cards -->
+    <div class="intel-header">
+      <span class="intel-title">Log Intelligence</span>
+      <select class="intel-range-sel" :value="intel.range" @change="setIntelRange(($event.target as HTMLSelectElement).value)">
+        <option v-for="o in INTEL_RANGE_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
+      </select>
+    </div>
+    <div v-if="intel.loading" class="intel-loading">Loading intelligence…</div>
+    <div v-else-if="intel.data" class="intel-grid">
+      <!-- Critical Errors -->
+      <div class="intel-card">
+        <div class="icard-header">
+          <span class="icard-icon error-icon">!</span>
+          <h4>Critical Errors</h4>
+          <span class="icard-total">{{ (intel.data.summary.error + intel.data.summary.fatal).toLocaleString() }} total</span>
         </div>
-        <template v-if="logs.summary?.[band]?.count">
-          <div class="sc-msg">{{ logs.summary[band].latest?.message ?? '' }}</div>
-          <div class="sc-meta">{{ logs.summary[band].latest?.source }} · {{ relativeTime(logs.summary[band].latest?.time ?? null) }}</div>
+        <div v-if="!intel.data.top_errors.length" class="icard-empty">No errors in this range</div>
+        <div v-else class="ierror-list">
+          <div v-for="(e, i) in intel.data.top_errors" :key="i" class="ierror-row">
+            <span class="ierror-count">×{{ e.count }}</span>
+            <span class="isrc-badge" :class="`isrc-${e.source}`">{{ e.source }}</span>
+            <span class="ierror-msg" :title="e.message">{{ e.message }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- HTTP Errors -->
+      <div class="intel-card" :class="{ dimmed: !intel.data.http_errors }">
+        <div class="icard-header">
+          <span class="icard-icon http-icon">HTTP</span>
+          <h4>HTTP Errors</h4>
+        </div>
+        <div v-if="!intel.data.http_errors" class="icard-empty">No nginx_access data</div>
+        <template v-else>
+          <div class="ihttp-summary">
+            <span class="ihttp-5xx">{{ intel.data.http_errors.total_5xx }} <small>5xx</small></span>
+            <span class="ihttp-4xx">{{ intel.data.http_errors.total_4xx }} <small>4xx</small></span>
+          </div>
+          <div class="iurl-list">
+            <div v-for="(u, i) in intel.data.http_errors.top_urls" :key="i" class="iurl-row">
+              <span class="iurl-status" :class="u.status >= 500 ? 'err' : 'warn'">{{ u.status }}</span>
+              <span class="iurl-path" :title="u.url">{{ u.url }}</span>
+              <span class="iurl-count">×{{ u.count }}</span>
+            </div>
+          </div>
         </template>
-        <div v-else-if="logs.summary" class="sc-empty">No issues in this range</div>
-        <div v-else class="sc-empty">—</div>
+      </div>
+
+      <!-- Slow Queries -->
+      <div class="intel-card" :class="{ dimmed: !intel.data.slow_queries }">
+        <div class="icard-header">
+          <span class="icard-icon slow-icon">⏱</span>
+          <h4>Slow Queries</h4>
+        </div>
+        <div v-if="!intel.data.slow_queries" class="icard-empty">No slow query data</div>
+        <template v-else>
+          <div class="islow-stats">
+            <div class="islow-stat">
+              <span class="istat-val">{{ intel.data.slow_queries.total }}</span>
+              <span class="istat-label">slow queries</span>
+            </div>
+            <div class="islow-stat">
+              <span class="istat-val warn-text">{{ (intel.data.slow_queries.worst_duration_ms / 1000).toFixed(2) }}s</span>
+              <span class="istat-label">worst</span>
+            </div>
+          </div>
+          <pre class="islow-query">{{ intel.data.slow_queries.worst_query }}</pre>
+        </template>
+      </div>
+
+      <!-- Auth Events -->
+      <div class="intel-card" :class="{ dimmed: !intel.data.auth_events }">
+        <div class="icard-header">
+          <span class="icard-icon auth-icon">🔒</span>
+          <h4>Auth Events</h4>
+        </div>
+        <div v-if="!intel.data.auth_events" class="icard-empty">No auth failure data</div>
+        <template v-else>
+          <div class="iauth-total">
+            <span class="istat-val warn-text">{{ intel.data.auth_events.failed_logins }}</span>
+            <span class="istat-label"> failed logins</span>
+          </div>
+          <div class="iip-list">
+            <div v-for="(ip, i) in intel.data.auth_events.top_ips" :key="i" class="iip-row" :class="{ flagged: ip.count > 10 }">
+              <span class="iip-addr">{{ ip.ip }}</span>
+              <span class="iip-count">×{{ ip.count }}</span>
+              <span v-if="ip.count > 10" class="iip-flag">⚠</span>
+            </div>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -400,70 +486,70 @@ onUnmounted(() => {
 .es-btn { background: var(--surface-2); border: 1px solid var(--border); color: var(--text); padding: 8px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; }
 .es-btn:hover { border-color: var(--accent); }
 
-.summary-panels {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  margin-bottom: 14px;
-}
+/* Intelligence cards */
+.intel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.intel-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.intel-range-sel { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 5px 10px; border-radius: 7px; font-size: 12px; cursor: pointer; }
+.intel-loading { font-size: 12px; color: var(--muted); padding: 12px 0; margin-bottom: 14px; }
+.intel-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 14px; }
 
-.summary-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--sc-color);
-  border-radius: 10px;
-  padding: 12px 14px;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-}
-.summary-card:hover {
-  background: var(--surface-2);
-  border-color: var(--sc-color);
-}
-.summary-card.error { --sc-color: #ef4444; }
-.summary-card.warn  { --sc-color: #f59e0b; }
+.intel-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; overflow: hidden; }
+.intel-card.dimmed { opacity: 0.55; }
+.icard-header { display: flex; align-items: center; gap: 8px; }
+.icard-header h4 { font-size: 12px; font-weight: 600; color: var(--text); margin: 0; }
+.icard-total { margin-left: auto; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.icard-icon { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 5px; flex-shrink: 0; }
+.error-icon { background: rgba(239,68,68,0.18); color: #f87171; }
+.http-icon  { background: rgba(59,130,246,0.18); color: #60a5fa; font-size: 9px; }
+.slow-icon  { background: rgba(245,158,11,0.18); color: #fbbf24; }
+.auth-icon  { background: rgba(20,184,166,0.18); color: #2dd4bf; }
+.icard-empty { color: var(--muted); font-size: 11.5px; }
 
-.sc-header {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 6px;
-}
-.sc-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--sc-color);
-  flex-shrink: 0;
-}
-.sc-label {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--sc-color);
-}
-.sc-count {
-  margin-left: auto;
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--sc-color);
-  line-height: 1;
-}
-.sc-msg {
-  font-size: 12px;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  margin-bottom: 4px;
-}
-.sc-meta {
-  font-size: 11px;
-  color: var(--muted);
-}
-.sc-empty {
-  font-size: 12px;
-  color: var(--muted);
-}
+/* Error list */
+.ierror-list { display: flex; flex-direction: column; gap: 5px; max-height: 160px; overflow-y: auto; }
+.ierror-row { display: flex; align-items: center; gap: 6px; font-size: 11.5px; min-width: 0; }
+.ierror-count { font-size: 10.5px; font-weight: 700; color: #f87171; width: 28px; flex-shrink: 0; text-align: right; }
+.ierror-msg { flex: 1; min-width: 0; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, monospace; font-size: 11px; }
+
+/* HTTP */
+.ihttp-summary { display: flex; gap: 20px; }
+.ihttp-5xx { font-size: 20px; font-weight: 700; color: #f87171; }
+.ihttp-4xx { font-size: 20px; font-weight: 700; color: #fbbf24; }
+.ihttp-5xx small, .ihttp-4xx small { font-size: 10px; color: var(--muted); margin-left: 3px; font-weight: 400; }
+.iurl-list { display: flex; flex-direction: column; gap: 3px; }
+.iurl-row { display: flex; align-items: center; gap: 6px; font-size: 11px; min-width: 0; }
+.iurl-status { font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 4px; flex-shrink: 0; }
+.iurl-status.err  { background: rgba(239,68,68,0.18); color: #f87171; }
+.iurl-status.warn { background: rgba(245,158,11,0.18); color: #fbbf24; }
+.iurl-path { flex: 1; min-width: 0; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, monospace; }
+.iurl-count { color: var(--muted); font-size: 10.5px; flex-shrink: 0; }
+
+/* Slow queries */
+.islow-stats { display: flex; gap: 20px; }
+.islow-stat { display: flex; flex-direction: column; }
+.istat-val { font-size: 20px; font-weight: 700; color: var(--text); line-height: 1.1; }
+.istat-label { font-size: 10.5px; color: var(--muted); }
+.warn-text { color: #fbbf24 !important; }
+.islow-query { background: #0f1117; border: 1px solid var(--border); border-radius: 5px; padding: 6px 8px; color: #e2e8f0; font-family: ui-monospace, monospace; font-size: 10.5px; white-space: pre-wrap; word-break: break-all; margin: 0; max-height: 60px; overflow: hidden; }
+
+/* Auth */
+.iauth-total { font-size: 12px; }
+.iip-list { display: flex; flex-direction: column; gap: 3px; max-height: 80px; overflow-y: auto; }
+.iip-row { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.iip-addr { flex: 1; font-family: ui-monospace, monospace; color: var(--text); }
+.iip-count { color: var(--muted); font-size: 10.5px; }
+.iip-flag { color: #fbbf24; font-size: 10px; }
+.iip-row.flagged .iip-addr { color: #fbbf24; }
+
+/* Source badges */
+.isrc-badge { font-size: 9.5px; font-weight: 600; padding: 1px 5px; border-radius: 4px; flex-shrink: 0; text-transform: lowercase; }
+.isrc-syslog       { background: rgba(148,163,184,0.16); color: #cbd5e1; }
+.isrc-auth         { background: rgba(20,184,166,0.18);  color: #2dd4bf; }
+.isrc-kernel       { background: rgba(100,116,139,0.22); color: #94a3b8; }
+.isrc-nginx_access { background: rgba(59,130,246,0.18);  color: #60a5fa; }
+.isrc-nginx_error  { background: rgba(37,99,235,0.22);   color: #3b82f6; }
+.isrc-php_fpm      { background: rgba(168,85,247,0.18);  color: #c084fc; }
+.isrc-php_app      { background: rgba(147,51,234,0.22);  color: #a855f7; }
+.isrc-mariadb_error{ background: rgba(245,158,11,0.18);  color: #fbbf24; }
+.isrc-mariadb_slow { background: rgba(217,119,6,0.22);   color: #f59e0b; }
 </style>

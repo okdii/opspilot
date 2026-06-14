@@ -10,12 +10,12 @@ export const useLogIntelligenceStore = defineStore('logIntelligence', () => {
   const error = ref<string | null>(null)
   const range = ref(DEFAULT_RANGE)
 
-  async function fetchIntelligence(orgId: string, r: string): Promise<void> {
+  async function fetchIntelligence(orgId: string | null, r: string, serverId?: string): Promise<void> {
     range.value = r
     loading.value = true
     error.value = null
     try {
-      data.value = await getLogIntelligence(orgId, r)
+      data.value = await getLogIntelligence(orgId, r, serverId)
     } catch {
       error.value = 'Could not load log intelligence.'
       data.value = null

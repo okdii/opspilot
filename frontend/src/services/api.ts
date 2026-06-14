@@ -190,10 +190,11 @@ export interface LogIntelligenceData {
   }[]
 }
 
-export async function getLogIntelligence(orgId: string, range: string): Promise<LogIntelligenceData> {
-  const { data } = await api.get<LogIntelligenceData>('/api/logs/intelligence', {
-    params: { org_id: orgId, range },
-  })
+export async function getLogIntelligence(orgId: string | null, range: string, serverId?: string): Promise<LogIntelligenceData> {
+  const params: Record<string, string> = { range }
+  if (orgId) params.org_id = orgId
+  if (serverId) params.server_id = serverId
+  const { data } = await api.get<LogIntelligenceData>('/api/logs/intelligence', { params })
   return data
 }
 

@@ -373,15 +373,18 @@ async def log_summary(
 @router.get("/intelligence")
 async def log_intelligence(
     user: CurrentUser,
-    org_id: str = Query(...),
+    org_id: str | None = Query(None),
+    server_id: str | None = Query(None),
     range: str = Query("24h"),
     db: AsyncSession = Depends(get_db),
 ):
+    if not org_id and not server_id:
+        raise HTTPException(422, detail={"error": "validation_error", "message": "org_id or server_id is required."})
     valid_ranges = {"1h": 1, "6h": 6, "24h": 24}
     hours = valid_ranges.get(range, 24)
     frm = datetime.now(timezone.utc) - timedelta(hours=hours)
 
-    servers = await _resolve_scope(user, db, org_id, None)
+    servers = await _resolve_scope(user, db, org_id, server_id)
     if not servers:
         return _empty_intelligence()
     server_ids = [str(s.id) for s in servers]
