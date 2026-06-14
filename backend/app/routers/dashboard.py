@@ -37,13 +37,13 @@ async def get_dashboard(org_id: str, user: CurrentUser, db: AsyncSession = Depen
     if ids:
         stmt = text(
             """
-            SELECT DISTINCT ON (server_id, metric_name)
-                   server_id::text AS sid, metric_name, value
+            SELECT server_id::text AS sid, metric_name, last(value, time) AS value
             FROM server_metrics
             WHERE server_id IN :ids
               AND metric_name IN :metrics
+              AND time > NOW() - INTERVAL '24 hours'
               AND (metric_name <> :disk OR labels->>'path' = '/')
-            ORDER BY server_id, metric_name, time DESC
+            GROUP BY server_id, metric_name
             """
         ).bindparams(bindparam("ids", expanding=True), bindparam("metrics", expanding=True))
         result = await db.execute(
