@@ -38,6 +38,8 @@ class Service(Base):
     ssl_issuer: Mapped[str | None] = mapped_column(String(255), nullable=True)
     ssl_last_checked: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_security_scan: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expected_keyword: Mapped[str | None] = mapped_column(Text, nullable=True)
+    forbidden_keywords_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
 
     server: Mapped["Server"] = relationship(back_populates="services")
     incidents: Mapped[list["Incident"]] = relationship(back_populates="service", cascade="all, delete-orphan")

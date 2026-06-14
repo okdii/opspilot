@@ -23,6 +23,8 @@ class ServiceCreate(BaseModel):
     ignore_ssl_errors: bool = False
     ssl_warn_days: int = 30
     ssl_critical_days: int = 7
+    expected_keyword: str | None = None
+    forbidden_keywords_enabled: bool = True
 
     @field_validator("name")
     @classmethod
@@ -80,6 +82,18 @@ class ServiceCreate(BaseModel):
             raise ValueError("ssl_critical_days must be ≥ 1 and less than ssl_warn_days")
         return self
 
+    @field_validator("expected_keyword")
+    @classmethod
+    def expected_keyword_valid(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if len(v) == 0:
+            return None
+        if len(v) > 200:
+            raise ValueError("Expected keyword must be ≤ 200 characters")
+        return v
+
 
 class ServiceUpdate(BaseModel):
     name: str | None = None
@@ -93,6 +107,8 @@ class ServiceUpdate(BaseModel):
     ignore_ssl_errors: bool | None = None
     ssl_warn_days: int | None = None
     ssl_critical_days: int | None = None
+    expected_keyword: str | None = None
+    forbidden_keywords_enabled: bool | None = None
 
     @field_validator("name")
     @classmethod
@@ -152,6 +168,18 @@ class ServiceUpdate(BaseModel):
             raise ValueError("ssl_critical_days must be less than ssl_warn_days")
         return self
 
+    @field_validator("expected_keyword")
+    @classmethod
+    def expected_keyword_valid(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if len(v) == 0:
+            return None
+        if len(v) > 200:
+            raise ValueError("Expected keyword must be ≤ 200 characters")
+        return v
+
 
 class ServiceOut(BaseModel):
     id: str
@@ -182,3 +210,5 @@ class ServiceOut(BaseModel):
     ssl_status: str | None
     ssl_issuer: str | None
     ssl_last_checked: datetime | None
+    expected_keyword: str | None
+    forbidden_keywords_enabled: bool
