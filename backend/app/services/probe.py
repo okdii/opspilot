@@ -192,7 +192,7 @@ async def _probe_http(service: Service) -> tuple[str, int | None, str | None]:
         if resp.status_code != expected:
             return "down", elapsed_ms, "wrong_status_code"
 
-        body_lower = resp.text[:50_000].lower()
+        body_lower = resp.text[:500_000].lower()
         if service.expected_keyword:
             keywords = [kw.strip().lower() for kw in service.expected_keyword.split(",") if kw.strip()]
             for kw in keywords:
