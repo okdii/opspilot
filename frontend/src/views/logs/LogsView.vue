@@ -125,6 +125,7 @@ onUnmounted(() => {
             <div class="card-header">
               <span class="card-icon error-icon">!</span>
               <h3>Critical Errors</h3>
+              <span class="card-total">{{ (intel.data.summary.error + intel.data.summary.fatal).toLocaleString() }} total</span>
             </div>
             <div v-if="!intel.data.top_errors.length" class="card-empty">No errors in this range</div>
             <div v-else class="error-list">
@@ -276,10 +277,11 @@ onUnmounted(() => {
 .card-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 @media (max-width: 800px) { .card-grid { grid-template-columns: 1fr; } }
 
-.intel-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px; transition: opacity 0.2s; }
+.intel-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px; transition: opacity 0.2s; min-width: 0; overflow: hidden; }
 .intel-card.dimmed { opacity: 0.6; }
 .card-header { display: flex; align-items: center; gap: 10px; }
 .card-header h3 { font-size: 13px; font-weight: 600; color: var(--text); margin: 0; }
+.card-total { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; }
 .card-icon { font-size: 11px; font-weight: 700; padding: 3px 7px; border-radius: 6px; }
 .error-icon { background: rgba(239,68,68,0.18); color: #f87171; }
 .http-icon { background: rgba(59,130,246,0.18); color: #60a5fa; font-size: 10px; }
@@ -288,10 +290,10 @@ onUnmounted(() => {
 .card-empty { color: var(--muted); font-size: 12px; padding: 8px 0; }
 
 /* Error list */
-.error-list { display: flex; flex-direction: column; gap: 6px; }
-.error-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.error-list { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
+.error-row { display: flex; align-items: center; gap: 8px; font-size: 12px; min-width: 0; }
 .error-count { font-size: 11px; font-weight: 700; color: #f87171; width: 32px; flex-shrink: 0; text-align: right; }
-.error-msg { flex: 1; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, monospace; font-size: 11.5px; }
+.error-msg { flex: 1; min-width: 0; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, monospace; font-size: 11.5px; }
 
 /* HTTP errors */
 .http-summary { display: flex; gap: 24px; }
