@@ -194,8 +194,10 @@ async def _probe_http(service: Service) -> tuple[str, int | None, str | None]:
 
         body_lower = resp.text[:50_000].lower()
         if service.expected_keyword:
-            if service.expected_keyword.lower() not in body_lower:
-                return "down", elapsed_ms, "content_mismatch"
+            keywords = [kw.strip().lower() for kw in service.expected_keyword.split(",") if kw.strip()]
+            for kw in keywords:
+                if kw not in body_lower:
+                    return "down", elapsed_ms, "content_mismatch"
         if service.forbidden_keywords_enabled:
             for kw in FORBIDDEN_KEYWORDS:
                 if kw in body_lower:

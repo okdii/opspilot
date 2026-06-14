@@ -311,15 +311,15 @@ function intervalLabel(s: number): string {
           Alerts if gambling or defacement keywords (e.g. "judi", "casino", "togel") are found in the response body.
         </p>
 
-        <label class="fl">Expected keyword <span class="optional">(optional)</span></label>
+        <label class="fl">Expected keywords <span class="optional">(optional, comma-separated)</span></label>
         <input
           v-model="form.expected_keyword"
-          placeholder="e.g. Kementerian Pertanian"
+          placeholder="e.g. Kementerian Pertanian, mphtj, portal rasmi"
           :class="{ invalid: errors.expected_keyword }"
           maxlength="200"
         />
         <p v-if="errors.expected_keyword" class="err">{{ errors.expected_keyword }}</p>
-        <small v-else-if="!form.expected_keyword.trim()" class="hint">Alert if this text is missing from the response body.</small>
+        <small v-else-if="!form.expected_keyword.trim()" class="hint">Alert if any of these keywords are missing from the response body.</small>
       </template>
 
       <!-- TCP / DB fields -->
