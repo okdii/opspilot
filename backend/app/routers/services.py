@@ -157,6 +157,8 @@ async def _service_to_out(service: Service, server_name: str, db: AsyncSession) 
         ssl_status=service.ssl_status,
         ssl_issuer=service.ssl_issuer,
         ssl_last_checked=service.ssl_last_checked,
+        expected_keyword=service.expected_keyword,
+        forbidden_keywords_enabled=service.forbidden_keywords_enabled,
     )
 
 
@@ -321,6 +323,8 @@ async def create_service(body: ServiceCreate, user: AdminUser, db: AsyncSession 
         ssl_enabled=ssl_enabled,
         ssl_warn_days=body.ssl_warn_days,
         ssl_critical_days=body.ssl_critical_days,
+        expected_keyword=body.expected_keyword if body.type == "http" else None,
+        forbidden_keywords_enabled=body.forbidden_keywords_enabled if body.type == "http" else False,
     )
     db.add(service)
     await db.commit()
@@ -385,6 +389,10 @@ async def update_service(
         service.ssl_warn_days = body.ssl_warn_days
     if body.ssl_critical_days is not None:
         service.ssl_critical_days = body.ssl_critical_days
+    if body.expected_keyword is not None:
+        service.expected_keyword = body.expected_keyword if service.type == "http" else None
+    if body.forbidden_keywords_enabled is not None:
+        service.forbidden_keywords_enabled = body.forbidden_keywords_enabled if service.type == "http" else False
     if body.is_active is not None:
         service.is_active = body.is_active
 
