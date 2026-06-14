@@ -12,7 +12,7 @@ export const ALL_SOURCES: LogSource[] = [
   'mariadb_error', 'mariadb_slow',
 ]
 
-export const ALL_SEVERITIES: LogSeverity[] = ['debug', 'info', 'warn', 'error', 'fatal']
+export const ALL_SEVERITIES: LogSeverity[] = ['debug', 'info', 'warn', 'error']
 
 const RANGE_OFFSET_MS: Record<Exclude<LogTimeRange, 'custom'>, number> = {
   '15m': 15 * 60_000,

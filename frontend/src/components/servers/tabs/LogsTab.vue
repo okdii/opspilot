@@ -113,7 +113,7 @@ function clearFilters(): void {
   reload()
 }
 
-function clickBand(sev: 'fatal' | 'error' | 'warn'): void {
+function clickBand(sev: 'error' | 'warn'): void {
   logs.setFilter('severities', [sev])
   reload()
 }
@@ -219,7 +219,7 @@ onUnmounted(() => {
     <!-- Severity summary panels -->
     <div class="summary-panels">
       <div
-        v-for="band in (['fatal', 'error', 'warn'] as const)"
+        v-for="band in (['error', 'warn'] as const)"
         :key="band"
         class="summary-card"
         :class="band"
@@ -402,7 +402,7 @@ onUnmounted(() => {
 
 .summary-panels {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
   margin-bottom: 14px;
 }
@@ -420,7 +420,6 @@ onUnmounted(() => {
   background: var(--surface-2);
   border-color: var(--sc-color);
 }
-.summary-card.fatal { --sc-color: #991b1b; }
 .summary-card.error { --sc-color: #ef4444; }
 .summary-card.warn  { --sc-color: #f59e0b; }
 
