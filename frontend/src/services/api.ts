@@ -156,7 +156,7 @@ export async function getServerMonitoring(serverId: string): Promise<MonitoringS
 // --- Log Viewer (Phase 3, spec 05) -----------------------------------------
 
 export interface LogIntelligenceData {
-  summary: { fatal: number; error: number; warn: number; info: number; debug: number }
+  summary: { error: number; warn: number; info: number; debug: number }
   top_errors: { message: string; count: number; source: string; last_seen: string }[]
   http_errors: {
     total_5xx: number
@@ -178,17 +178,9 @@ export interface LogIntelligenceData {
   per_server: {
     server_id: string
     server_name: string
-    fatal: number
     error: number
     warn: number
     sparkline: number[]
-  }[]
-  recent_fatals: {
-    id: string
-    time: string
-    server_name: string
-    source: string
-    message: string
   }[]
 }
 

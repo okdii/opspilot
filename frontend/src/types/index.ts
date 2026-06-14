@@ -238,7 +238,7 @@ export type LogSource =
   | 'nginx_access' | 'nginx_error' | 'php_fpm' | 'php_app'
   | 'mariadb_error' | 'mariadb_slow' | 'syslog' | 'auth' | 'kernel'
 
-export type LogSeverity = 'debug' | 'info' | 'warn' | 'error' | 'fatal'
+export type LogSeverity = 'debug' | 'info' | 'warn' | 'error'
 
 export type LogTimeRange = '15m' | '1h' | '6h' | '24h' | '7d' | '30d' | 'custom'
 
@@ -266,7 +266,6 @@ export interface VolumeBucket {
   info: number
   warn: number
   error: number
-  fatal: number
 }
 
 export interface VolumeResponse {
@@ -290,7 +289,6 @@ export interface LogSummaryBand {
 }
 
 export interface LogSummary {
-  fatal: LogSummaryBand
   error: LogSummaryBand
   warn:  LogSummaryBand
 }
@@ -473,7 +471,7 @@ export interface DailyReportDataSnapshot {
   }>
   logs: {
     total_lines: number
-    severity_counts: { fatal: number; error: number; warn: number; info: number }
+    severity_counts: { error: number; warn: number; info: number }
     top_errors: Array<{ message: string; count: number; source: string }>
     failed_logins: Array<{ count: number; remote_host: string | null }>
     slow_queries: { count: number; avg_sec: number; max_sec: number } | null

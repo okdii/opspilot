@@ -42,7 +42,7 @@ const RANGE_OPTIONS: { value: LogTimeRange; label: string }[] = [
 ]
 
 const SEV_COLORS: Record<LogSeverity, string> = {
-  debug: '#6b7280', info: '#3b82f6', warn: '#f59e0b', error: '#ef4444', fatal: '#991b1b',
+  debug: '#6b7280', info: '#3b82f6', warn: '#f59e0b', error: '#ef4444',
 }
 
 const expanded = ref<Set<string>>(new Set())
@@ -75,7 +75,7 @@ const entryCountLabel = computed(() => {
 const totalLogCount = computed(() => {
   if (!logs.volumeData.length) return null
   return logs.volumeData.reduce(
-    (sum, b) => sum + (b.debug || 0) + (b.info || 0) + (b.warn || 0) + (b.error || 0) + (b.fatal || 0),
+    (sum, b) => sum + (b.debug || 0) + (b.info || 0) + (b.warn || 0) + (b.error || 0),
     0,
   )
 })
@@ -254,7 +254,7 @@ onUnmounted(() => {
         <div class="icard-header">
           <span class="icard-icon error-icon">!</span>
           <h4>Critical Errors</h4>
-          <span class="icard-total">{{ (intel.data.summary.error + intel.data.summary.fatal).toLocaleString() }} total</span>
+          <span class="icard-total">{{ intel.data.summary.error.toLocaleString() }} total</span>
         </div>
         <div v-if="!intel.data.top_errors.length" class="icard-empty">No errors in this range</div>
         <div v-else class="ierror-list">
