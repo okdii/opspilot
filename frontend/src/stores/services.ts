@@ -36,6 +36,8 @@ export interface Service {
   ssl_status: string | null
   ssl_issuer: string | null
   ssl_last_checked: string | null
+  expected_keyword: string | null
+  forbidden_keywords_enabled: boolean
 }
 
 export interface ServiceCreatePayload {
@@ -52,6 +54,8 @@ export interface ServiceCreatePayload {
   ignore_ssl_errors: boolean
   ssl_warn_days?: number
   ssl_critical_days?: number
+  expected_keyword?: string | null
+  forbidden_keywords_enabled?: boolean
 }
 
 export type ServiceUpdatePayload = Partial<Omit<ServiceCreatePayload, 'server_id' | 'type'>>
