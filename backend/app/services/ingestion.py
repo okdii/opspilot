@@ -10,6 +10,7 @@ labels) shape that the rest of the system queries.
 """
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Iterator
 from uuid import UUID
@@ -18,6 +19,67 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+# ── Log intelligence parsers ───────────────────────────────────────────────────
+# Enrich raw JSONB with structured fields so intelligence card queries work.
+
+_NGINX_ACCESS_RE = re.compile(
+    r'^(?P<ip>\S+) \S+ \S+ \[[^\]]+\] '
+    r'"(?P<method>\S+) (?P<url>\S+) [^"]*" '
+    r'(?P<status>\d{3}) (?P<bytes>\d+|-)'
+)
+_MARIADB_QT_RE = re.compile(r'#\s*Query_time:\s*([\d.]+)')
+_AUTH_IP_RE = re.compile(r'(?:from |rhost=)(\d{1,3}(?:\.\d{1,3}){3})')
+_NGINX_ERR_SEV_RE = re.compile(r'\[(emerg|alert|crit|error|warn|notice|info|debug)\]', re.I)
+_SYSLOG_ERROR_RE = re.compile(r'\b(error|fail(?:ed|ure)|segfault|oom-killer|panic|kernel bug)\b', re.I)
+_SYSLOG_WARN_RE = re.compile(r'\b(warn(?:ing)?)\b', re.I)
+
+_NGINX_SEV = {
+    "emerg": "fatal", "alert": "fatal", "crit": "fatal",
+    "error": "error", "warn": "warn", "notice": "info",
+    "info": "info", "debug": "debug",
+}
+_AUTH_FAIL_WORDS = ("failed password", "authentication failure", "invalid user", "connection closed by invalid")
+
+
+def _enrich_log(source: str, rec: dict, message: str) -> tuple[dict, str]:
+    """Parse source-specific fields into rec; return (enriched_rec, severity)."""
+    severity = "info"
+
+    if source == "nginx_access":
+        m = _NGINX_ACCESS_RE.match(message)
+        if m:
+            rec["ip"] = m.group("ip")
+            rec["method"] = m.group("method")
+            rec["url"] = m.group("url")
+            rec["status_code"] = m.group("status")
+            rec["bytes"] = m.group("bytes")
+        # access logs carry no severity
+
+    elif source == "nginx_error":
+        m = _NGINX_ERR_SEV_RE.search(message)
+        severity = _NGINX_SEV.get(m.group(1).lower(), "error") if m else "error"
+
+    elif source == "mariadb_slow":
+        m = _MARIADB_QT_RE.search(message)
+        if m:
+            rec["query_time"] = m.group(1)
+
+    elif source == "auth":
+        m = _AUTH_IP_RE.search(message)
+        if m:
+            rec["source_ip"] = m.group(1)
+        lower = message.lower()
+        if any(kw in lower for kw in _AUTH_FAIL_WORDS):
+            severity = "warn"
+
+    elif source == "syslog":
+        if _SYSLOG_ERROR_RE.search(message):
+            severity = "error"
+        elif _SYSLOG_WARN_RE.search(message):
+            severity = "warn"
+
+    return rec, severity
 
 
 # ── InfluxDB Line Protocol parser ─────────────────────────────────────────────
@@ -201,12 +263,14 @@ async def write_logs(server_id: UUID, records: list[dict], db: AsyncSession, org
             ts = datetime.now(timezone.utc)
 
         source = rec.get("source") or rec.get("tag") or "unknown"
-        severity = rec.get("severity") or rec.get("level") or "info"
         message = rec.get("log") or rec.get("message") or ""
 
         source_s = str(source)[:80]
-        severity_s = str(severity)[:20]
         message_s = str(message)
+        rec, derived_severity = _enrich_log(source_s, rec, message_s)
+        # Honour an explicit severity from the agent if it differs from the default
+        agent_sev = rec.get("severity") or rec.get("level") or ""
+        severity_s = (str(agent_sev)[:20] if agent_sev and agent_sev != "info" else derived_severity)
         rows.append({
             "time": ts,
             "server_id": server_id,
