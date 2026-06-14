@@ -35,7 +35,7 @@ _SYSLOG_ERROR_RE = re.compile(r'\b(error|fail(?:ed|ure)|segfault|oom-killer|pani
 _SYSLOG_WARN_RE = re.compile(r'\b(warn(?:ing)?)\b', re.I)
 
 _NGINX_SEV = {
-    "emerg": "fatal", "alert": "fatal", "crit": "fatal",
+    "emerg": "error", "alert": "error", "crit": "error",
     "error": "error", "warn": "warn", "notice": "info",
     "info": "info", "debug": "debug",
 }
