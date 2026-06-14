@@ -20,7 +20,7 @@ const RANGE_OPTIONS = [
 ]
 
 const SEV_COLORS: Record<LogSeverity, string> = {
-  debug: '#6b7280', info: '#3b82f6', warn: '#f59e0b', error: '#ef4444', fatal: '#991b1b',
+  debug: '#6b7280', info: '#3b82f6', warn: '#f59e0b', error: '#ef4444',
 }
 
 let refreshTimer: number | null = null
@@ -125,7 +125,7 @@ onUnmounted(() => {
             <div class="card-header">
               <span class="card-icon error-icon">!</span>
               <h3>Critical Errors</h3>
-              <span class="card-total">{{ (intel.data.summary.error + intel.data.summary.fatal).toLocaleString() }} total</span>
+              <span class="card-total">{{ intel.data.summary.error.toLocaleString() }} total</span>
             </div>
             <div v-if="!intel.data.top_errors.length" class="card-empty">No errors in this range</div>
             <div v-else class="error-list">
@@ -233,7 +233,6 @@ onUnmounted(() => {
               class="server-card" @click="goToServerLogs(s.server_id)">
               <div class="sc-name">{{ s.server_name }}</div>
               <div class="sc-counts">
-                <span v-if="s.fatal" class="sc-count fatal">F:{{ s.fatal }}</span>
                 <span class="sc-count error">E:{{ s.error }}</span>
                 <span class="sc-count warn">W:{{ s.warn }}</span>
               </div>
@@ -244,20 +243,6 @@ onUnmounted(() => {
                 </span>
               </div>
               <div class="sc-link">View logs →</div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Recent fatals -->
-        <section class="section">
-          <h3 class="section-title">Recent Fatals</h3>
-          <div v-if="!intel.data.recent_fatals.length" class="no-fatals">No fatal events — system clean.</div>
-          <div v-else class="fatals-list">
-            <div v-for="f in intel.data.recent_fatals" :key="f.id" class="fatal-row">
-              <span class="fatal-time">{{ formatTime(f.time) }}</span>
-              <span class="fatal-server">{{ f.server_name }}</span>
-              <span class="fatal-source src-badge" :class="`src-${f.source}`">{{ f.source }}</span>
-              <span class="fatal-msg" :title="f.message">{{ f.message }}</span>
             </div>
           </div>
         </section>
@@ -377,21 +362,12 @@ onUnmounted(() => {
 .sc-name { font-size: 13px; font-weight: 600; color: var(--text); }
 .sc-counts { display: flex; gap: 8px; }
 .sc-count { font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.sc-count.fatal { color: #fca5a5; }
 .sc-count.error { color: #f87171; }
 .sc-count.warn { color: #fbbf24; }
 .sc-spark { display: flex; align-items: flex-end; gap: 2px; height: 24px; }
 .spark-bar { width: 6px; background: rgba(239,68,68,0.5); border-radius: 2px; }
 .sc-link { font-size: 11px; color: var(--accent-2); }
 
-/* Recent fatals */
-.no-fatals { color: #4ade80; font-size: 13px; }
-.fatals-list { display: flex; flex-direction: column; gap: 6px; }
-.fatal-row { display: flex; align-items: center; gap: 10px; font-size: 12px; padding: 6px 0; border-bottom: 1px solid rgba(148,163,184,0.08); }
-.fatal-row:last-child { border-bottom: none; }
-.fatal-time { width: 40px; flex-shrink: 0; color: var(--muted); font-variant-numeric: tabular-nums; font-family: ui-monospace, monospace; }
-.fatal-server { width: 100px; flex-shrink: 0; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fatal-msg { flex: 1; color: #fca5a5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, monospace; }
 
 /* Volume chart */
 .chart-empty { color: var(--muted); font-size: 12.5px; padding: 24px; text-align: center; }
