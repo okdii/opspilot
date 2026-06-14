@@ -7,6 +7,7 @@ SMTP config never stops an alert from being recorded or pushed.
 """
 import logging
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +40,8 @@ TYPE_DISPLAY: dict[str, str] = {
     "mariadb_error": "MariaDB Error",
     "slow_query_spike": "Slow Query Spike",
     "maintenance": "Maintenance Mode",
+    "content_mismatch": "Content Check Failed",
+    "malicious_content": "Malicious Content Detected",
 }
 
 _DIVIDER = "-" * 53
@@ -54,11 +57,16 @@ def _aware(dt: datetime | None) -> datetime | None:
     return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
 
 
-def _fmt_ts(dt: datetime | None) -> str:
+def _fmt_ts(dt: datetime | None, tz: str = "UTC") -> str:
     dt = _aware(dt)
     if dt is None:
         return "—"
-    return dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    try:
+        zone = ZoneInfo(tz)
+    except ZoneInfoNotFoundError:
+        zone = timezone.utc
+        tz = "UTC"
+    return dt.astimezone(zone).strftime(f"%Y-%m-%d %H:%M:%S {tz}")
 
 
 def _fmt_duration(start: datetime | None, end: datetime | None) -> str:
@@ -94,6 +102,7 @@ def format_fire_body(
     server_name: str | None,
     base_url: str,
     email_meta: dict | None = None,
+    tz: str = "UTC",
 ) -> str:
     base = base_url.rstrip("/")
     meta = email_meta or {}
@@ -111,7 +120,7 @@ def format_fire_body(
         lines.append(f"Value:      {meta['value']}")
     if meta.get("threshold") is not None:
         lines.append(f"Threshold:  {meta['threshold']}")
-    lines.append(f"Fired at:   {_fmt_ts(alert.sent_at)}")
+    lines.append(f"Fired at:   {_fmt_ts(alert.sent_at, tz)}")
     lines += [
         "",
         "Message:",
@@ -157,10 +166,12 @@ _RESOLVE_SUMMARY: dict[str, str] = {
     "ssh_brute_force": "SSH brute force activity has subsided.",
     "mariadb_error": "No further MariaDB errors have been detected.",
     "slow_query_spike": "Slow query rate has returned to normal.",
+    "content_mismatch": "Content check passed — expected keywords are present on the page again.",
+    "malicious_content": "Page content is clean — no malicious keywords detected.",
 }
 
 
-def format_resolve_body(alert: Alert, *, server_name: str | None) -> str:
+def format_resolve_body(alert: Alert, *, server_name: str | None, tz: str = "UTC") -> str:
     summary = _RESOLVE_SUMMARY.get(alert.type, "The issue has been resolved and everything is back to normal.")
     lines = [
         _DIVIDER,
@@ -171,7 +182,7 @@ def format_resolve_body(alert: Alert, *, server_name: str | None) -> str:
         "",
         f"Severity:   {alert.severity.upper()} (resolved)",
         f"Server:     {server_name or '—'}",
-        f"Resolved:   {_fmt_ts(alert.resolved_at)}",
+        f"Resolved:   {_fmt_ts(alert.resolved_at, tz)}",
         f"Duration:   {_fmt_duration(alert.sent_at, alert.resolved_at)}",
         "",
         "Message:",
@@ -209,13 +220,14 @@ async def send_alert_email(
     recipients = parse_recipients(s.smtp_recipients)
     base_url = s.base_url or "http://localhost"
 
+    tz = s.timezone or "UTC"
     if kind == "fire":
         subject = fire_subject(alert, server_name)
         body = format_fire_body(
-            alert, server_name=server_name, base_url=base_url, email_meta=email_meta
+            alert, server_name=server_name, base_url=base_url, email_meta=email_meta, tz=tz
         )
     else:
         subject = resolve_subject(alert, server_name)
-        body = format_resolve_body(alert, server_name=server_name)
+        body = format_resolve_body(alert, server_name=server_name, tz=tz)
 
     return send_email_safe(s, subject, body, recipients)
