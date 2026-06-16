@@ -40,16 +40,33 @@ _SSH_PATTERN = "%Failed password%"
 
 
 def _derive_type(rule: LogAlertRule) -> str:
-    """Map a LogAlertRule to its spec §15 alert ``type`` key.
-
-    The type governs dedup (one open alert per (type, server_id)), so it must be
-    stable for a given rule's intent. We classify by the well-known source +
-    pattern shapes seeded by the default-rule factory, falling back to a generic
-    ``log_match`` for custom user rules.
-    """
+    """Map a LogAlertRule to its spec §15 alert ``type`` key (governs dedup)."""
     source = (rule.source or "").lower()
     pat = (rule.pattern or "").lower()
 
+    # ── Security detection (Part 1) — classify by pattern first ──────────
+    if "profiles.import" in pat:
+        return "jce_exploit_attempt"
+    if "webshell_exec" in pat:
+        return "webshell_command_exec"
+    if "webroot_write" in pat:
+        return "webshell_upload"
+    if "ssh_key_change" in pat:
+        return "ssh_key_modified"
+    if "log_tamper" in pat:
+        return "log_tampering"
+    if "create user" in pat or "grant all" in pat:
+        return "db_privilege_change"
+    if "accepted publickey" in pat:
+        return "new_ssh_login"
+    if " 404 " in pat:
+        return "probe_scan"
+    if ".php" in pat and "200" in pat:
+        return "webshell_execution"
+    if "post" in pat and ".php" in pat:
+        return "webshell_upload"
+
+    # ── Existing classifications ─────────────────────────────────────────
     if source == _SSH_SOURCE:
         return "ssh_brute_force"
     if "php" in source or "fatal error" in pat:
