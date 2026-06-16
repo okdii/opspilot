@@ -81,6 +81,36 @@
     Skip_Long_Lines   On
     Multiline.parser  mariadb_slow
 
+{% if web_access_log_path %}
+# ── Web access (nginx / LiteSpeed / Apache — normalized) ─────────────────────
+[INPUT]
+    Name              tail
+    Path              {{ web_access_log_path }}
+    Tag               web_access
+    DB                /var/lib/fluent-bit/web_access.db
+    Skip_Long_Lines   On
+{% endif %}
+
+{% if auditd_enabled %}
+# ── auditd (file writes + www-data execve + key/log tamper) ──────────────────
+[INPUT]
+    Name              tail
+    Path              /var/log/audit/audit.log
+    Tag               auditd
+    DB                /var/lib/fluent-bit/auditd.db
+    Skip_Long_Lines   On
+{% endif %}
+
+{% if mariadb_general_enabled %}
+# ── MariaDB general query log (CREATE USER / GRANT) ──────────────────────────
+[INPUT]
+    Name              tail
+    Path              /var/log/mysql/general.log
+    Tag               mariadb_general
+    DB                /var/lib/fluent-bit/mariadb_general.db
+    Skip_Long_Lines   On
+{% endif %}
+
 # ── Tag server_id onto every record ──────────────────────────────────────────
 [FILTER]
     Name    modify
