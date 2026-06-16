@@ -35,6 +35,7 @@ from app.routers.daily_report import router as daily_report_router
 from app.routers.fail2ban import router as fail2ban_router
 from app.services.metric_evaluator import metric_alert_evaluator
 from app.services.log_evaluator import log_alert_evaluator
+from app.services.log_silence import log_silence_evaluator
 from app.services.ssl_checker import ssl_checker_daily, domain_checker_daily
 from app.services.probe import schedule_all_active
 from app.routers.databases import db_deadlock_evaluator
@@ -53,6 +54,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(maintenance_expiry, "interval", seconds=60, id="maintenance_expiry", replace_existing=True)
     scheduler.add_job(metric_alert_evaluator, "interval", seconds=30, id="metric_alert_evaluator", replace_existing=True)
     scheduler.add_job(log_alert_evaluator, "interval", seconds=60, id="log_alert_evaluator", replace_existing=True)
+    scheduler.add_job(log_silence_evaluator, "interval", seconds=60, id="log_silence_evaluator", replace_existing=True)
     scheduler.add_job(snooze_expiry_tick, "interval", seconds=60, id="snooze_expiry_tick", replace_existing=True)
     scheduler.add_job(ssl_checker_daily, "cron", hour=2, minute=0, id="ssl_checker_daily", replace_existing=True)
     scheduler.add_job(domain_checker_daily, "cron", hour=3, minute=0, id="domain_checker_daily", replace_existing=True)
