@@ -6,6 +6,7 @@ import Fail2banChart from './fail2ban/Fail2banChart.vue'
 import Fail2banJailCards from './fail2ban/Fail2banJailCards.vue'
 import Fail2banTopCountries from './fail2ban/Fail2banTopCountries.vue'
 import Fail2banBannedTable from './fail2ban/Fail2banBannedTable.vue'
+import SecurityEventsTimeline from './security/SecurityEventsTimeline.vue'
 
 const props = defineProps<{ serverId: string }>()
 const store = useFail2banStore()
@@ -33,6 +34,8 @@ const hasData = computed(() =>
 
 <template>
   <div class="security-tab">
+    <SecurityEventsTimeline :server-id="serverId" />
+
     <div v-if="store.loading && !store.status" class="empty-state">
       <p class="muted">Loading fail2ban data…</p>
     </div>

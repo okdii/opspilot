@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-type Kind = 'server' | 'service' | 'process_service' | 'alert' | 'ssl' | 'domain' | 'job'
+type Kind = 'server' | 'service' | 'process_service' | 'alert' | 'ssl' | 'domain' | 'job' | 'severity'
 type Tone = 'success' | 'danger' | 'warning' | 'info' | 'muted'
 
 const props = defineProps<{ status: string; kind: Kind }>()
@@ -48,6 +48,10 @@ const MAP: Record<Kind, Record<string, { label: string; tone: Tone }>> = {
     late: { label: 'Late', tone: 'warning' },
     missing: { label: 'Missing', tone: 'danger' },
     paused: { label: 'Paused', tone: 'muted' },
+  },
+  severity: {
+    critical: { label: 'Critical', tone: 'danger' },
+    warning: { label: 'Warning', tone: 'warning' },
   },
 }
 
