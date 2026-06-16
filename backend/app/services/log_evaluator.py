@@ -61,10 +61,13 @@ def _derive_type(rule: LogAlertRule) -> str:
         return "new_ssh_login"
     if " 404 " in pat:
         return "probe_scan"
-    if ".php" in pat and "200" in pat:
-        return "webshell_execution"
+    # POST to a .php = upload attempt; check before the generic execution rule
+    # so the seeded `%POST%.php% 200 %` rule classifies as upload, while a GET
+    # to a .php in an upload dir (no "post") falls through to execution.
     if "post" in pat and ".php" in pat:
         return "webshell_upload"
+    if ".php" in pat and "200" in pat:
+        return "webshell_execution"
 
     # ── Existing classifications ─────────────────────────────────────────
     if source == _SSH_SOURCE:
