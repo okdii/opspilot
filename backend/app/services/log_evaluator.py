@@ -143,6 +143,42 @@ async def _ssh_bruteforce_offenders(db, rule: LogAlertRule) -> list[tuple[str, i
     return [(r.source_ip, int(r.cnt)) for r in rows if r.source_ip]
 
 
+async def _per_ip_offenders(db, rule: LogAlertRule, pattern: str) -> list[tuple[str, int]]:
+    """[(ip, count), …] for IPs at/over threshold in the window, grouped by IP.
+
+    IP extraction handles both sshd's ``from <ip>`` form and the leading-IP of a
+    CLF/combined web access line. Matching uses ``source LIKE :source`` and a
+    case-insensitive ``ILIKE`` on the pattern.
+    """
+    rows = await db.execute(
+        text(
+            r"""
+            SELECT
+              COALESCE(
+                (regexp_match(message, 'from ([0-9]{1,3}(?:\.[0-9]{1,3}){3}|[0-9a-fA-F:]+)'))[1],
+                (regexp_match(message, '^([0-9]{1,3}(?:\.[0-9]{1,3}){3})'))[1]
+              ) AS source_ip,
+              COUNT(*) AS cnt
+            FROM server_logs
+            WHERE server_id = :sid
+              AND source LIKE :source
+              AND message ILIKE :pattern
+              AND time > now() - make_interval(secs => :win)
+            GROUP BY source_ip
+            HAVING COUNT(*) >= :threshold
+            """
+        ),
+        {
+            "sid": str(rule.server_id),
+            "source": rule.source,
+            "pattern": pattern,
+            "win": rule.window_sec,
+            "threshold": rule.threshold,
+        },
+    )
+    return [(r.source_ip, int(r.cnt)) for r in rows if r.source_ip]
+
+
 async def _clear_or_resolve(db, alert_type: str, server_id) -> None:
     """Tick the auto-resolve counter for any open alert of this (type, server).
 
@@ -190,6 +226,33 @@ async def log_alert_evaluator() -> None:
         for rule in rules:
             alert_type = _derive_type(rule)
             try:
+                if alert_type == "probe_scan":
+                    offenders = await _per_ip_offenders(db, rule, rule.pattern)
+                    if offenders:
+                        await _reset_clear_count(db, alert_type, rule.server_id)
+                        # One alert per (type, server): the most prolific IP wins
+                        # the message; dedup keeps it to a single open alert.
+                        ip, cnt = max(offenders, key=lambda o: o[1])
+                        msg = (
+                            f"Probe scan: {cnt} requests returning 404 from {ip} "
+                            f"in the last {rule.window_sec}s "
+                            f"(threshold {rule.threshold})"
+                        )
+                        fired = await fire_alert(
+                            db,
+                            type=alert_type,
+                            severity=rule.severity,
+                            message=msg,
+                            server_id=rule.server_id,
+                            cooldown_min=rule.cooldown_min,
+                            commit=False,
+                        )
+                        if fired is not None:
+                            rule.last_fired_at = fired.sent_at
+                    else:
+                        await _clear_or_resolve(db, alert_type, rule.server_id)
+                    continue
+
                 if rule.source == _SSH_SOURCE:
                     offenders = await _ssh_bruteforce_offenders(db, rule)
                     if offenders:
