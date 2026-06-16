@@ -33,6 +33,7 @@ from app.routers.vhost_scan import router as vhost_scan_router
 from app.routers.cron_backup import router as cron_backup_router
 from app.routers.daily_report import router as daily_report_router
 from app.routers.fail2ban import router as fail2ban_router
+from app.routers.security_events import router as security_events_router
 from app.services.metric_evaluator import metric_alert_evaluator
 from app.services.log_evaluator import log_alert_evaluator
 from app.services.log_silence import log_silence_evaluator
@@ -134,6 +135,7 @@ app.include_router(vhost_scan_router)
 app.include_router(cron_backup_router)
 app.include_router(daily_report_router)
 app.include_router(fail2ban_router)
+app.include_router(security_events_router)
 
 
 @app.get("/api/health")
