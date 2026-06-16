@@ -65,7 +65,7 @@
 <body>
 <div class="header">
   <div><h1>OpsPilot &mdash; Dev Progress</h1><p>13 phases &middot; 212 tasks &middot; Python + FastAPI + Vue 3 + TimescaleDB</p></div>
-  <div class="badge">Updated: <span>2026-06-11</span></div>
+  <div class="badge">Updated: <span>2026-06-16</span></div>
 </div>
 <div class="overall">
   <div>
@@ -352,6 +352,18 @@ const phases = [
     { text: "Wire KernelEventsCard into SystemTab.vue as 5th card; LogsTab.vue reads route.query.source on mount to pre-select kernel chip", status: "done", smoke: true },
     { text: "Admin-only Agent Management section in InfoTab.vue with Reconfigure Agents button (Reconfiguring… → Done ✓ / error)", status: "done", smoke: true },
     { text: "Smoke test: card renders with 24h test data, View all navigates to Logs tab, Reconfigure Agents queues redeploy. Fixed: ServerDetail tab-switch watcher (watch route.query.tab)", status: "done", smoke: true },
+  ]},
+  { id: 18, title: "Security Incident Detection (Part 1)", subtitle: "Behavior-based kill-chain detection (recon→exploit→webshell upload/exec→persistence→log-tampering) for any server/attack method; nginx/LiteSpeed/Apache; reuses LogAlertRule + log_evaluator + fire_alert pipeline. Security Events timeline in Security tab.", tasks: [
+    { text: "log_evaluator: pattern-first _derive_type classification — 10 new alert types (jce_exploit_attempt, webshell_upload/execution/command_exec, probe_scan, new_ssh_login, ssh_key_modified, db_privilege_change, log_tampering, log_ingestion_silent); POST/.php upload check precedes .php+200 execution", status: "done", smoke: true },
+    { text: "Per-IP probe-scan grouping: _per_ip_offenders helper (COALESCE 'from <ip>' / leading CLF IP, GROUP BY source_ip HAVING COUNT>=threshold) + probe_scan branch in log_alert_evaluator (mirrors SSH brute-force)", status: "done", smoke: true },
+    { text: "Seed 16 security DEFAULT_LOG_RULES (9 web_access, 4 auditd, 2 mariadb_general, 1 auth) → 21 total", status: "done", smoke: true },
+    { text: "Migration 0030_security_detection: idempotent per-server backfill of 16 security rules + ix_server_logs_server_time index (server_logs server_id, time DESC)", status: "done", smoke: true },
+    { text: "log_silence.py: 60s dead-man's-switch heartbeat — fires log_ingestion_silent (critical) when a server with recent logs goes silent >5min; registered as APScheduler job", status: "done", smoke: true },
+    { text: "GET /api/servers/{id}/security/events endpoint: SECURITY_TYPES filter + STAGE kill-chain mapping, server-access check, limit 1-200", status: "done", smoke: true },
+    { text: "Fluent Bit feeds: 3 conditional INPUT blocks (web_access, auditd, mariadb_general) gated on render vars", status: "done", smoke: true },
+    { text: "Onboarding hardening: detect web access log (lsws/nginx/apache2/httpd), setup auditd webroot+ssh-key+log-tamper rules, web-server-aware PHP block with validate-before-reload + revert-on-failure; mariadb general log gated OFF. Fixed pre-existing SSHResult .strip() crash in step 7", status: "done", smoke: false },
+    { text: "security.ts Pinia store: fetchEvents(serverId), SecurityEvent interface (UUID id), error unwrap matching fail2ban.ts conventions", status: "done", smoke: true },
+    { text: "SecurityEventsTimeline.vue: kill-chain timeline, 60s poll, reuses StatusBadge (extended Kind union with 'severity'), skeleton/empty/error states, reduced-motion, relative-time; rendered as first child of SecurityTab. Smoke test: empty state renders in Security tab (verified in browser)", status: "done", smoke: true },
   ]},
 ];
 
