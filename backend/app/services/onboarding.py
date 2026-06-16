@@ -371,19 +371,21 @@ RULES
 augenrules --load >/dev/null 2>&1 && echo AUDITD_OK
 """
 
-# PHP-execution block for upload dirs. nginx: drop a conf.d include that nginx
-# already loads, validate with `nginx -t`; on failure remove the file and skip
-# the reload so nginx is never left in a non-validating state.
+# PHP-execution block for upload dirs. nginx loads conf.d/*.conf in the http{}
+# context, but a `location` directive is only valid inside a server{} block — a
+# bare location in conf.d fails `nginx -t`. So we cannot harden nginx globally
+# without editing the operator's vhosts (which we never do automatically).
+# Instead, write a ready-to-include snippet and leave it to the operator to add
+# `include snippets/opspilot-php-block.conf;` to their server block. Writing the
+# snippet never affects `nginx -t` because nothing includes it yet.
 _NGINX_PHP_BLOCK = r"""
-cat >/etc/nginx/conf.d/opspilot-php-block.conf <<'NGX'
+mkdir -p /etc/nginx/snippets
+cat >/etc/nginx/snippets/opspilot-php-block.conf <<'NGX'
+# OpsPilot — deny PHP execution under upload dirs.
+# Include inside each server{} block:  include snippets/opspilot-php-block.conf;
 location ~* /(images|media|uploads|files|tmp|cache)/.*\.php$ { deny all; }
 NGX
-if nginx -t >/dev/null 2>&1; then
-    systemctl reload nginx >/dev/null 2>&1 && echo PHPBLOCK_OK
-else
-    rm -f /etc/nginx/conf.d/opspilot-php-block.conf
-    echo PHPBLOCK_INVALID
-fi
+echo PHPBLOCK_SNIPPET
 """
 
 # Apache (Debian): DirectoryMatch denying PHP handlers under upload dirs.
@@ -493,10 +495,24 @@ async def _apply_php_block(ssh: SSHSession, web_kind: str) -> None:
     we log a manual-step note and change nothing that could break it.
     """
     cmd_by_kind = {
-        "nginx": _NGINX_PHP_BLOCK,
         "apache-debian": _APACHE_PHP_BLOCK_DEBIAN,
         "apache-rhel": _APACHE_PHP_BLOCK_RHEL,
     }
+    if web_kind == "nginx":
+        # nginx can't be hardened globally from http-context conf.d (see
+        # _NGINX_PHP_BLOCK). Write the ready-to-include snippet and emit a note —
+        # never edit the operator's vhosts automatically.
+        try:
+            await ssh.run(_NGINX_PHP_BLOCK, sudo=True, timeout=60)
+        except SSHError:
+            pass
+        await _push_log_note(
+            ssh, "nginx_php_block",
+            "nginx detected — wrote /etc/nginx/snippets/opspilot-php-block.conf. "
+            "Add `include snippets/opspilot-php-block.conf;` inside each server{} "
+            "block and reload nginx to deny PHP execution under upload dirs.",
+        )
+        return
     if web_kind == "litespeed":
         # LiteSpeed honors context rules in the vhost config, not a dropped conf
         # file, and editing the vhost generically is unsafe. Skip with a note.

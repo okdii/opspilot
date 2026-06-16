@@ -81,8 +81,12 @@
     Skip_Long_Lines   On
     Multiline.parser  mariadb_slow
 
-{% if web_access_log_path %}
-# ── Web access (nginx / LiteSpeed / Apache — normalized) ─────────────────────
+{% if web_access_log_path and web_access_log_path != '/var/log/nginx/access.log' %}
+# ── Web access (LiteSpeed / Apache — normalized) ─────────────────────────────
+# Skipped for nginx: the hardcoded `nginx_access` input above already tails
+# /var/log/nginx/access.log. Tailing it twice would double-count every line for
+# the security rules (which match source LIKE '%access%'). nginx_access already
+# matches that pattern, so nginx detection is unaffected.
 [INPUT]
     Name              tail
     Path              {{ web_access_log_path }}
