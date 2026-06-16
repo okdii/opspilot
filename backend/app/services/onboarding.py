@@ -344,6 +344,184 @@ def _log_paths(os_info: OSInfo) -> dict:
     }
 
 
+# ── Security hardening (Task 8) ──────────────────────────────────────────────
+#
+# These steps run during configure_fluent_bit so their results can be fed into
+# the Fluent Bit template (web_access_log_path / auditd_enabled /
+# mariadb_general_enabled gate the conditional INPUT blocks added in Task 7).
+#
+# All hardening is BEST-EFFORT: any failure is swallowed (the corresponding
+# template var stays falsy → its INPUT block is simply omitted). A hardening
+# failure must NEVER abort onboarding.
+
+# auditd: non-disruptive rules. The web-server uid is resolved remotely
+# (www-data / apache / nginx, falling back to 33) rather than hardcoded.
+_AUDITD_SETUP = """\
+WEBUID=$(id -u www-data 2>/dev/null || id -u apache 2>/dev/null || id -u nginx 2>/dev/null || echo 33)
+( apt-get install -y auditd >/dev/null 2>&1 || yum install -y audit >/dev/null 2>&1 || true )
+mkdir -p /etc/audit/rules.d
+cat >/etc/audit/rules.d/opspilot.rules <<RULES
+-w /var/www -p wa -k webroot_write
+-a exit,always -F arch=b64 -F uid=$WEBUID -S execve -k webshell_exec
+-a exit,always -F arch=b32 -F uid=$WEBUID -S execve -k webshell_exec
+-w /root/.ssh/authorized_keys -p wa -k ssh_key_change
+-w /home -p wa -k ssh_key_change
+-w /var/log -p wa -k log_tamper
+RULES
+augenrules --load >/dev/null 2>&1 && echo AUDITD_OK
+"""
+
+# PHP-execution block for upload dirs. nginx: drop a conf.d include that nginx
+# already loads, validate with `nginx -t`; on failure remove the file and skip
+# the reload so nginx is never left in a non-validating state.
+_NGINX_PHP_BLOCK = r"""
+cat >/etc/nginx/conf.d/opspilot-php-block.conf <<'NGX'
+location ~* /(images|media|uploads|files|tmp|cache)/.*\.php$ { deny all; }
+NGX
+if nginx -t >/dev/null 2>&1; then
+    systemctl reload nginx >/dev/null 2>&1 && echo PHPBLOCK_OK
+else
+    rm -f /etc/nginx/conf.d/opspilot-php-block.conf
+    echo PHPBLOCK_INVALID
+fi
+"""
+
+# Apache (Debian): DirectoryMatch denying PHP handlers under upload dirs.
+# Validate with apache2ctl configtest; revert + skip reload on failure.
+_APACHE_PHP_BLOCK_DEBIAN = r"""
+mkdir -p /etc/apache2/conf-available
+cat >/etc/apache2/conf-available/opspilot-php-block.conf <<'APC'
+<DirectoryMatch "/(images|media|uploads|files|tmp|cache)/">
+    <FilesMatch "\.(php|phtml|php[0-9]?)$">
+        Require all denied
+    </FilesMatch>
+</DirectoryMatch>
+APC
+a2enconf opspilot-php-block >/dev/null 2>&1 || ln -sf ../conf-available/opspilot-php-block.conf /etc/apache2/conf-enabled/opspilot-php-block.conf
+if apache2ctl configtest >/dev/null 2>&1; then
+    systemctl reload apache2 >/dev/null 2>&1 && echo PHPBLOCK_OK
+else
+    a2disconf opspilot-php-block >/dev/null 2>&1 || rm -f /etc/apache2/conf-enabled/opspilot-php-block.conf
+    rm -f /etc/apache2/conf-available/opspilot-php-block.conf
+    echo PHPBLOCK_INVALID
+fi
+"""
+
+# Apache (RHEL): same rule into conf.d (httpd auto-loads conf.d/*.conf).
+# Validate with httpd -t; revert + skip reload on failure.
+_APACHE_PHP_BLOCK_RHEL = r"""
+mkdir -p /etc/httpd/conf.d
+cat >/etc/httpd/conf.d/opspilot-php-block.conf <<'APC'
+<DirectoryMatch "/(images|media|uploads|files|tmp|cache)/">
+    <FilesMatch "\.(php|phtml|php[0-9]?)$">
+        Require all denied
+    </FilesMatch>
+</DirectoryMatch>
+APC
+if httpd -t >/dev/null 2>&1; then
+    systemctl reload httpd >/dev/null 2>&1 && echo PHPBLOCK_OK
+else
+    rm -f /etc/httpd/conf.d/opspilot-php-block.conf
+    echo PHPBLOCK_INVALID
+fi
+"""
+
+# MariaDB general query log enable (GATED — disruptive, restarts MariaDB).
+# NOT run by default in this task; kept here for a future opt-in flag.
+_MARIADB_GENERAL_ENABLE = """\
+cat >/etc/mysql/conf.d/opspilot-general-log.cnf <<CNF
+[mysqld]
+general_log = 1
+general_log_file = /var/log/mysql/general.log
+CNF
+systemctl restart mariadb && echo DBLOG_OK
+"""
+
+
+async def _detect_web_access_log(ssh: SSHSession) -> str:
+    """
+    Detect the active web server and return its access-log path.
+
+    Priority: LiteSpeed → nginx → Apache(Debian) → Apache(RHEL).
+    Returns "" if none detected (keeps the template's web_access INPUT off).
+    """
+    checks = [
+        ("systemctl is-active --quiet lsws", "/usr/local/lsws/logs/access.log"),
+        ("systemctl is-active --quiet nginx", "/var/log/nginx/access.log"),
+        ("systemctl is-active --quiet apache2", "/var/log/apache2/access.log"),
+        ("test -f /var/log/httpd/access_log", "/var/log/httpd/access_log"),
+    ]
+    for cmd, path in checks:
+        try:
+            r = await ssh.run(cmd, timeout=10)
+        except SSHError:
+            continue
+        if r.ok:
+            return path
+    return ""
+
+
+def _web_server_kind(web_access_log_path: str) -> str:
+    """Map a detected access-log path back to a web-server kind for PHP-block selection."""
+    if web_access_log_path == "/usr/local/lsws/logs/access.log":
+        return "litespeed"
+    if web_access_log_path == "/var/log/nginx/access.log":
+        return "nginx"
+    if web_access_log_path == "/var/log/apache2/access.log":
+        return "apache-debian"
+    if web_access_log_path == "/var/log/httpd/access_log":
+        return "apache-rhel"
+    return ""
+
+
+async def _setup_auditd(ssh: SSHSession) -> bool:
+    """Install non-disruptive auditd rules. Best-effort; returns True only on AUDITD_OK."""
+    try:
+        r = await ssh.run(_AUDITD_SETUP, sudo=True, timeout=120)
+        return "AUDITD_OK" in (r.stdout or "")
+    except SSHError:
+        return False
+
+
+async def _apply_php_block(ssh: SSHSession, web_kind: str) -> None:
+    """
+    Drop a web-server-aware PHP-execution block for upload dirs. Best-effort.
+
+    Each variant validates the web-server config BEFORE reloading and reverts its
+    own file if validation fails — the web server is never left non-validating.
+    LiteSpeed cannot be hardened generically without risking the vhost config, so
+    we log a manual-step note and change nothing that could break it.
+    """
+    cmd_by_kind = {
+        "nginx": _NGINX_PHP_BLOCK,
+        "apache-debian": _APACHE_PHP_BLOCK_DEBIAN,
+        "apache-rhel": _APACHE_PHP_BLOCK_RHEL,
+    }
+    if web_kind == "litespeed":
+        # LiteSpeed honors context rules in the vhost config, not a dropped conf
+        # file, and editing the vhost generically is unsafe. Skip with a note.
+        await _push_log_note(
+            ssh, "litespeed_php_block",
+            "LiteSpeed detected — PHP-execution block requires a manual vhost "
+            "context rule denying *.php under upload dirs; skipped automatically.",
+        )
+        return
+    cmd = cmd_by_kind.get(web_kind)
+    if not cmd:
+        return
+    try:
+        await ssh.run(cmd, sudo=True, timeout=60)
+    except SSHError:
+        # Validation/reload guarded inside the script; nothing left to revert here.
+        pass
+
+
+async def _push_log_note(ssh: SSHSession, key: str, message: str) -> None:
+    """Lightweight informational note — no remote side effect, just structured logging."""
+    import logging
+    logging.getLogger("opspilot.onboarding").info("%s: %s", key, message)
+
+
 async def _step_configure_fluent_bit(db, server, ssh: SSHSession, os_info: OSInfo):
     log, t0 = await _start_step(db, server.id, "configure_fluent_bit", 7)
     paths = _log_paths(os_info)
@@ -367,7 +545,7 @@ async def _step_configure_fluent_bit(db, server, ssh: SSHSession, os_info: OSInf
         "echo '/var/log/php*-fpm.log'"
     )
     _php_result = await ssh.run(_php_detect, timeout=10)
-    php_fpm_log_path = (_php_result or "").strip() or "/var/log/php*-fpm.log"
+    php_fpm_log_path = (_php_result.stdout or "").strip() or "/var/log/php*-fpm.log"
 
     # Detect PHP app error_log from php.ini (empty string = omit INPUT block).
     _php_app_detect = (
@@ -377,7 +555,26 @@ async def _step_configure_fluent_bit(db, server, ssh: SSHSession, os_info: OSInf
         "[ -n \"$p\" ] && echo \"$p\" || echo ''"
     )
     _php_app_result = await ssh.run(_php_app_detect, timeout=10)
-    php_app_log_path = (_php_app_result or "").strip()
+    php_app_log_path = (_php_app_result.stdout or "").strip()
+
+    # ── Security hardening (Task 8) — compute template vars + apply side effects ──
+    # All best-effort: a failure leaves the var falsy and onboarding continues.
+    web_access_log_path = await _detect_web_access_log(ssh)
+    web_kind = _web_server_kind(web_access_log_path)
+
+    # (2) auditd — non-disruptive rules; gates the auditd INPUT block.
+    auditd_enabled = await _setup_auditd(ssh)
+
+    # (3) PHP-execution block for upload dirs (web-server-aware, validated-before-reload).
+    await _apply_php_block(ssh, web_kind)
+
+    # (4) MariaDB general query log — GATED, default OFF (disruptive: restarts MariaDB).
+    # No onboarding flag exists for this yet, so it stays disabled. When a future
+    # opt-in flag is added, replace `False` with that flag and run the stub below:
+    #     if r := await ssh.run(_MARIADB_GENERAL_ENABLE, sudo=True, timeout=60):
+    #         mariadb_general_enabled = "DBLOG_OK" in (r.stdout or "")
+    # By default NO MariaDB restart happens.
+    mariadb_general_enabled = False
 
     tmpl = _template_env.get_template("fluent-bit.conf.j2")
     conf = tmpl.render(
@@ -389,6 +586,9 @@ async def _step_configure_fluent_bit(db, server, ssh: SSHSession, os_info: OSInf
         ingestion_token=str(server.ingestion_token),
         php_fpm_log_path=php_fpm_log_path,
         php_app_log_path=php_app_log_path,
+        web_access_log_path=web_access_log_path,
+        auditd_enabled=auditd_enabled,
+        mariadb_general_enabled=mariadb_general_enabled,
         **paths,
     )
     # Multiline/parser definitions must live in a separate parsers file
