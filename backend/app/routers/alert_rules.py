@@ -35,6 +35,23 @@ DEFAULT_LOG_RULES: list[tuple[str, str, str, int, int]] = [
     ("auth", "%Failed password%", "critical", 5, 300),
     ("mariadb_error", "%ERROR%", "critical", 1, 300),
     ("mariadb_slow", "%Query_time%", "warning", 5, 300),
+    # ── Security detection (Part 1) ───────────────────────────────────
+    ("%access%", "%com_jce%profiles.import%", "critical", 1, 300),
+    ("%access%", "%POST%.php% 200 %", "critical", 1, 300),
+    ("%access%", "%/images/%.php% 200 %", "critical", 1, 300),
+    ("%access%", "%/media/%.php% 200 %", "critical", 1, 300),
+    ("%access%", "%/uploads/%.php% 200 %", "critical", 1, 300),
+    ("%access%", "%/files/%.php% 200 %", "critical", 1, 300),
+    ("%access%", "%/tmp/%.php% 200 %", "critical", 1, 300),
+    ("%access%", "%/cache/%.php% 200 %", "critical", 1, 300),
+    ("%access%", "% 404 %", "warning", 20, 300),
+    ("auditd", "%webroot_write%", "critical", 1, 300),
+    ("auditd", "%webshell_exec%", "critical", 1, 300),
+    ("auditd", "%ssh_key_change%", "critical", 1, 300),
+    ("auditd", "%log_tamper%", "critical", 1, 300),
+    ("mariadb_general", "%CREATE USER%", "critical", 1, 300),
+    ("mariadb_general", "%GRANT ALL%", "critical", 1, 300),
+    ("auth", "%Accepted publickey%", "warning", 1, 300),
 ]
 
 
