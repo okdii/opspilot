@@ -22,9 +22,14 @@ from app.database import AsyncSessionLocal
 from app.models.other import Alert, SecurityAction
 from app.models.server import Server
 from app.services import response_channel as rc
-from app.services.alerting import OPEN_STATES
 
 logger = logging.getLogger(__name__)
+
+# Alert states the responder acts on. Deliberately EXCLUDES "suppressed":
+# entering maintenance mode sets state='suppressed' to suppress all alert
+# activity (locked project decision), which must also pause auto-response —
+# so suppressed alerts never trigger a remediation.
+_ACTIVE_STATES = ("firing", "acknowledged", "snoozed")
 
 # type → confidence (derived here; Part 1 has no confidence field).
 CONFIDENCE = {
@@ -53,6 +58,13 @@ ACTION_PLAN = {
 # window, pause auto-response for that server and escalate (alert-only).
 _BREAKER_MAX = 10
 _BREAKER_WINDOW_MIN = 10
+
+# ttl_expiry bounds: keep the per-tick working set finite. Max block_ttl_hours is
+# 720h (30d), so a 60-day recency window leaves ≥30 days of retry headroom while
+# ensuring a block whose unblock permanently fails stops being retried forever
+# (and ancient rows never accumulate into an unbounded scan).
+_TTL_GIVEUP_DAYS = 60
+_TTL_BATCH = 500
 
 _IPV4 = re.compile(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b")
 
@@ -240,7 +252,7 @@ async def security_responder() -> None:
         alerts = (await db.execute(
             select(Alert).where(
                 Alert.type.in_(ACTION_PLAN.keys()),
-                Alert.state.in_(OPEN_STATES),
+                Alert.state.in_(_ACTIVE_STATES),
                 Alert.server_id.in_(servers.keys()),
             ).order_by(Alert.sent_at.asc())
         )).scalars().all()
@@ -262,7 +274,11 @@ async def ttl_expiry() -> None:
             select(SecurityAction, Server)
             .join(Server, Server.id == SecurityAction.server_id)
             .where(SecurityAction.action_type == "block_ip",
-                   SecurityAction.status == "executed")
+                   SecurityAction.status == "executed",
+                   SecurityAction.executed_at.isnot(None),
+                   SecurityAction.executed_at >= _now() - timedelta(days=_TTL_GIVEUP_DAYS))
+            .order_by(SecurityAction.executed_at.asc())
+            .limit(_TTL_BATCH)
         )).all()
         for action, server in rows:
             ttl = server.block_ttl_hours or 24

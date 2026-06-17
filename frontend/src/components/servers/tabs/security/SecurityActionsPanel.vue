@@ -21,9 +21,11 @@ onUnmounted(() => { if (poll) clearInterval(poll) })
 const pending = computed(() => store.actions.filter(a => a.status === 'pending_approval'))
 const history = computed(() => store.actions.filter(a => a.status !== 'pending_approval'))
 
-// Map ledger status → StatusBadge alert tone vocabulary.
+// Map ledger status → StatusBadge alert tone vocabulary. executed (success) must
+// read differently from failed: green for a successful remediation, red for a
+// failure; reverted/expired are muted (no longer active), rejected suppressed.
 function tone(s: string): string {
-  return ({ executed: 'firing', reverted: 'resolved', expired: 'snoozed',
+  return ({ executed: 'resolved', reverted: 'snoozed', expired: 'snoozed',
             rejected: 'suppressed', failed: 'firing' } as Record<string, string>)[s] ?? 'snoozed'
 }
 

@@ -55,9 +55,14 @@ async def list_actions(server_id: str, user: CurrentUser, db: AsyncSession = Dep
 
 
 async def _get_action(server_id: str, action_id: int, db: AsyncSession) -> SecurityAction:
+    # FOR UPDATE locks the row until this request's transaction commits, so two
+    # concurrent approve/undo calls on the same action serialize: the second
+    # blocks here, then re-reads the post-commit status and fails its state-
+    # transition guard — preventing a privileged verb from running twice.
     a = (await db.execute(
         select(SecurityAction).where(
             SecurityAction.id == action_id, SecurityAction.server_id == server_id)
+        .with_for_update()
     )).scalar_one_or_none()
     if a is None:
         raise HTTPException(404, detail={"error": "not_found", "message": "Action not found."})
