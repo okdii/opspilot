@@ -40,6 +40,35 @@ def _unit_state(unit):
         return "not-found", "unknown"
 
 
+def _litespeed_running():
+    """Fallback for LiteSpeed: check lshttpd process when systemd reports not installed.
+
+    Commercial LiteSpeed manages itself via lswsctrl rather than systemd, so
+    systemctl always reports the unit as not-found even when the server is live.
+    """
+    # Primary: pgrep for the lshttpd master process
+    try:
+        r = subprocess.run(
+            ["pgrep", "-x", "lshttpd"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=3,
+        )
+        if r.returncode == 0:
+            return True
+    except Exception:
+        pass
+    # Secondary: check known PID files
+    import os
+    for pid_path in ("/tmp/lshttpd.pid", "/usr/local/lsws/logs/lshttpd.pid"):
+        try:
+            with open(pid_path) as f:
+                pid = int(f.read().strip())
+            os.kill(pid, 0)  # signal 0 = existence check, no signal sent
+            return True
+        except Exception:
+            continue
+    return False
+
+
 def _proc_stats(proc_names):
     try:
         import psutil
@@ -72,6 +101,11 @@ def collect_services():
             else:
                 status = "stopped"
             break
+        # LiteSpeed fallback: commercial LiteSpeed uses lswsctrl not systemd,
+        # so all aliases report not-found even when the server is running.
+        if status == "not_installed" and svc["name"] == "litespeed":
+            if _litespeed_running():
+                status = "running"
         entry = {"name": svc["name"], "status": status}
         if status == "running":
             entry.update(_proc_stats(svc["proc_names"]))
