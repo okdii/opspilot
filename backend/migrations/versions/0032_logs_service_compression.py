@@ -50,11 +50,13 @@ def upgrade() -> None:
     conn.execute(sa.text(
         "SELECT add_retention_policy('server_metrics_hourly', INTERVAL '90 days')"
     ))
+    # server_metrics_daily intentionally has no retention policy — daily aggregates
+    # are kept forever for long-term capacity planning. Their size is negligible.
 
     # 5. Backfill: compress existing server_logs chunks already older than 2 days.
     #    Runs synchronously in the migration — may take a minute on large datasets.
     conn.execute(sa.text("""
-        SELECT compress_chunk(chunk_schema || '.' || chunk_name)
+        SELECT compress_chunk(format('%I.%I', chunk_schema, chunk_name))
         FROM timescaledb_information.chunks
         WHERE hypertable_name = 'server_logs'
           AND is_compressed    = false
@@ -63,7 +65,7 @@ def upgrade() -> None:
 
     # 6. Backfill: compress existing service_checks chunks older than 2 days.
     conn.execute(sa.text("""
-        SELECT compress_chunk(chunk_schema || '.' || chunk_name)
+        SELECT compress_chunk(format('%I.%I', chunk_schema, chunk_name))
         FROM timescaledb_information.chunks
         WHERE hypertable_name = 'service_checks'
           AND is_compressed    = false
@@ -74,27 +76,23 @@ def upgrade() -> None:
 def downgrade() -> None:
     conn = op.get_bind()
 
-    # Remove CAGG retention
     conn.execute(sa.text(
         "SELECT remove_retention_policy('server_metrics_hourly', if_exists => true)"
     ))
 
-    # Decompress all chunks before removing compression settings
     for table in ("service_checks", "server_logs"):
-        conn.execute(sa.text(f"""
-            SELECT decompress_chunk(chunk_schema || '.' || chunk_name)
-            FROM timescaledb_information.chunks
-            WHERE hypertable_name = '{table}'
-              AND is_compressed   = true
-        """))
         conn.execute(sa.text(
-            f"SELECT remove_compression_policy('{table}', if_exists => true)"
-        ))
+            "SELECT decompress_chunk(format('%I.%I', chunk_schema, chunk_name)) "
+            "FROM timescaledb_information.chunks "
+            "WHERE hypertable_name = :t AND is_compressed = true"
+        ), {"t": table})
         conn.execute(sa.text(
-            f"ALTER TABLE {table} SET (timescaledb.compress = false)"
-        ))
+            "SELECT remove_compression_policy(CAST(:t AS regclass), if_exists => true)"
+        ), {"t": table})
 
-    # Restore GIN index
+    conn.execute(sa.text("ALTER TABLE service_checks SET (timescaledb.compress = false)"))
+    conn.execute(sa.text("ALTER TABLE server_logs SET (timescaledb.compress = false)"))
+
     conn.execute(sa.text("""
         CREATE INDEX IF NOT EXISTS ix_server_logs_fts
         ON server_logs USING GIN (to_tsvector('english', message))
