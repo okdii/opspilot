@@ -112,7 +112,11 @@ async def db_disk_monitor() -> None:
     from app.services.alerting import fire_alert
 
     log = logging.getLogger(__name__)
-    usage = shutil.disk_usage("/")
+    try:
+        usage = shutil.disk_usage("/")
+    except OSError:
+        log.exception("db_disk_monitor: could not read disk usage, skipping")
+        return
     pct = usage.used / usage.total * 100
 
     async with AsyncSessionLocal() as db:
