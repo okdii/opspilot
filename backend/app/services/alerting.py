@@ -35,6 +35,12 @@ logger = logging.getLogger(__name__)
 # Open states that block a re-fire (spec §16 dedup).
 OPEN_STATES = ("firing", "acknowledged", "snoozed", "suppressed")
 
+# Notification floor: only these severities push email + Discord on fire. Lower
+# severities (e.g. 'warning' — Recon/probe_scan) are still recorded and shown
+# in-app / over WebSocket, but don't email anyone. This kills alert-fatigue
+# noise from frequent low-value detections while keeping them visible.
+NOTIFY_SEVERITIES = ("critical",)
+
 # spec §11.3 — which FK column governs dedup/cooldown for each alert type.
 # Anything not listed (cpu/ram/disk/disk_inode/db_*/agent_offline/log types)
 # is keyed on server_id.
@@ -233,12 +239,15 @@ async def fire_alert(
 
     org_id, server_name = await _resolve_org_and_server_name(db, alert)
 
-    await alert_email.send_alert_email(
-        db, alert, kind="fire", server_name=server_name, email_meta=email_meta
-    )
-    await discord_service.send_discord_alert(
-        db, alert, kind="fire", server_name=server_name
-    )
+    # Push email + Discord only above the notification floor; quieter severities
+    # are still recorded and broadcast in-app below.
+    if severity in NOTIFY_SEVERITIES:
+        await alert_email.send_alert_email(
+            db, alert, kind="fire", server_name=server_name, email_meta=email_meta
+        )
+        await discord_service.send_discord_alert(
+            db, alert, kind="fire", server_name=server_name
+        )
     await _broadcast("alert_fired", alert, org_id, server_name)
 
     if commit:
@@ -255,7 +264,9 @@ async def resolve_alert(
 ) -> None:
     """Set state='resolved', resolved_at=now, consecutive_clear_count=0; send a
     resolve email (best-effort) unless send_email is False; broadcast
-    'alert_resolved'. No-op if already resolved."""
+    'alert_resolved'. No-op if already resolved. Resolve notifications honour the
+    same severity floor as fire — a 'warning' that never emailed on fire won't
+    email on resolve either."""
     if alert.state == "resolved":
         return
 
@@ -266,13 +277,15 @@ async def resolve_alert(
 
     org_id, server_name = await _resolve_org_and_server_name(db, alert)
 
-    if send_email:
+    notify = alert.severity in NOTIFY_SEVERITIES
+    if send_email and notify:
         await alert_email.send_alert_email(
             db, alert, kind="resolve", server_name=server_name
         )
-    await discord_service.send_discord_alert(
-        db, alert, kind="resolve", server_name=server_name
-    )
+    if notify:
+        await discord_service.send_discord_alert(
+            db, alert, kind="resolve", server_name=server_name
+        )
     await _broadcast("alert_resolved", alert, org_id, server_name)
 
     if commit:
