@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import ipaddress
 import logging
-import shlex
 
 from app.models.server import Server
 from app.services.ssh import SSHSession
