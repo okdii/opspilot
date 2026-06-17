@@ -892,9 +892,9 @@ async def _step_deploy_opspilot_agent(db, server, ssh: SSHSession):
         )
         await ssh.upload(unit, "/etc/systemd/system/opspilot-agent.service", mode=0o644, sudo=True)
 
-        # Enable and start
+        # Enable and (re)start — restart picks up new script on redeploy
         r = await ssh.run(
-            "systemctl daemon-reload && systemctl enable --now opspilot-agent",
+            "systemctl daemon-reload && systemctl enable opspilot-agent && systemctl restart opspilot-agent",
             sudo=True, timeout=15,
         )
         if not r.ok:
