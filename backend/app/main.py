@@ -36,6 +36,7 @@ from app.routers.fail2ban import router as fail2ban_router
 from app.routers.security_events import router as security_events_router
 from app.services.metric_evaluator import metric_alert_evaluator
 from app.services.log_evaluator import log_alert_evaluator
+from app.services.security_responder import security_responder, ttl_expiry as security_ttl_expiry
 from app.services.log_silence import log_silence_evaluator
 from app.services.ssl_checker import ssl_checker_daily, domain_checker_daily
 from app.services.probe import schedule_all_active
@@ -65,6 +66,8 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(dmesg_collector, "interval", minutes=15, id="dmesg_collector", replace_existing=True)
     scheduler.add_job(fail2ban_retention, "cron", hour=4, minute=30, id="fail2ban_retention", replace_existing=True)
     scheduler.add_job(fail2ban_collector, "interval", minutes=5, id="fail2ban_collector", replace_existing=True)
+    scheduler.add_job(security_responder, "interval", seconds=30, id="security_responder", replace_existing=True)
+    scheduler.add_job(security_ttl_expiry, "interval", seconds=60, id="security_ttl_expiry", replace_existing=True)
     scheduler.start()
     asyncio.create_task(schedule_all_active())
     flush_task = asyncio.create_task(live_bus.flush_loop())
