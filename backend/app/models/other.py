@@ -314,3 +314,22 @@ class Settings(Base):
     ai_model: Mapped[str] = mapped_column(String(80), nullable=False, server_default="claude-sonnet-4-6")
     ai_api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_base_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    abuseipdb_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    abuseipdb_api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class IpIntel(Base):
+    """Cached IP reputation (AbuseIPDB). Keyed by IP for upsert + fast lookup.
+    Provider-agnostic columns; the full provider response is kept in `raw`."""
+    __tablename__ = "ip_intel"
+
+    ip: Mapped[str] = mapped_column(Text, primary_key=True)
+    abuse_score: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    country_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    isp: Mapped[str | None] = mapped_column(Text, nullable=True)
+    usage_type: Mapped[str | None] = mapped_column(Text, nullable=True)
+    total_reports: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_reported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    raw: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("NOW()"))

@@ -16,11 +16,12 @@ from app.models.other import (
     JobRun,
     DBCredential,
     Settings as AppSettings,
+    IpIntel,
 )
 
 __all__ = [
     "User", "UserOrganization", "Session", "Organization", "Invite",
     "Server", "OnboardingLog", "Service", "Incident", "Domain", "SSLCert",
     "Alert", "AlertRule", "LogAlertRule", "MaintenanceWindow",
-    "MonitoredJob", "JobRun", "DBCredential", "AppSettings",
+    "MonitoredJob", "JobRun", "DBCredential", "AppSettings", "IpIntel",
 ]
