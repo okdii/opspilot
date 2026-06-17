@@ -54,6 +54,9 @@ const discordWebhookUrl = ref('')
 const discordEnabled = ref(false)
 const savingDiscord = ref(false)
 
+const autoResponseEnabled = ref(false)
+const savingAutoResponse = ref(false)
+
 const aiProvider = ref<'disabled' | 'anthropic' | 'openai' | 'gemini' | 'custom'>('disabled')
 const aiModel = ref('claude-sonnet-4-6')
 const aiBaseUrl = ref('')
@@ -86,6 +89,7 @@ async function load() {
     smtpEnabled.value = settings.smtp.enabled
     discordWebhookUrl.value = settings.discord.webhookUrl
     discordEnabled.value = settings.discord.enabled
+    autoResponseEnabled.value = settings.autoResponse.enabled
     aiProvider.value = settings.ai.provider
     aiModel.value = settings.ai.model
     aiHasKey.value = settings.ai.hasKey
@@ -178,6 +182,20 @@ async function saveDiscord() {
     notify.error(getApiError(err) ?? 'Unable to save Discord settings.')
   } finally {
     savingDiscord.value = false
+  }
+}
+
+async function saveAutoResponse() {
+  savingAutoResponse.value = true
+  try {
+    await settings.saveAutoResponse({
+      auto_response_enabled: autoResponseEnabled.value,
+    })
+    notify.success('Security auto-response settings saved.')
+  } catch (err) {
+    notify.error(getApiError(err) ?? 'Unable to save security auto-response settings.')
+  } finally {
+    savingAutoResponse.value = false
   }
 }
 
@@ -347,6 +365,26 @@ async function testAi() {
         </button>
         <button class="ghost" :disabled="testingDiscord || loading || !discordWebhookUrl.trim()" @click="sendDiscordTest">
           <span v-if="testingDiscord" class="spin dark"></span><span v-else>Send Test Notification</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Security Auto-Response -->
+    <section class="card">
+      <h2>Security Auto-Response</h2>
+      <div class="field toggle-row">
+        <div>
+          <span class="toggle-label">Security auto-response (master switch)</span>
+          <p class="hint">Master kill switch. When OFF, no automatic remediation runs on any server, regardless of per-server settings.</p>
+        </div>
+        <label class="switch">
+          <input v-model="autoResponseEnabled" type="checkbox" :disabled="loading" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="actions">
+        <button class="primary" :disabled="savingAutoResponse || loading" @click="saveAutoResponse">
+          <span v-if="savingAutoResponse" class="spin"></span><span v-else>Save</span>
         </button>
       </div>
     </section>

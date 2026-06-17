@@ -25,6 +25,9 @@ export const useSettingsStore = defineStore('settings', () => {
     webhookUrl: '',
     enabled: false,
   })
+  const autoResponse = ref({
+    enabled: false,
+  })
   const ai = ref({
     provider: 'disabled' as 'disabled' | 'anthropic' | 'openai' | 'gemini' | 'custom',
     model: 'claude-sonnet-4-6',
@@ -66,6 +69,9 @@ export const useSettingsStore = defineStore('settings', () => {
       webhookUrl: data.discord_webhook_url ?? '',
       enabled: data.discord_enabled ?? false,
     }
+    autoResponse.value = {
+      enabled: data.auto_response_enabled ?? false,
+    }
     ai.value = {
       provider: data.ai_provider ?? 'disabled',
       model: data.ai_model ?? 'claude-sonnet-4-6',
@@ -95,6 +101,10 @@ export const useSettingsStore = defineStore('settings', () => {
     await fetchSettings()
   }
   async function saveDiscord(p: { discord_webhook_url: string; discord_enabled: boolean }) {
+    await api.patch('/api/settings', p)
+    await fetchSettings()
+  }
+  async function saveAutoResponse(p: { auto_response_enabled: boolean }) {
     await api.patch('/api/settings', p)
     await fetchSettings()
   }
@@ -163,6 +173,7 @@ export const useSettingsStore = defineStore('settings', () => {
     smtp,
     retention,
     discord,
+    autoResponse,
     ai,
     sessions,
     team,
@@ -175,6 +186,7 @@ export const useSettingsStore = defineStore('settings', () => {
     testDiscord,
     saveRetention,
     saveDiscord,
+    saveAutoResponse,
     fetchSessions,
     revokeSession,
     revokeAllOtherSessions,

@@ -21,6 +21,7 @@ class SettingsResponse(BaseModel):
     timezone: str
     discord_webhook_url: str | None
     discord_enabled: bool
+    auto_response_enabled: bool
     ai_provider: str
     ai_model: str
     ai_has_key: bool
@@ -45,6 +46,7 @@ class SettingsPatch(BaseModel):
     timezone: str | None = None
     discord_webhook_url: str | None = None
     discord_enabled: bool | None = None
+    auto_response_enabled: bool | None = None
     ai_provider: str | None = None
     ai_model: str | None = None
     ai_api_key: str | None = None  # plaintext in; encrypted at rest; blank/None keeps existing
