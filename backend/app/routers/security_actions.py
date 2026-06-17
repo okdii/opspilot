@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.deps import AdminUser, CurrentUser
-from app.models.other import Alert, SecurityAction
+from app.models.other import SecurityAction
 from app.models.server import Server
 from app.services import response_channel as rc
 from app.services import security_responder as responder
@@ -70,10 +70,10 @@ async def approve(server_id: str, action_id: int, user: AdminUser, db: AsyncSess
     a = await _get_action(server_id, action_id, db)
     if a.status != "pending_approval":
         raise HTTPException(409, detail={"error": "conflict", "message": "Action is not pending."})
+    a.actor = user.username
     try:
         reversal = await responder._execute(server, a.action_type, a.target)
         a.status, a.executed_at, a.reversal = "executed", _now(), reversal
-        a.actor = user.username
         a.detail = f"approved+{a.action_type} {a.target}"
     except rc.ResponseError as e:
         a.status, a.detail = "failed", str(e)
@@ -98,6 +98,11 @@ async def undo(server_id: str, action_id: int, user: AdminUser, db: AsyncSession
     a = await _get_action(server_id, action_id, db)
     if a.status != "executed":
         raise HTTPException(409, detail={"error": "conflict", "message": "Only executed actions can be undone."})
+    if a.action_type not in ("block_ip", "quarantine_file", "revert_authorized_keys", "disable_db_user"):
+        raise HTTPException(400, detail={"error": "not_reversible",
+                                         "message": f"{a.action_type} cannot be undone."})
+    if not a.reversal:
+        raise HTTPException(409, detail={"error": "no_reversal", "message": "No reversal data recorded for this action."})
     try:
         if a.action_type == "block_ip":
             await rc.unblock_ip(server, a.reversal["ip"])
@@ -107,9 +112,6 @@ async def undo(server_id: str, action_id: int, user: AdminUser, db: AsyncSession
             await rc.restore_authorized_keys(server, a.reversal)
         elif a.action_type == "disable_db_user":
             await rc.enable_db_user(server, a.reversal)
-        else:
-            raise HTTPException(400, detail={"error": "not_reversible",
-                                             "message": f"{a.action_type} cannot be undone."})
     except rc.ResponseError as e:
         raise HTTPException(502, detail={"error": "undo_failed", "message": str(e)})
     a.status, a.reverted_at, a.actor = "reverted", _now(), user.username
