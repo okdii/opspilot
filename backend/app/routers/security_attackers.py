@@ -5,7 +5,7 @@ GET /api/servers/{server_id}/security/attackers/{ip}/events  one attacker's even
 GET /api/servers/{server_id}/security/trend                  global attack volume per day
 """
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
@@ -160,3 +160,68 @@ async def attackers(
         }
 
     return {"items": [_out(g) for g in page], "total": total}
+
+
+@router.get("/{server_id}/security/attackers/{ip}/events")
+async def attacker_events(
+    server_id: str,
+    ip: str,
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    """Security event history for one attacker IP (newest first), same row shape
+    as /security/events so the expanded row can render a compact event list."""
+    await _check_access(server_id, user, db)
+    alerts, block_targets = await _alerts_and_block_targets(db, server_id)
+    matched = [a for a in alerts if _resolve_ip(a, block_targets) == ip]
+    matched.sort(key=lambda a: a.sent_at or _MIN_AWARE, reverse=True)
+    total = len(matched)
+    page = matched[offset:offset + limit]
+    return {
+        "items": [
+            {
+                "id": str(a.id), "type": a.type, "stage": STAGE.get(a.type, "—"),
+                "severity": a.severity, "message": a.message,
+                "state": a.state, "at": a.sent_at,
+            }
+            for a in page
+        ],
+        "total": total,
+    }
+
+
+@router.get("/{server_id}/security/trend")
+async def security_trend(
+    server_id: str,
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+    days: int = Query(30, ge=1, le=90),
+):
+    """Global attack volume per day, stacked by severity, zero-filled across the
+    full window so the chart has a continuous axis."""
+    await _check_access(server_id, user, db)
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(days=days)
+    day = func.date_trunc("day", Alert.sent_at, "UTC")
+    rows = (await db.execute(
+        select(day.label("day"), Alert.severity, func.count())
+        .where(Alert.server_id == server_id, Alert.type.in_(SECURITY_TYPES),
+               Alert.sent_at >= since)
+        .group_by(day, Alert.severity)
+    )).all()
+
+    buckets: dict[str, dict] = {}
+    for d, severity, count in rows:
+        key = d.date().isoformat()
+        b = buckets.setdefault(key, {"date": key, "critical": 0, "warning": 0})
+        if severity in ("critical", "warning"):
+            b[severity] += count
+
+    start = (now - timedelta(days=days - 1)).date()
+    return [
+        buckets.get((start + timedelta(days=n)).isoformat(),
+                    {"date": (start + timedelta(days=n)).isoformat(), "critical": 0, "warning": 0})
+        for n in range(days)
+    ]
