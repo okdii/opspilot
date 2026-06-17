@@ -24,6 +24,9 @@ QUARANTINE_DIR = "/var/opspilot-quarantine"
 # Web roots a quarantine target must resolve under. Mirrors Part 1 detection dirs.
 _WEB_ROOTS = ("/var/www", "/usr/share/nginx", "/srv/www", "/home")
 
+# MariaDB root defaults file on the server (project rule; never echoed to logs).
+DB_CREDENTIALS_FILE = "/root/.mdsb-db-credentials"
+
 
 class ResponseError(Exception):
     """A verb failed validation or execution. Caller records status='failed'."""
@@ -68,6 +71,7 @@ async def block_ip(server: Server, ip: str) -> dict:
     scheduler. Returns reversal data (the ip + iptables bin used)."""
     ip = _validate_ip(ip)
     binary = _iptables_bin(ip)
+    logger.info("block_ip server=%s ip=%s", server.id, ip)
     cmd = f"{binary} -C INPUT -s {ip} -j DROP 2>/dev/null || {binary} -I INPUT -s {ip} -j DROP"
     async with SSHSession(server) as ssh:
         r = await ssh.run(cmd, sudo=True, timeout=20)
@@ -79,6 +83,7 @@ async def block_ip(server: Server, ip: str) -> dict:
 async def unblock_ip(server: Server, ip: str) -> None:
     ip = _validate_ip(ip)
     binary = _iptables_bin(ip)
+    logger.info("unblock_ip server=%s ip=%s", server.id, ip)
     cmd = f"{binary} -D INPUT -s {ip} -j DROP 2>/dev/null || true"
     async with SSHSession(server) as ssh:
         await ssh.run(cmd, sudo=True, timeout=20)
@@ -88,7 +93,7 @@ async def quarantine_file(server: Server, path: str) -> dict:
     """chmod 000 + move the file to QUARANTINE_DIR (never delete). Returns the
     original path + quarantine path so restore_file can reverse it."""
     path = _validate_path(path)
-    q = path  # mkdir + move with a timestamped name, recording the dest
+    logger.info("quarantine_file server=%s path=%s", server.id, path)
     cmd = (
         f"set -e; mkdir -p {QUARANTINE_DIR}; "
         f"if [ -e {shlex.quote(path)} ]; then "
@@ -111,6 +116,7 @@ async def restore_file(server: Server, reversal: dict) -> None:
     quarantined = reversal["quarantined"]
     if not quarantined.startswith(QUARANTINE_DIR + "/") or ".." in quarantined:
         raise ResponseError("bad quarantine path in reversal")
+    logger.info("restore_file server=%s original=%s", server.id, original)
     cmd = (
         f"set -e; mv {shlex.quote(quarantined)} {shlex.quote(original)}; "
         f"chmod 644 {shlex.quote(original)}"
@@ -124,6 +130,7 @@ async def restore_file(server: Server, reversal: dict) -> None:
 async def kill_pid(server: Server, pid) -> dict:
     """SIGKILL a pid. NOT reversible (no undo)."""
     p = _validate_pid(pid)
+    logger.info("kill_pid server=%s pid=%s", server.id, p)
     async with SSHSession(server) as ssh:
         r = await ssh.run(f"kill -9 {p}", sudo=True, timeout=15)
     if not r.ok:
@@ -134,33 +141,39 @@ async def kill_pid(server: Server, pid) -> dict:
 # ── Tier 2 verbs (human-approved) ──────────────────────────────────────────
 async def revert_authorized_keys(server: Server, ssh_user: str) -> dict:
     """Back up authorized_keys, then remove ONLY the last-appended key line (the
-    attacker's freshly-added key). Full backup stored for restore via undo."""
+    attacker's freshly-added key). Full backup stored for restore via undo.
+    Refuses (SINGLE) rather than emptying a file that has <=1 key line."""
     user = ssh_user.strip()
     if not user.replace("-", "").replace("_", "").isalnum():
         raise ResponseError(f"invalid user {ssh_user!r}")
     home = "/root" if user == "root" else f"/home/{user}"
     ak = f"{home}/.ssh/authorized_keys"
+    # POSIX-portable last-line delete (sed '$d'); head -n -1 is GNU-only. Guard
+    # against emptying a single-key file: refuse with SINGLE instead.
     cmd = (
         f"set -e; f={shlex.quote(ak)}; "
         f"if [ ! -f \"$f\" ]; then echo MISSING; exit 0; fi; "
+        f"if [ \"$(grep -c . \"$f\" || true)\" -le 1 ]; then echo SINGLE; exit 0; fi; "
         f"backup=$(base64 -w0 \"$f\"); "          # capture full file
-        f"head -n -1 \"$f\" > \"$f.opspilot\" || true; "  # drop last line
+        f"sed '$d' \"$f\" > \"$f.opspilot\"; "    # drop last line (POSIX)
         f"mv \"$f.opspilot\" \"$f\"; "
         f"echo \"$backup\""
     )
+    logger.info("revert_authorized_keys server=%s user=%s", server.id, user)
     async with SSHSession(server) as ssh:
         r = await ssh.run(cmd, sudo=True, timeout=20)
     out = (r.stdout or "").strip()
-    if not r.ok or out == "MISSING" or not out:
-        raise ResponseError(f"revert_authorized_keys failed: {r.stderr or out}")
+    if not r.ok or out in ("MISSING", "SINGLE") or not out:
+        raise ResponseError(f"revert_authorized_keys failed ({out or r.stderr}): {r.stderr or out}")
     return {"verb": "revert_authorized_keys", "path": ak, "backup_b64": out}
 
 
 async def restore_authorized_keys(server: Server, reversal: dict) -> None:
     ak = reversal["path"]
-    if "/.ssh/authorized_keys" not in ak or ".." in ak:
+    if not (ak.endswith("/.ssh/authorized_keys") and ak.startswith(("/root/", "/home/"))) or ".." in ak:
         raise ResponseError("bad authorized_keys path in reversal")
     b64 = reversal["backup_b64"]
+    logger.info("restore_authorized_keys server=%s path=%s", server.id, ak)
     cmd = f"echo {shlex.quote(b64)} | base64 -d > {shlex.quote(ak)}; chmod 600 {shlex.quote(ak)}"
     async with SSHSession(server) as ssh:
         r = await ssh.run(cmd, sudo=True, timeout=20)
@@ -175,7 +188,8 @@ async def disable_db_user(server: Server, db_user: str) -> dict:
     if not u or not all(c.isalnum() or c in "_-." for c in u):
         raise ResponseError(f"invalid db user {db_user!r}")
     sql = f"ALTER USER '{u}'@'%' ACCOUNT LOCK;"
-    cmd = f"mysql --defaults-extra-file=/root/.mdsb-db-credentials -e {shlex.quote(sql)}"
+    cmd = f"mysql --defaults-extra-file={DB_CREDENTIALS_FILE} -e {shlex.quote(sql)}"
+    logger.info("disable_db_user server=%s db_user=%s", server.id, u)
     async with SSHSession(server) as ssh:
         r = await ssh.run(cmd, sudo=True, timeout=20)
     if not r.ok:
@@ -185,8 +199,11 @@ async def disable_db_user(server: Server, db_user: str) -> dict:
 
 async def enable_db_user(server: Server, reversal: dict) -> None:
     u = reversal["db_user"]
+    if not u or not all(c.isalnum() or c in "_-." for c in u):
+        raise ResponseError(f"invalid db_user in reversal: {u!r}")
     sql = f"ALTER USER '{u}'@'%' ACCOUNT UNLOCK;"
-    cmd = f"mysql --defaults-extra-file=/root/.mdsb-db-credentials -e {shlex.quote(sql)}"
+    cmd = f"mysql --defaults-extra-file={DB_CREDENTIALS_FILE} -e {shlex.quote(sql)}"
+    logger.info("enable_db_user server=%s db_user=%s", server.id, u)
     async with SSHSession(server) as ssh:
         r = await ssh.run(cmd, sudo=True, timeout=20)
     if not r.ok:
