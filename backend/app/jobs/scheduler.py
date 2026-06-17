@@ -102,3 +102,35 @@ async def fail2ban_collector() -> None:
     """Every 5 min: poll fail2ban status on each active server."""
     from app.services.fail2ban_collector import collect_fail2ban
     await collect_fail2ban()
+
+
+async def db_disk_monitor() -> None:
+    """Every 6h: fire a db_disk_high alert when host disk exceeds 70%."""
+    import logging
+    import shutil
+    from app.database import AsyncSessionLocal
+    from app.services.alerting import fire_alert
+
+    log = logging.getLogger(__name__)
+    usage = shutil.disk_usage("/")
+    pct = usage.used / usage.total * 100
+
+    async with AsyncSessionLocal() as db:
+        if pct >= 70.0:
+            used_gb = usage.used / 1_073_741_824
+            total_gb = usage.total / 1_073_741_824
+            await fire_alert(
+                db,
+                type="db_disk_high",
+                severity="warning",
+                message=(
+                    f"OpsPilot host disk at {pct:.1f}% "
+                    f"({used_gb:.1f} GB used of {total_gb:.1f} GB). "
+                    "Expand disk or apply log retention policy."
+                ),
+                server_id=None,
+                cooldown_min=360,
+            )
+            log.warning("db_disk_monitor: disk at %.1f%% — alert fired", pct)
+        else:
+            log.debug("db_disk_monitor: disk at %.1f%% — OK", pct)

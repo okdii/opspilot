@@ -10,7 +10,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import settings
 from app.core.rate_limit import limiter
-from app.jobs.scheduler import maintenance_expiry, scheduler, session_cleanup, ticket_sweep, daily_report_nightly, dmesg_collector, fail2ban_retention, fail2ban_collector
+from app.jobs.scheduler import maintenance_expiry, scheduler, session_cleanup, ticket_sweep, daily_report_nightly, dmesg_collector, fail2ban_retention, fail2ban_collector, db_disk_monitor
 from app.routers.auth import invite_router, router as auth_router, ws_router
 from app.routers.ingest import router as ingest_router
 from app.routers.organizations import router as org_router
@@ -67,6 +67,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(dmesg_collector, "interval", minutes=15, id="dmesg_collector", replace_existing=True)
     scheduler.add_job(fail2ban_retention, "cron", hour=4, minute=30, id="fail2ban_retention", replace_existing=True)
     scheduler.add_job(fail2ban_collector, "interval", minutes=5, id="fail2ban_collector", replace_existing=True)
+    scheduler.add_job(db_disk_monitor, "interval", hours=6, id="db_disk_monitor", replace_existing=True)
     scheduler.add_job(security_responder, "interval", seconds=30, id="security_responder", replace_existing=True)
     scheduler.add_job(security_ttl_expiry, "interval", seconds=60, id="security_ttl_expiry", replace_existing=True)
     scheduler.start()
