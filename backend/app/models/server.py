@@ -23,6 +23,10 @@ class Server(Base):
     kernel_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
     tags: Mapped[list[str] | None] = mapped_column(ARRAY(String(30)), nullable=True, default=list)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    auto_response_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false")
+    block_ttl_hours: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=24, server_default="24")
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
     ingestion_token: Mapped[uuid.UUID] = mapped_column(

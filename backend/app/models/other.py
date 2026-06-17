@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import (
     BigInteger, Boolean, DateTime, Float, ForeignKey,
-    Integer, String, Text, text,
+    Integer, SmallInteger, String, Text, text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -158,6 +158,28 @@ class Alert(Base):
     job: Mapped["MonitoredJob"] = relationship(back_populates="alerts")
 
 
+class SecurityAction(Base):
+    __tablename__ = "security_actions"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    server_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("server.id", ondelete="CASCADE"), nullable=False, index=True)
+    alert_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("alert.id", ondelete="SET NULL"), nullable=True, index=True)
+    action_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    target: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tier: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="pending_approval")
+    actor: Mapped[str] = mapped_column(String(255), nullable=False, server_default="auto")
+    confidence: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reversal: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reverted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class AlertRule(Base):
     __tablename__ = "alert_rule"
 
@@ -286,6 +308,8 @@ class Settings(Base):
     smtp_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     discord_webhook_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     discord_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    auto_response_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false")
     ai_provider: Mapped[str] = mapped_column(String(30), nullable=False, server_default="disabled")
     ai_model: Mapped[str] = mapped_column(String(80), nullable=False, server_default="claude-sonnet-4-6")
     ai_api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
