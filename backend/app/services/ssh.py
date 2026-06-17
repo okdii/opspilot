@@ -171,6 +171,42 @@ class SSHSession:
             raise SSHCommandError(ssh_result, command)
         return ssh_result
 
+    async def run_action(
+        self,
+        verb: str,
+        *args: str,
+        input_text: str | None = None,
+        timeout: int = DEFAULT_CMD_TIMEOUT_SEC,
+    ) -> SSHResult:
+        """Call sudo /usr/local/bin/opspilot-action <verb> [args] directly.
+
+        Unlike run(sudo=True) which wraps everything in `sudo bash -c '...'`,
+        this pins the sudoers entry to a single allow-listed script. A stolen
+        SSH key can only call defined verbs, not arbitrary root commands.
+
+        input_text is piped to stdin — used by restore_authorized_keys to pass
+        the base64 backup without hitting shell ARG_MAX limits.
+        """
+        if self._conn is None:
+            raise SSHError("Session not opened — use 'async with SSHSession(...)'")
+        parts = ["sudo", "-n", "/usr/local/bin/opspilot-action", shlex.quote(verb)]
+        parts += [shlex.quote(a) for a in args]
+        cmd = " ".join(parts)
+        start = perf_counter()
+        try:
+            result = await asyncio.wait_for(
+                self._conn.run(cmd, check=False, input=input_text),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError as e:
+            raise SSHTimeoutError(f"run_action timed out after {timeout}s: {verb}") from e
+        return SSHResult(
+            exit_code=result.exit_status if result.exit_status is not None else -1,
+            stdout=result.stdout if isinstance(result.stdout, str) else "",
+            stderr=result.stderr if isinstance(result.stderr, str) else "",
+            duration_ms=int((perf_counter() - start) * 1000),
+        )
+
     async def upload(
         self,
         content: str,

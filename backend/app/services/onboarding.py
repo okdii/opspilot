@@ -21,6 +21,7 @@ Each step:
 """
 
 import asyncio
+import shlex
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from time import perf_counter
@@ -388,6 +389,150 @@ NGX
 echo PHPBLOCK_SNIPPET
 """
 
+# Remediation wrapper installed at /usr/local/bin/opspilot-action.
+# The sudoers drop-in pins to this script so a stolen SSH key cannot run
+# arbitrary root commands — only the verbs defined here.
+_OPSPILOT_ACTION_SCRIPT = """\
+#!/usr/bin/env bash
+# /usr/local/bin/opspilot-action — OpsPilot allow-listed remediation wrapper.
+# MANAGED BY OPSPILOT. Reinstalled on every onboarding run.
+#
+# Sudoers entry (see /etc/sudoers.d/opspilot):
+#   SSH_USER ALL=(root) NOPASSWD: /usr/local/bin/opspilot-action
+set -euo pipefail
+
+QUARANTINE_DIR="/var/opspilot-quarantine"
+DB_CREDS="/root/.mdsb-db-credentials"
+
+die() { printf 'opspilot-action: %s\\n' "$*" >&2; exit 1; }
+
+_validate_ip() {
+    local ip="$1"
+    [[ "$ip" =~ ^[0-9a-fA-F.:]+$ ]] || die "invalid ip: $ip"
+    echo "$ip"
+}
+
+_reject_private_ip() {
+    local ip="$1"
+    case "$ip" in
+        127.*|0.*|"::1"|fc*|fd*|fe80*|FE80*)
+            die "refusing private/loopback ip: $ip" ;;
+        10.*|192.168.*)
+            die "refusing private ip: $ip" ;;
+    esac
+    if [[ "$ip" =~ ^172\\.([0-9]+)\\. ]]; then
+        local oct="${BASH_REMATCH[1]}"
+        if (( oct >= 16 && oct <= 31 )); then die "refusing private ip: $ip"; fi
+    fi
+}
+
+_validate_pid() {
+    local pid="$1"
+    [[ "$pid" =~ ^[0-9]+$ ]] || die "invalid pid: $pid"
+    (( pid > 1 )) || die "refusing pid <= 1: $pid"
+    echo "$pid"
+}
+
+_validate_path() {
+    local path="$1"
+    [[ "$path" == /* ]] || die "path must be absolute: $path"
+    [[ "$path" != *..* ]] || die "path must not contain ..: $path"
+    local ok=0
+    for root in /var/www /usr/share/nginx /srv/www /home; do
+        [[ "$path" == "$root"/* ]] && ok=1 && break
+    done
+    (( ok )) || die "path not under a web root: $path"
+    echo "$path"
+}
+
+_validate_user() {
+    local user="$1"
+    [[ "$user" =~ ^[a-zA-Z0-9_-]+$ ]] || die "invalid user: $user"
+    echo "$user"
+}
+
+_validate_db_user() {
+    local u="$1"
+    [[ "$u" =~ ^[a-zA-Z0-9_.@-]+$ ]] || die "invalid db user: $u"
+    echo "$u"
+}
+
+verb="${1:-}"
+[[ -n "$verb" ]] || die "usage: opspilot-action <verb> [args...]"
+shift
+
+case "$verb" in
+    block_ip)
+        ip=$(_validate_ip "$1"); _reject_private_ip "$ip"
+        bin="iptables"; [[ "$ip" == *:* ]] && bin="ip6tables"
+        "$bin" -C INPUT -s "$ip" -j DROP 2>/dev/null || "$bin" -I INPUT -s "$ip" -j DROP
+        ;;
+    unblock_ip)
+        ip=$(_validate_ip "$1")
+        bin="iptables"; [[ "$ip" == *:* ]] && bin="ip6tables"
+        "$bin" -D INPUT -s "$ip" -j DROP 2>/dev/null || true
+        ;;
+    quarantine_file)
+        path=$(_validate_path "$1")
+        mkdir -p "$QUARANTINE_DIR"
+        if [ -e "$path" ]; then
+            dest="$QUARANTINE_DIR/$(date +%s)_$(basename "$path")"
+            chmod 000 "$path"; mv "$path" "$dest"; echo "$dest"
+        else echo "MISSING"; fi
+        ;;
+    restore_file)
+        quarantined="$1"; original=$(_validate_path "$2")
+        [[ "$quarantined" == "$QUARANTINE_DIR/"* ]] || die "bad quarantine path: $quarantined"
+        [[ "$quarantined" != *..* ]] || die "path traversal in quarantine path"
+        mv "$quarantined" "$original"; chmod 644 "$original"
+        ;;
+    kill_pid)
+        pid=$(_validate_pid "$1"); kill -9 "$pid"
+        ;;
+    revert_authorized_keys)
+        user=$(_validate_user "$1")
+        home="/root"; [ "$user" != "root" ] && home="/home/$user"
+        ak="$home/.ssh/authorized_keys"
+        if [ ! -f "$ak" ]; then echo "MISSING"; exit 0; fi
+        count=$(grep -c . "$ak" 2>/dev/null || echo 0)
+        if (( count <= 1 )); then echo "SINGLE"; exit 0; fi
+        backup=$(base64 -w0 "$ak")
+        sed '$d' "$ak" > "$ak.opspilot"; mv "$ak.opspilot" "$ak"
+        echo "$backup"
+        ;;
+    restore_authorized_keys)
+        user=$(_validate_user "$1")
+        home="/root"; [ "$user" != "root" ] && home="/home/$user"
+        ak="$home/.ssh/authorized_keys"
+        b64=$(cat)
+        echo "$b64" | base64 -d > "$ak"; chmod 600 "$ak"
+        ;;
+    disable_db_user)
+        u=$(_validate_db_user "$1")
+        mysql --defaults-extra-file="$DB_CREDS" -e "ALTER USER '${u}'@'%' ACCOUNT LOCK;"
+        ;;
+    enable_db_user)
+        u=$(_validate_db_user "$1")
+        mysql --defaults-extra-file="$DB_CREDS" -e "ALTER USER '${u}'@'%' ACCOUNT UNLOCK;"
+        ;;
+    *)
+        die "unknown verb: $verb"
+        ;;
+esac
+"""
+
+# sudoers drop-in template. __SSH_USER__ is replaced with server.ssh_user at install time.
+# Pins the SSH user to ONLY the wrapper script — no other root commands are permitted.
+_OPSPILOT_SUDOERS_TEMPLATE = """\
+# Managed by OpsPilot. Do not edit — reinstalled on re-onboarding.
+# Restricts __SSH_USER__ to ONLY the OpsPilot remediation wrapper.
+# A compromised SSH key cannot run arbitrary root commands.
+# !requiretty + !use_pty: allow the wrapper to run over a non-interactive SSH
+# channel (the OpsPilot backend never allocates a TTY for remediation calls).
+Defaults:__SSH_USER__ !requiretty, !use_pty
+__SSH_USER__ ALL=(root) NOPASSWD: /usr/local/bin/opspilot-action
+"""
+
 # Apache (Debian): DirectoryMatch denying PHP handlers under upload dirs.
 # Validate with apache2ctl configtest; revert + skip reload on failure.
 _APACHE_PHP_BLOCK_DEBIAN = r"""
@@ -743,6 +888,46 @@ async def _step_deploy_opspilot_agent(db, server, ssh: SSHSession):
         await _finish_step(db, log, t0, status="skipped", message=f"agent deploy skipped: {exc}")
 
 
+async def _step_install_action_wrapper(db, server: Server, ssh: SSHSession) -> None:
+    """Install /usr/local/bin/opspilot-action and lock sudoers to it.
+
+    Soft step — failure never aborts onboarding. The server remains functional;
+    sudoers is just not yet restricted. A warning is written to the onboarding log.
+
+    After this step succeeds, the SSH user can ONLY sudo the wrapper script —
+    a stolen key cannot run arbitrary root commands.
+    """
+    t0, log = await _start_step(db, server.id, "install_action_wrapper")
+    try:
+        ssh_user = server.ssh_user or "opspilot"
+
+        # Install the wrapper executable
+        await ssh.upload(_OPSPILOT_ACTION_SCRIPT, "/usr/local/bin/opspilot-action",
+                         mode=0o755, sudo=True)
+
+        # Build the sudoers drop-in for this server's SSH user
+        sudoers = _OPSPILOT_SUDOERS_TEMPLATE.replace("__SSH_USER__", ssh_user)
+
+        # Stage to /tmp, validate with visudo, then install atomically.
+        # If visudo rejects it the bad file never reaches sudoers.d.
+        r = await ssh.run(
+            f"echo {shlex.quote(sudoers)} > /tmp/opspilot-sudoers && "
+            f"visudo -c -f /tmp/opspilot-sudoers && "
+            f"mv /tmp/opspilot-sudoers /etc/sudoers.d/opspilot && "
+            f"chmod 440 /etc/sudoers.d/opspilot && "
+            f"echo SUDOERS_OK",
+            sudo=True, timeout=15,
+        )
+        if not r.ok or "SUDOERS_OK" not in r.stdout:
+            raise RuntimeError(f"sudoers install failed: {r.stderr or r.stdout}")
+
+        await _finish_step(db, log, t0, status="done",
+                           message=f"opspilot-action installed; sudoers restricted to wrapper for {ssh_user}")
+    except Exception as exc:
+        await _finish_step(db, log, t0, status="skipped",
+                           message=f"action wrapper install skipped (sudoers NOT restricted yet): {exc}")
+
+
 # ── Orchestrator ─────────────────────────────────────────────────────────────
 
 async def _build_db_instances(db, server) -> list[dict]:
@@ -822,6 +1007,7 @@ async def run_onboarding(server_id: str, redeploy_only: bool = False) -> None:
                     await _step_verify_data_flow(db, server)
 
                 await _step_deploy_opspilot_agent(db, server, ssh)
+                await _step_install_action_wrapper(db, server, ssh)
 
             duration = int(perf_counter() - started_total)
             await _push(server.id, "onboarding_complete", {
