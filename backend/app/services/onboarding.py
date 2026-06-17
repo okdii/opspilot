@@ -366,7 +366,8 @@ cat >/etc/audit/rules.d/opspilot.rules <<RULES
 -a exit,always -F arch=b64 -F uid=$WEBUID -S execve -k webshell_exec
 -a exit,always -F arch=b32 -F uid=$WEBUID -S execve -k webshell_exec
 -w /root/.ssh/authorized_keys -p wa -k ssh_key_change
--w /home -p wa -k ssh_key_change
+-a always,exit -F arch=b64 -F dir=/home -F name=authorized_keys -F perm=wa -k ssh_key_change
+-a always,exit -F arch=b32 -F dir=/home -F name=authorized_keys -F perm=wa -k ssh_key_change
 -w /var/log -p wa -k log_tamper
 RULES
 augenrules --load >/dev/null 2>&1 && echo AUDITD_OK
