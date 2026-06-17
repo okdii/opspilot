@@ -35,12 +35,16 @@ async function save(enabled: boolean) {
         :model-value="store.settings?.auto_response_enabled ?? false"
         :disabled="!auth.isAdmin"
         @update:model-value="save($event)"
+        aria-label="Enable auto-response"
         size="small" />
     </div>
     <div v-if="store.settings?.auto_response_enabled" class="ar-settings__ttl">
-      <label>Auto-block expires after</label>
-      <VaInput v-model="ttl" type="number" :min="1" :max="720" :disabled="!auth.isAdmin"
-               @blur="save(true)" class="ttl-input" /> <span class="muted">hours</span>
+      <label class="ar-settings__ttl-label">
+        <span>Auto-block expires after</span>
+        <VaInput v-model.number="ttl" type="number" :min="1" :max="720" :disabled="!auth.isAdmin"
+                 @blur="save(true)" class="ttl-input" />
+      </label>
+      <span class="muted">hours</span>
     </div>
   </section>
 </template>
@@ -51,5 +55,6 @@ async function save(enabled: boolean) {
 .ar-settings h4 { margin: 0 0 4px; font-size: 0.95rem; }
 .muted { color: var(--va-text-secondary, #9aa4b2); font-size: 0.8rem; margin: 0; }
 .ar-settings__ttl { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.ar-settings__ttl-label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .ttl-input { max-width: 90px; }
 </style>
