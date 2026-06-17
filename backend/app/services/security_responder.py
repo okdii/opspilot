@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import AsyncSessionLocal
 from app.models.other import Alert, SecurityAction
 from app.models.server import Server
+from app.services import ip_intel
 from app.services import response_channel as rc
 
 logger = logging.getLogger(__name__)
@@ -96,10 +97,10 @@ async def _recent_log_lines(db: AsyncSession, server_id, like: str,
 
 
 async def _extract_ip(db: AsyncSession, alert: Alert) -> str | None:
-    # probe_scan/ssh messages carry the IP inline.
-    m = _IPV4.search(alert.message or "")
-    if m:
-        return m.group(1)
+    # probe_scan/ssh messages carry the IP inline (shared regex, see ip_intel).
+    inline = ip_intel.extract_inline_ip(alert.message)
+    if inline:
+        return inline
     # Otherwise pull from recent access-log lines around the alert.
     since = (alert.sent_at or _now()) - timedelta(minutes=5)
     for line in await _recent_log_lines(db, alert.server_id, "%.php%", since):
