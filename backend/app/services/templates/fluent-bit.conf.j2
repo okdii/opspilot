@@ -95,6 +95,18 @@
     Skip_Long_Lines   On
 {% endif %}
 
+{% if web_error_log_path and web_error_log_path != '/var/log/nginx/error.log' %}
+# ── Web error (LiteSpeed / Apache — normalized) ──────────────────────────────
+# Skipped for nginx: the hardcoded `nginx_error` input above already tails
+# /var/log/nginx/error.log. Tailing it twice would double-count every line.
+[INPUT]
+    Name              tail
+    Path              {{ web_error_log_path }}
+    Tag               web_error
+    DB                /var/lib/fluent-bit/web_error.db
+    Skip_Long_Lines   On
+{% endif %}
+
 {% if auditd_enabled %}
 # ── auditd (file writes + www-data execve + key/log tamper) ──────────────────
 [INPUT]

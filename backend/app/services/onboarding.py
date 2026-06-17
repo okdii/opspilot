@@ -622,6 +622,22 @@ def _web_server_kind(web_access_log_path: str) -> str:
     return ""
 
 
+def _web_error_log(web_kind: str) -> str:
+    """Map a detected web-server kind to its error-log path (mirrors _detect_web_access_log).
+
+    Reuses the single detection already performed for the access log instead of
+    probing over SSH again. Returns "" for an unknown kind (keeps the template's
+    web_error INPUT off). nginx is intentionally included so the template gate can
+    skip it — the hardcoded nginx_error input already tails it.
+    """
+    return {
+        "litespeed": "/usr/local/lsws/logs/error.log",
+        "nginx": "/var/log/nginx/error.log",
+        "apache-debian": "/var/log/apache2/error.log",
+        "apache-rhel": "/var/log/httpd/error_log",
+    }.get(web_kind, "")
+
+
 async def _setup_auditd(ssh: SSHSession) -> bool:
     """Install non-disruptive auditd rules. Best-effort; returns True only on AUDITD_OK."""
     try:
@@ -723,6 +739,7 @@ async def _step_configure_fluent_bit(db, server, ssh: SSHSession, os_info: OSInf
     # All best-effort: a failure leaves the var falsy and onboarding continues.
     web_access_log_path = await _detect_web_access_log(ssh)
     web_kind = _web_server_kind(web_access_log_path)
+    web_error_log_path = _web_error_log(web_kind)
 
     # (2) auditd — non-disruptive rules; gates the auditd INPUT block.
     auditd_enabled = await _setup_auditd(ssh)
@@ -749,6 +766,7 @@ async def _step_configure_fluent_bit(db, server, ssh: SSHSession, os_info: OSInf
         php_fpm_log_path=php_fpm_log_path,
         php_app_log_path=php_app_log_path,
         web_access_log_path=web_access_log_path,
+        web_error_log_path=web_error_log_path,
         auditd_enabled=auditd_enabled,
         mariadb_general_enabled=mariadb_general_enabled,
         **paths,
