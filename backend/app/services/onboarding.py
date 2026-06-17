@@ -594,7 +594,8 @@ async def _detect_web_access_log(ssh: SSHSession) -> str:
     Returns "" if none detected (keeps the template's web_access INPUT off).
     """
     checks = [
-        ("systemctl is-active --quiet lsws", "/usr/local/lsws/logs/access.log"),
+        # LiteSpeed: fall back to pgrep when systemd reports inactive (common on OpenLiteSpeed)
+        ("systemctl is-active --quiet lsws || pgrep -f 'lshttpd|openlitespeed' >/dev/null 2>&1", "/usr/local/lsws/logs/access.log"),
         ("systemctl is-active --quiet nginx", "/var/log/nginx/access.log"),
         ("systemctl is-active --quiet apache2", "/var/log/apache2/access.log"),
         ("test -f /var/log/httpd/access_log", "/var/log/httpd/access_log"),
