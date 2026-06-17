@@ -90,7 +90,7 @@
 [INPUT]
     Name              tail
     Path              {{ web_access_log_path }}
-    Tag               web_access
+    Tag               nginx_access
     DB                /var/lib/fluent-bit/web_access.db
     Skip_Long_Lines   On
 {% endif %}
