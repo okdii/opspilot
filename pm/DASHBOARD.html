@@ -64,8 +64,8 @@
 </head>
 <body>
 <div class="header">
-  <div><h1>OpsPilot &mdash; Dev Progress</h1><p>13 phases &middot; 212 tasks &middot; Python + FastAPI + Vue 3 + TimescaleDB</p></div>
-  <div class="badge">Updated: <span>2026-06-16</span></div>
+  <div><h1>OpsPilot &mdash; Dev Progress</h1><p>18 phases &middot; 248 tasks &middot; Python + FastAPI + Vue 3 + TimescaleDB</p></div>
+  <div class="badge">Updated: <span>2026-06-17</span></div>
 </div>
 <div class="overall">
   <div>
@@ -79,7 +79,7 @@
   </div>
 </div>
 <div class="stats">
-  <div class="stat"><div class="label">Phases Done</div><div class="val g">13</div><div class="sub">of 13 phases</div></div>
+  <div class="stat"><div class="label">Phases Done</div><div class="val g">18</div><div class="sub">of 18 phases</div></div>
   <div class="stat"><div class="label">Tasks Complete</div><div class="val a">212</div><div class="sub">of 212 total</div></div>
   <div class="stat"><div class="label">Smoke Tests Passed</div><div class="val b">17</div><div class="sub">of 17 gates</div></div>
   <div class="stat"><div class="label">In Progress</div><div class="val am">0</div><div class="sub">tasks active</div></div>
@@ -364,6 +364,14 @@ const phases = [
     { text: "Onboarding hardening: detect web access log (lsws/nginx/apache2/httpd), setup auditd webroot+ssh-key+log-tamper rules, web-server-aware PHP block with validate-before-reload + revert-on-failure; mariadb general log gated OFF. Fixed pre-existing SSHResult .strip() crash in step 7", status: "done", smoke: false },
     { text: "security.ts Pinia store: fetchEvents(serverId), SecurityEvent interface (UUID id), error unwrap matching fail2ban.ts conventions", status: "done", smoke: true },
     { text: "SecurityEventsTimeline.vue: kill-chain timeline, 60s poll, reuses StatusBadge (extended Kind union with 'severity'), skeleton/empty/error states, reduced-motion, relative-time; rendered as first child of SecurityTab. Smoke test: empty state renders in Security tab (verified in browser)", status: "done", smoke: true },
+  ]},
+  { id: 19, title: "Security Auto-Response (Part 2)", subtitle: "Semi-automatic kill-chain remediation: a 30s responder consumes open Part-1 security alerts, derives confidence, extracts the target from corroborating logs, and either auto-executes (Tier 1) or queues for approval (Tier 2) via an allow-listed privileged-command channel. Full audit ledger with one-click undo, TTL auto-unblock, per-server opt-in + global kill switch.", tasks: [
+    { text: "Migration 0031_security_actions + SecurityAction ORM ledger (action_type/target/tier/confidence/status/actor/reversal/detail/executed_at/reverted_at); server.auto_response_enabled + server.block_ttl_hours; app_settings.auto_response_enabled master switch", status: "done", smoke: true },
+    { text: "response_channel.py: allow-listed privileged-command module (block_ip/unblock_ip iptables, quarantine_file/restore_file chmod000+move, kill_pid, revert_authorized_keys/restore_authorized_keys, disable_db_user/enable_db_user ACCOUNT LOCK) with strict IP/PID/path/user validation + audit logging", status: "done", smoke: true },
+    { text: "security_responder.py: 30s responder gated by global kill switch + per-server opt-in; ACTION_PLAN type→verbs/tier map; CONFIDENCE derivation; target extraction from logs (IP/file/PID/db-user); idempotency + per-server circuit breaker (10 actions / 10 min); Tier-1 auto-exec, Tier-2 pending_approval. ttl_expiry 60s auto-unblock past block_ttl_hours", status: "done", smoke: true },
+    { text: "securityActions.ts Pinia store + routers/security_actions.py: GET ledger, POST approve/reject/undo (Admin), GET/PUT per-server auto-response settings", status: "done", smoke: true },
+    { text: "AutoResponseSettings.vue (per-server toggle + TTL) + SecurityActionsPanel.vue (pending-approval danger cards, history, confirm-preview approve/undo, 30s poll, reuses StatusBadge) mounted in SecurityTab; GeneralTab master kill switch", status: "done", smoke: true },
+    { text: "Live-VM e2e (Lima ubuntu): probe_scan→block_ip (real iptables DROP); webshell_execution→quarantine_file (file moved to /var/opspilot-quarantine chmod000) + block_ip; webshell_command_exec→kill_pid (real process killed); ssh_key_modified→Tier-2 pending→approve (attacker key stripped 2→1)→undo (restored); TTL backdate→expired + DROP removed; circuit breaker wired", status: "done", smoke: true },
   ]},
 ];
 
