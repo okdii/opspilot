@@ -103,6 +103,14 @@
     Tag               auditd
     DB                /var/lib/fluent-bit/auditd.db
     Skip_Long_Lines   On
+
+# Drop housekeeping records that are never security events but whose key= fields
+# would falsely match alert patterns (e.g. CONFIG_CHANGE fires on augenrules --load,
+# DAEMON_* fires on auditd service start/stop/rotate).
+[FILTER]
+    Name    grep
+    Match   auditd
+    Exclude log type=CONFIG_CHANGE|type=DAEMON_
 {% endif %}
 
 {% if mariadb_general_enabled %}
