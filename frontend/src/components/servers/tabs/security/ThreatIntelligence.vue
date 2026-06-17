@@ -4,8 +4,10 @@ import { useSecurityStore } from '@/stores/security'
 import { useSecurityActionsStore, type SecurityActionRow } from '@/stores/securityActions'
 import { useAuthStore } from '@/stores/auth'
 import { useNotify } from '@/composables/useNotify'
-import StatusBadge from '@/components/ui/StatusBadge.vue'
+import { relativeTime } from '@/utils/time'
 import Pager from '@/components/ui/Pager.vue'
+import KillChainBar from './KillChainBar.vue'
+import IncidentTimeline from './IncidentTimeline.vue'
 
 const props = defineProps<{ serverId: string }>()
 const events = useSecurityStore()
@@ -22,19 +24,25 @@ async function loadSettings() {
   ttl.value = actions.settings?.block_ttl_hours ?? 24
 }
 
+// Refetch the merged timeline + kill-chain after a mutation (the store's own
+// refresh only covers pending + summary).
+function reloadTimeline() {
+  return Promise.all([events.fetchIncidents(props.serverId), events.fetchStages(props.serverId)])
+}
+
 onMounted(() => {
-  events.fetchEvents(props.serverId, 0)
-  actions.fetchActions(props.serverId, 0)
+  events.fetchIncidents(props.serverId, 0)
+  events.fetchStages(props.serverId)
   actions.fetchPending(props.serverId)
   actions.fetchSummary(props.serverId)
   loadSettings()
   // Poll the current page in place so live updates appear without losing the page.
   evPoll = setInterval(() => {
-    events.fetchEvents(props.serverId)
+    events.fetchIncidents(props.serverId)
+    events.fetchStages(props.serverId)
     actions.fetchSummary(props.serverId)
   }, 60 * 1000)
   acPoll = setInterval(() => {
-    actions.fetchActions(props.serverId)
     actions.fetchPending(props.serverId)
     actions.fetchSummary(props.serverId)
   }, 30 * 1000)
@@ -48,35 +56,18 @@ onUnmounted(() => {
 const summary = computed(() => actions.summary)
 const pending = computed(() => actions.pending)
 
-// Server returns the ledger newest-first, already paginated.
-const ledger = computed(() => actions.actions)
-
 const settingsOn = computed(() => actions.settings?.auto_response_enabled ?? false)
 
-// ── Pagination ────────────────────────────────────────────────────────────────
-function goEvents(p: number) { events.fetchEvents(props.serverId, p) }
-function goLedger(p: number) { actions.fetchActions(props.serverId, p) }
+// ── Kill-chain stage filter ───────────────────────────────────────────────────
+const stageFilter = computed(() => events.stageFilter)
+function onStage(stage: string) { events.setStage(props.serverId, stage) }
+function clearStage() { events.setStage(props.serverId, events.stageFilter) }
+
+// ── Pagination (by incident) ───────────────────────────────────────────────────
+function goIncidents(p: number) { events.fetchIncidents(props.serverId, p) }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-function rel(ts: string): string {
-  const s = Math.max(0, (Date.now() - new Date(ts).getTime()) / 1000)
-  if (s < 60) return `${Math.floor(s)}s ago`
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`
-  return `${Math.floor(s / 86400)}d ago`
-}
-
-// Ledger status → StatusBadge alert tone vocabulary (matches the prior panel).
-function tone(s: string): string {
-  return ({ executed: 'resolved', reverted: 'snoozed', expired: 'snoozed',
-            rejected: 'suppressed', failed: 'firing' } as Record<string, string>)[s] ?? 'snoozed'
-}
-
-function tierLabel(a: SecurityActionRow): string {
-  const bits = [`Tier ${a.tier}`, a.actor]
-  if (a.confidence) bits.push(a.confidence)
-  return bits.join(' · ')
-}
+const rel = relativeTime
 
 // ── Mutations ───────────────────────────────────────────────────────────────
 async function setEnabled(enabled: boolean) {
@@ -98,17 +89,17 @@ async function saveTtl() {
 async function approve(a: SecurityActionRow) {
   const label = `${a.action_type} ${a.target ?? ''}`.trim()
   if (!window.confirm(`Approve and run: ${label}?\nThis acts on the server now.`)) return
-  try { await actions.approve(props.serverId, a.id); notify.success('Action approved and executed') }
+  try { await actions.approve(props.serverId, a.id); await reloadTimeline(); notify.success('Action approved and executed') }
   catch (e) { notify.error(e as Error) }
 }
 async function reject(a: SecurityActionRow) {
-  try { await actions.reject(props.serverId, a.id); notify.info('Action rejected') }
+  try { await actions.reject(props.serverId, a.id); await reloadTimeline(); notify.info('Action rejected') }
   catch (e) { notify.error(e as Error) }
 }
 async function undo(a: SecurityActionRow) {
   const label = `${a.action_type} ${a.target ?? ''}`.trim()
   if (!window.confirm(`Undo: ${label}?`)) return
-  try { await actions.undo(props.serverId, a.id); notify.success('Action reverted') }
+  try { await actions.undo(props.serverId, a.id); await reloadTimeline(); notify.success('Action reverted') }
   catch (e) { notify.error(e as Error) }
 }
 
@@ -145,6 +136,9 @@ watch(() => actions.settings?.block_ttl_hours, v => { if (typeof v === 'number')
       </div>
     </section>
 
+    <!-- ZONE 1.5 — Kill-chain pipeline (per-category breakdown + feed filter) -->
+    <KillChainBar :stages="events.stages" :active="stageFilter" @select="onStage" />
+
     <!-- ZONE 2 — Needs-approval banner (only when pending) -->
     <section v-if="pending.length" class="approval">
       <div class="approval__head">
@@ -167,70 +161,32 @@ watch(() => actions.settings?.block_ttl_hours, v => { if (typeof v === 'number')
       </div>
     </section>
 
-    <!-- ZONE 3 — Feed + Ledger -->
-    <div class="grid">
-      <!-- Threat detection feed -->
-      <section class="col">
-        <header class="col__head"><span>Threat Detection Feed</span><span class="col__hint">live · 1m</span></header>
-        <div class="col__body">
-          <div v-if="events.loading && !events.events.length" class="skeleton">
-            <div v-for="n in 3" :key="n" class="skeleton__row" />
-          </div>
-          <p v-else-if="events.error" class="state-msg error" role="alert">{{ events.error }}</p>
-          <div v-else-if="!events.events.length" class="state-msg empty">No security events detected.</div>
-          <ul v-else class="feed">
-            <li v-for="e in events.events" :key="e.id" class="event" :class="{ 'event--resolved': e.state === 'resolved' }">
-              <StatusBadge :status="e.severity" kind="severity" class="event__sev" />
-              <div class="event__body">
-                <div class="event__top">
-                  <span class="event__type">{{ e.type }}</span>
-                  <span class="event__stage">{{ e.stage }}</span>
-                </div>
-                <p class="event__msg" :title="e.message">{{ e.message }}</p>
-              </div>
-              <time class="event__time" :datetime="e.at">{{ rel(e.at) }}</time>
-            </li>
-          </ul>
+    <!-- ZONE 3 — Merged incident timeline (detections + their mitigations) -->
+    <section class="col">
+      <header class="col__head">
+        <span>Incident Timeline</span>
+        <span class="col__head-right">
+          <button v-if="stageFilter" class="feed-filter" @click="clearStage">
+            {{ stageFilter }} <span class="feed-filter__x" aria-hidden="true">✕</span>
+          </button>
+          <span class="col__hint">attack → response · live · 1m</span>
+        </span>
+      </header>
+      <div class="col__body">
+        <div v-if="events.loading && !events.incidents.length" class="skeleton">
+          <div v-for="n in 4" :key="n" class="skeleton__row" />
         </div>
-        <Pager :page="events.page" :page-size="events.pageSize" :total="events.total"
-               :disabled="events.loading" @update:page="goEvents" />
-      </section>
-
-      <!-- Response activity ledger -->
-      <section class="col">
-        <header class="col__head"><span>Response Activity</span><span class="col__hint">ledger</span></header>
-        <div class="col__body">
-          <div v-if="!ledger.length" class="state-msg empty">No response actions taken.</div>
-          <ul v-else class="ledger">
-            <li v-for="a in ledger" :key="a.id" class="action"
-                :class="{ 'action--pending': a.status === 'pending_approval' }">
-              <div class="action__top">
-                <StatusBadge v-if="a.status !== 'pending_approval'" :status="tone(a.status)" kind="alert" class="action__chip" />
-                <span v-else class="action__pendchip">Pending</span>
-                <span class="action__type">{{ a.action_type }}</span>
-                <time class="action__time">{{ rel(a.created_at) }}</time>
-              </div>
-              <p v-if="a.target" class="action__target">{{ a.target }}</p>
-              <p v-if="a.detail" class="action__detail" :title="a.detail">{{ a.detail }}</p>
-              <div class="action__foot">
-                <span class="action__tier">{{ tierLabel(a) }}</span>
-                <div class="action__btns">
-                  <template v-if="a.status === 'pending_approval'">
-                    <VaButton size="small" color="success" :disabled="!auth.isAdmin" @click="approve(a)">Approve</VaButton>
-                    <VaButton size="small" preset="secondary" :disabled="!auth.isAdmin" @click="reject(a)">Reject</VaButton>
-                  </template>
-                  <VaButton v-else-if="a.status === 'executed' && a.reversible" size="small" preset="secondary"
-                            :disabled="!auth.isAdmin" @click="undo(a)">Undo</VaButton>
-                  <span v-else-if="a.status === 'executed' && !a.reversible" class="muted not-rev">not reversible</span>
-                </div>
-              </div>
-            </li>
-          </ul>
+        <p v-else-if="events.error" class="state-msg error" role="alert">{{ events.error }}</p>
+        <div v-else-if="!events.incidents.length" class="state-msg empty">
+          {{ stageFilter ? `No ${stageFilter} incidents.` : 'No security incidents detected.' }}
         </div>
-        <Pager :page="actions.page" :page-size="actions.pageSize" :total="actions.total"
-               :disabled="actions.loading" @update:page="goLedger" />
-      </section>
-    </div>
+        <IncidentTimeline v-else
+          :incidents="events.incidents" :is-admin="auth.isAdmin"
+          @approve="approve" @reject="reject" @undo="undo" />
+      </div>
+      <Pager :page="events.page" :page-size="events.pageSize" :total="events.total"
+             :disabled="events.loading" @update:page="goIncidents" />
+    </section>
   </div>
 </template>
 
@@ -281,50 +237,23 @@ watch(() => actions.settings?.block_ttl_hours, v => { if (typeof v === 'number')
   border-top: 1px solid rgba(245,158,11,0.2); padding-top: 10px; }
 .approval__btns { display: flex; gap: 10px; justify-content: flex-end; }
 
-/* Zone 3 */
-.grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; }
-@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+/* Zone 3 — Incident timeline card */
 .col { background: var(--surface, #161d2e); border: 1px solid var(--border, #243049);
   border-radius: 12px; overflow: hidden; }
 .col__head { display: flex; align-items: center; justify-content: space-between;
   padding: 12px 16px; border-bottom: 1px solid var(--border, #243049);
   font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted, #94a3b8); font-weight: 600; }
 .col__hint { letter-spacing: 0; text-transform: none; color: var(--muted, #64748b); }
+.col__head-right { display: inline-flex; align-items: center; gap: 10px; }
+.feed-filter {
+  display: inline-flex; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0;
+  background: rgba(79,140,255,0.12); border: 1px solid var(--accent-2, #4f8cff);
+  color: #bcd2ff; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; cursor: pointer;
+}
+.feed-filter:hover { background: rgba(79,140,255,0.2); }
+.feed-filter__x { font-size: 10px; opacity: 0.8; }
 .col__body { padding: 4px 0; }
 
-.feed, .ledger { list-style: none; margin: 0; padding: 0; }
-
-.event { display: flex; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border, #1c2638); }
-.event:last-child { border-bottom: none; }
-.event--resolved { opacity: 0.6; }
-.event__sev { flex: none; margin-top: 2px; }
-.event__body { flex: 1; min-width: 0; }
-.event__top { display: flex; align-items: center; gap: 9px; margin-bottom: 3px; }
-.event__type { font-weight: 600; font-size: 13.5px; color: var(--text, #e8edf6); }
-.event__stage { font-size: 11px; padding: 1px 7px; border-radius: 5px;
-  background: var(--surface-2, #1a2336); color: var(--muted, #9aa4b2); border: 1px solid var(--border, #243049); }
-.event__msg { font-size: 12.5px; color: var(--muted, #b6c2d6); margin: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.event__time { font-size: 11px; color: var(--muted, #64748b); flex: none; font-variant-numeric: tabular-nums; }
-
-.action { padding: 12px 16px; border-bottom: 1px solid var(--border, #1c2638); }
-.action:last-child { border-bottom: none; }
-.action--pending { background: rgba(245,158,11,0.06); }
-.action__top { display: flex; align-items: center; gap: 9px; margin-bottom: 5px; }
-.action__chip { flex: none; }
-.action__pendchip { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
-  padding: 3px 8px; border-radius: 4px; background: rgba(245,158,11,0.15); color: var(--amber, #fbbf24); }
-.action__type { font-weight: 600; font-size: 13.5px; color: var(--text, #e8edf6); font-family: monospace; }
-.action__time { margin-left: auto; font-size: 11px; color: var(--muted, #64748b); flex: none; font-variant-numeric: tabular-nums; }
-.action__target { font-size: 12.5px; color: var(--text, #b6c2d6); margin: 0 0 3px; word-break: break-all; font-family: monospace; }
-.action__detail { font-size: 12px; color: var(--muted, #94a3b8); margin: 0 0 7px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.action__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.action__tier { font-size: 11px; color: var(--muted, #64748b); }
-.action__btns { display: flex; gap: 8px; align-items: center; }
-.not-rev { font-size: 11px; }
-
-.muted { color: var(--muted, #94a3b8); }
 .state-msg { padding: 28px 16px; text-align: center; font-size: 13px; color: var(--muted, #94a3b8); }
 .state-msg.error { color: var(--red, #ef4444); }
 

@@ -18,7 +18,7 @@ from app.database import get_db
 from app.deps import AdminUser, CurrentUser
 from app.models.other import Alert, SecurityAction
 from app.models.server import Server
-from app.routers.security_events import SECURITY_TYPES
+from app.routers.security_events import SECURITY_TYPES, STAGE, STAGE_TYPES
 from app.services import response_channel as rc
 from app.services import security_responder as responder
 
@@ -96,6 +96,72 @@ async def security_summary(server_id: str, user: CurrentUser, db: AsyncSession =
         "active_events": active_events,
         "pending_approvals": pending_approvals,
         "blocked_ips": blocked_ips,
+    }
+
+
+@router.get("/{server_id}/security/incidents")
+async def list_incidents(
+    server_id: str,
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    stage: str | None = Query(None),
+):
+    """Merged incident chronology: each detected attack (Alert) newest-first, with
+    its mitigations (SecurityActions) nested chronologically underneath. Powers the
+    connect-the-dots timeline — one stream that reads like an incident report.
+
+    Paginated by incident (attack), not by action, so an attack and all its
+    responses always stay together on the same page."""
+    await _access(server_id, user, db)
+
+    base = select(Alert).where(
+        Alert.server_id == server_id, Alert.type.in_(SECURITY_TYPES)
+    )
+    if stage and stage in STAGE_TYPES:
+        base = base.where(Alert.type.in_(STAGE_TYPES[stage]))
+    total = (
+        await db.execute(select(func.count()).select_from(base.subquery()))
+    ).scalar_one()
+    attacks = (
+        await db.execute(
+            base.order_by(Alert.sent_at.desc()).limit(limit).offset(offset)
+        )
+    ).scalars().all()
+
+    # Fetch every mitigation linked to this page's attacks in one query, then
+    # group by alert_id so each incident carries its own response chronology.
+    alert_ids = [a.id for a in attacks]
+    by_alert: dict[str, list[dict]] = {}
+    if alert_ids:
+        actions = (
+            await db.execute(
+                select(SecurityAction)
+                .where(SecurityAction.alert_id.in_(alert_ids))
+                .order_by(SecurityAction.created_at.asc())
+            )
+        ).scalars().all()
+        for ac in actions:
+            by_alert.setdefault(str(ac.alert_id), []).append(_row(ac))
+
+    return {
+        "items": [
+            {
+                "id": str(a.id),
+                "type": a.type,
+                "stage": STAGE.get(a.type, "—"),
+                "severity": a.severity,
+                "message": a.message,
+                "state": a.state,
+                "at": a.sent_at,
+                "actions": by_alert.get(str(a.id), []),
+            }
+            for a in attacks
+        ],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
     }
 
 

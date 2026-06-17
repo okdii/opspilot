@@ -38,6 +38,18 @@ STAGE = {
     "log_ingestion_silent": "Cover-tracks",
 }
 
+# Kill-chain order for the pipeline view (attacker progression left → right).
+STAGE_ORDER = ["Recon", "Exploit", "Upload", "Execute", "Persist", "Cover-tracks"]
+
+# Reverse map stage → alert types, so the feed can be filtered by stage. Stage is
+# derived from type (not stored), so a stage filter expands to its member types.
+STAGE_TYPES: dict[str, list[str]] = {}
+for _type, _stage in STAGE.items():
+    STAGE_TYPES.setdefault(_stage, []).append(_type)
+
+# Worst-severity ranking when collapsing a stage's events to one tint.
+_SEV_RANK = {"critical": 2, "warning": 1}
+
 
 @router.get("/{server_id}/security/events")
 async def security_events(
@@ -46,12 +58,15 @@ async def security_events(
     db: AsyncSession = Depends(get_db),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    stage: str | None = Query(None),
 ):
     await _check_access(server_id, user, db)
 
     base = select(Alert).where(
         Alert.server_id == server_id, Alert.type.in_(SECURITY_TYPES)
     )
+    if stage and stage in STAGE_TYPES:
+        base = base.where(Alert.type.in_(STAGE_TYPES[stage]))
     total = (
         await db.execute(select(func.count()).select_from(base.subquery()))
     ).scalar_one()
@@ -77,3 +92,35 @@ async def security_events(
         "limit": limit,
         "offset": offset,
     }
+
+
+@router.get("/{server_id}/security/stages")
+async def security_stages(
+    server_id: str,
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Per kill-chain-stage breakdown for the pipeline view: event count + worst
+    severity per stage, in attack-progression order. Aggregated over all events
+    (GROUP BY), so the pipeline stays accurate independent of the feed's page."""
+    await _check_access(server_id, user, db)
+
+    rows = (
+        await db.execute(
+            select(Alert.type, Alert.severity, func.count())
+            .where(Alert.server_id == server_id, Alert.type.in_(SECURITY_TYPES))
+            .group_by(Alert.type, Alert.severity)
+        )
+    ).all()
+
+    agg = {s: {"stage": s, "count": 0, "severity": None} for s in STAGE_ORDER}
+    for type_, severity, count in rows:
+        s = STAGE.get(type_)
+        if s is None:
+            continue
+        bucket = agg[s]
+        bucket["count"] += count
+        if bucket["severity"] is None or _SEV_RANK.get(severity, 0) > _SEV_RANK.get(bucket["severity"], 0):
+            bucket["severity"] = severity
+
+    return [agg[s] for s in STAGE_ORDER]

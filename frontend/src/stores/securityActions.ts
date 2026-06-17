@@ -76,9 +76,11 @@ export const useSecurityActionsStore = defineStore('securityActions', () => {
     } catch (e) { _err(e, 'Failed to load security summary') }
   }
 
-  // Refresh everything that a mutation can change: ledger page, pending, counts.
+  // Refresh what a mutation changes within this store: the approval banner and the
+  // status-bar counts. The merged incident timeline (security store) is refetched by
+  // the component, since the attack→mitigation grouping lives there.
   async function refresh(serverId: string) {
-    await Promise.all([fetchActions(serverId), fetchPending(serverId), fetchSummary(serverId)])
+    await Promise.all([fetchPending(serverId), fetchSummary(serverId)])
   }
 
   async function fetchSettings(serverId: string) {
