@@ -41,15 +41,16 @@ def _unit_state(unit):
 
 
 def _litespeed_running():
-    """Fallback for LiteSpeed: check lshttpd process when systemd reports not installed.
+    """Fallback for LiteSpeed: check lshttpd/openlitespeed process directly.
 
-    Commercial LiteSpeed manages itself via lswsctrl rather than systemd, so
-    systemctl always reports the unit as not-found even when the server is live.
+    Both commercial LiteSpeed (lshttpd) and OpenLiteSpeed (openlitespeed) may
+    show as inactive/not-found in systemd while the master process is live.
+    pgrep -f matches the full command line, covering both binary names.
     """
-    # Primary: pgrep for the lshttpd master process
+    # Primary: scan for either lshttpd or openlitespeed in the process list
     try:
         r = subprocess.run(
-            ["pgrep", "-x", "lshttpd"],
+            ["pgrep", "-f", "lshttpd|openlitespeed"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=3,
         )
         if r.returncode == 0:
@@ -101,9 +102,10 @@ def collect_services():
             else:
                 status = "stopped"
             break
-        # LiteSpeed fallback: commercial LiteSpeed uses lswsctrl not systemd,
-        # so all aliases report not-found even when the server is running.
-        if status == "not_installed" and svc["name"] == "litespeed":
+        # LiteSpeed fallback: both commercial LiteSpeed and OpenLiteSpeed may
+        # show as inactive/not-found in systemd while the master process is live.
+        # Trigger on stopped too — systemd may have the unit loaded but inactive.
+        if svc["name"] == "litespeed" and status in ("not_installed", "stopped"):
             if _litespeed_running():
                 status = "running"
         entry = {"name": svc["name"], "status": status}
