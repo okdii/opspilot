@@ -9,15 +9,16 @@ PUT  /api/servers/{server_id}/security/auto-response          update per-server 
 """
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.deps import AdminUser, CurrentUser
-from app.models.other import SecurityAction
+from app.models.other import Alert, SecurityAction
 from app.models.server import Server
+from app.routers.security_events import SECURITY_TYPES
 from app.services import response_channel as rc
 from app.services import security_responder as responder
 
@@ -45,13 +46,57 @@ def _row(a: SecurityAction) -> dict:
 
 
 @router.get("/{server_id}/security/actions")
-async def list_actions(server_id: str, user: CurrentUser, db: AsyncSession = Depends(get_db)):
+async def list_actions(
+    server_id: str,
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    status: str | None = Query(None),
+):
     await _access(server_id, user, db)
+    base = select(SecurityAction).where(SecurityAction.server_id == server_id)
+    if status:
+        base = base.where(SecurityAction.status == status)
+    total = (
+        await db.execute(select(func.count()).select_from(base.subquery()))
+    ).scalar_one()
     rows = (await db.execute(
-        select(SecurityAction).where(SecurityAction.server_id == server_id)
-        .order_by(SecurityAction.created_at.desc()).limit(200)
+        base.order_by(SecurityAction.created_at.desc()).limit(limit).offset(offset)
     )).scalars().all()
-    return [_row(a) for a in rows]
+    return {"items": [_row(a) for a in rows], "total": total, "limit": limit, "offset": offset}
+
+
+@router.get("/{server_id}/security/summary")
+async def security_summary(server_id: str, user: CurrentUser, db: AsyncSession = Depends(get_db)):
+    """Aggregate counts for the Threat Status bar. Computed server-side so the
+    chips stay accurate independent of the paginated events/actions pages."""
+    await _access(server_id, user, db)
+    active_events = (await db.execute(
+        select(func.count()).select_from(Alert).where(
+            Alert.server_id == server_id,
+            Alert.type.in_(SECURITY_TYPES),
+            Alert.state != "resolved",
+        )
+    )).scalar_one()
+    pending_approvals = (await db.execute(
+        select(func.count()).select_from(SecurityAction).where(
+            SecurityAction.server_id == server_id,
+            SecurityAction.status == "pending_approval",
+        )
+    )).scalar_one()
+    blocked_ips = (await db.execute(
+        select(func.count(func.distinct(SecurityAction.target))).where(
+            SecurityAction.server_id == server_id,
+            SecurityAction.action_type == "block_ip",
+            SecurityAction.status == "executed",
+        )
+    )).scalar_one()
+    return {
+        "active_events": active_events,
+        "pending_approvals": pending_approvals,
+        "blocked_ips": blocked_ips,
+    }
 
 
 async def _get_action(server_id: str, action_id: int, db: AsyncSession) -> SecurityAction:

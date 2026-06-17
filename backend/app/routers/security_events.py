@@ -3,7 +3,7 @@
 GET /api/servers/{server_id}/security/events
 """
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -45,26 +45,35 @@ async def security_events(
     user: CurrentUser,
     db: AsyncSession = Depends(get_db),
     limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
 ):
     await _check_access(server_id, user, db)
 
+    base = select(Alert).where(
+        Alert.server_id == server_id, Alert.type.in_(SECURITY_TYPES)
+    )
+    total = (
+        await db.execute(select(func.count()).select_from(base.subquery()))
+    ).scalar_one()
     rows = (
         await db.execute(
-            select(Alert)
-            .where(Alert.server_id == server_id, Alert.type.in_(SECURITY_TYPES))
-            .order_by(Alert.sent_at.desc())
-            .limit(limit)
+            base.order_by(Alert.sent_at.desc()).limit(limit).offset(offset)
         )
     ).scalars().all()
-    return [
-        {
-            "id": str(a.id),
-            "type": a.type,
-            "stage": STAGE.get(a.type, "—"),
-            "severity": a.severity,
-            "message": a.message,
-            "state": a.state,
-            "at": a.sent_at,
-        }
-        for a in rows
-    ]
+    return {
+        "items": [
+            {
+                "id": str(a.id),
+                "type": a.type,
+                "stage": STAGE.get(a.type, "—"),
+                "severity": a.severity,
+                "message": a.message,
+                "state": a.state,
+                "at": a.sent_at,
+            }
+            for a in rows
+        ],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
