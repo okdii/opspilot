@@ -33,7 +33,7 @@ CONFIDENCE = {
     "webshell_upload": "high",
     "ssh_key_modified": "high",
     "db_privilege_change": "high",
-    "log_tampering": "high",
+    "log_tampering": "high",  # alert-only: intentionally absent from ACTION_PLAN (no safe auto-verb)
     "jce_exploit_attempt": "high",
     "probe_scan": "medium",
 }
@@ -125,7 +125,7 @@ async def _extract_db_user(db: AsyncSession, alert: Alert) -> str | None:
     since = (alert.sent_at or _now()) - timedelta(minutes=5)
     for like in ("%CREATE USER%", "%GRANT ALL%"):
         for line in await _recent_log_lines(db, alert.server_id, like, since):
-            m = re.search(r"(?:CREATE USER|TO)\s+'([^']+)'", line, re.IGNORECASE)
+            m = re.search(r"(?:CREATE USER|GRANT\b[^']*TO)\s+'([^']+)'", line, re.IGNORECASE)
             if m:
                 return m.group(1)
     return None
@@ -147,6 +147,8 @@ async def _resolve_target(db: AsyncSession, alert: Alert, action_type: str,
 
 
 async def _already_handled(db: AsyncSession, alert_id) -> bool:
+    # One SecurityAction row per alert is the idempotency key. Failed rows count
+    # too: a fired alert is handled exactly once and not retried, by design.
     row = (await db.execute(
         select(SecurityAction.id).where(SecurityAction.alert_id == alert_id).limit(1)
     )).first()
@@ -179,7 +181,8 @@ async def _execute(server: Server, action_type: str, target: str) -> dict:
     raise rc.ResponseError(f"unknown action {action_type}")
 
 
-async def _handle_alert(db: AsyncSession, alert: Alert, server: Server) -> None:
+async def _handle_alert(db: AsyncSession, alert: Alert, server: Server,
+                        tick_executed: dict) -> None:
     plan = ACTION_PLAN.get(alert.type)
     if not plan:
         return
@@ -201,8 +204,9 @@ async def _handle_alert(db: AsyncSession, alert: Alert, server: Server) -> None:
             row.detail = f"awaiting approval: {action_type} {target}"
             db.add(row)
             continue
-        # Tier 1: gates already checked by caller; circuit breaker is per-server.
-        if await _breaker_tripped(db, server.id):
+        # Tier 1: breaker counts prior committed ticks AND actions already executed
+        # earlier in THIS tick (the COUNT query may not see uncommitted rows yet).
+        if await _breaker_tripped(db, server.id) or tick_executed.get(server.id, 0) >= _BREAKER_MAX:
             row.status = "failed"
             row.detail = "circuit breaker tripped — auto-response paused"
             db.add(row)
@@ -213,6 +217,7 @@ async def _handle_alert(db: AsyncSession, alert: Alert, server: Server) -> None:
             row.executed_at = _now()
             row.reversal = reversal
             row.detail = f"{action_type} {target}"
+            tick_executed[server.id] = tick_executed.get(server.id, 0) + 1
         except rc.ResponseError as e:
             row.status = "failed"
             row.detail = str(e)
@@ -239,11 +244,12 @@ async def security_responder() -> None:
                 Alert.server_id.in_(servers.keys()),
             ).order_by(Alert.sent_at.asc())
         )).scalars().all()
+        tick_executed: dict = {}
         for alert in alerts:
             try:
                 if await _already_handled(db, alert.id):
                     continue
-                await _handle_alert(db, alert, servers[alert.server_id])
+                await _handle_alert(db, alert, servers[alert.server_id], tick_executed)
             except Exception:  # noqa: BLE001 — one bad alert must not abort the tick
                 logger.warning("security_responder: alert %s failed", alert.id, exc_info=True)
         await db.commit()
@@ -261,6 +267,9 @@ async def ttl_expiry() -> None:
         for action, server in rows:
             ttl = server.block_ttl_hours or 24
             if action.executed_at and _now() >= action.executed_at + timedelta(hours=ttl):
+                if not action.reversal or "ip" not in action.reversal:
+                    logger.warning("ttl_expiry: action %s has no reversal ip, skipping", action.id)
+                    continue
                 try:
                     await rc.unblock_ip(server, action.reversal["ip"])
                     action.status = "expired"
