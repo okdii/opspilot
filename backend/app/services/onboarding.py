@@ -917,7 +917,7 @@ async def _step_install_action_wrapper(db, server: Server, ssh: SSHSession) -> N
     After this step succeeds, the SSH user can ONLY sudo the wrapper script —
     a stolen key cannot run arbitrary root commands.
     """
-    log, t0 = await _start_step(db, server.id, "install_action_wrapper")
+    log, t0 = await _start_step(db, server.id, "install_action_wrapper", 12)
     try:
         ssh_user = server.ssh_user or "opspilot"
 
