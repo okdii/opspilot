@@ -84,6 +84,7 @@ export const useSecurityActionsStore = defineStore('securityActions', () => {
   }
 
   async function fetchSettings(serverId: string) {
+    settings.value = null  // clear stale data from previous server immediately
     try {
       settings.value = (await api.get(`/api/servers/${serverId}/security/auto-response`)).data
     } catch (e) { _err(e, 'Failed to load auto-response settings') }
