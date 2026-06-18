@@ -64,8 +64,8 @@
 </head>
 <body>
 <div class="header">
-  <div><h1>OpsPilot &mdash; Dev Progress</h1><p>18 phases &middot; 248 tasks &middot; Python + FastAPI + Vue 3 + TimescaleDB</p></div>
-  <div class="badge">Updated: <span>2026-06-17</span></div>
+  <div><h1>OpsPilot &mdash; Dev Progress</h1><p>19 phases &middot; 256 tasks &middot; Python + FastAPI + Vue 3 + TimescaleDB</p></div>
+  <div class="badge">Updated: <span>2026-06-18</span></div>
 </div>
 <div class="overall">
   <div>
@@ -372,6 +372,16 @@ const phases = [
     { text: "securityActions.ts Pinia store + routers/security_actions.py: GET ledger, POST approve/reject/undo (Admin), GET/PUT per-server auto-response settings", status: "done", smoke: true },
     { text: "AutoResponseSettings.vue (per-server toggle + TTL) + SecurityActionsPanel.vue (pending-approval danger cards, history, confirm-preview approve/undo, 30s poll, reuses StatusBadge) mounted in SecurityTab; GeneralTab master kill switch", status: "done", smoke: true },
     { text: "Live-VM e2e (Lima ubuntu): probe_scan→block_ip (real iptables DROP); webshell_execution→quarantine_file (file moved to /var/opspilot-quarantine chmod000) + block_ip; webshell_command_exec→kill_pid (real process killed); ssh_key_modified→Tier-2 pending→approve (attacker key stripped 2→1)→undo (restored); TTL backdate→expired + DROP removed; circuit breaker wired", status: "done", smoke: true },
+  ]},
+  { id: 20, title: "Attacker Intelligence", subtitle: "Security → Attackers sub-tab: existing security alerts/actions pivoted by source IP (Approach A — inline-message IP, block_ip target fallback, public-IP filtered) into attacker profiles enriched with AbuseIPDB reputation, plus a global attack-trend chart. Read-only intelligence (no manual block/unblock in v1).", tasks: [
+    { text: "Migration 0033_ip_intel: ip_intel cache table (abuse_score/country/isp/usage/reports/raw/fetched_at, 7-day TTL) + app_settings.abuseipdb_enabled / abuseipdb_api_key_encrypted; IpIntel ORM model", status: "done", smoke: true },
+    { text: "ip_intel.py service: extract_inline_ip + is_public_ip helpers, cache-first lazy enrich() (no-op when disabled/no-key/private/fresh, never raises, self-commits cache), enrich_many; security_responder wired to shared extractor", status: "done", smoke: true },
+    { text: "GET /security/attackers endpoint: IP-grouped profiles (event_count, first/last_seen, kill-chain stages reached, critical/warning counts, mitigations, currently-blocked = executed & not reverted), page-scoped AbuseIPDB enrichment, sort/limit/offset", status: "done", smoke: true },
+    { text: "GET /security/attackers/{ip}/events (per-IP history, paginated) + GET /security/trend (zero-filled daily critical/warning buckets, TZ-explicit date_trunc, 1-90 days)", status: "done", smoke: true },
+    { text: "attackers.ts Pinia store: fetchAttackers/setSort/fetchTrend/fetchAttackerEvents, Attacker/AttackerIntel/TrendBucket/AttackerSort types, pagination", status: "done", smoke: true },
+    { text: "AttackTrendChart.vue: reuses MetricChart as a stacked Critical/Warning daily bar chart with empty-state guard", status: "done", smoke: true },
+    { text: "AttackerIntelligence.vue Attackers sub-tab (reuses Pager/StatusBadge/AttackTrendChart/relativeTime): top-attackers list, abuse-score chip, geo flag, mini kill-chain, blocked badge, sort, row-expand intel + per-IP event history; wired into SecurityTab as 3rd sub-tab. Browser-smoke verified", status: "done", smoke: true },
+    { text: "AbuseIPDB Settings: response/patch schema (has_key boolean, never returns key), encrypted key persistence, POST /settings/abuseipdb/test, settings store + GeneralTab \"Threat Intelligence (AbuseIPDB)\" card (enable toggle, masked key field, test connection). Browser-smoke verified", status: "done", smoke: true },
   ]},
 ];
 
