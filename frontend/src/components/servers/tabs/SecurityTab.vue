@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import ThreatIntelligence from './security/ThreatIntelligence.vue'
+import AttackerIntelligence from './security/AttackerIntelligence.vue'
 import Fail2banPanel from './fail2ban/Fail2banPanel.vue'
 
 defineProps<{ serverId: string }>()
 
-type SubTab = 'threat' | 'fail2ban'
+type SubTab = 'threat' | 'attackers' | 'fail2ban'
 const subTab = ref<SubTab>('threat')
 </script>
 
@@ -16,6 +17,9 @@ const subTab = ref<SubTab>('threat')
         <button class="sub-tab" :class="{ active: subTab === 'threat' }" @click="subTab = 'threat'">
           Threat Intelligence
         </button>
+        <button class="sub-tab" :class="{ active: subTab === 'attackers' }" @click="subTab = 'attackers'">
+          Attackers
+        </button>
         <button class="sub-tab" :class="{ active: subTab === 'fail2ban' }" @click="subTab = 'fail2ban'">
           Fail2ban
         </button>
@@ -23,6 +27,7 @@ const subTab = ref<SubTab>('threat')
     </div>
 
     <ThreatIntelligence v-if="subTab === 'threat'" :server-id="serverId" />
+    <AttackerIntelligence v-else-if="subTab === 'attackers'" :server-id="serverId" />
     <Fail2banPanel v-else :server-id="serverId" />
   </div>
 </template>
