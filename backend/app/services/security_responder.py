@@ -41,6 +41,7 @@ CONFIDENCE = {
     "db_privilege_change": "high",
     "log_tampering": "high",  # alert-only: intentionally absent from ACTION_PLAN (no safe auto-verb)
     "jce_exploit_attempt": "high",
+    "ssh_brute_force": "high",
     "probe_scan": "medium",
 }
 
@@ -51,6 +52,7 @@ ACTION_PLAN = {
     "webshell_execution":    [("quarantine_file", 1), ("block_ip", 1)],
     "webshell_command_exec": [("kill_pid", 1), ("block_ip", 1)],
     "jce_exploit_attempt":   [("block_ip", 1)],
+    "ssh_brute_force":       [("block_ip", 1)],
     "ssh_key_modified":      [("revert_authorized_keys", 2)],
     "db_privilege_change":   [("disable_db_user", 2)],
 }
