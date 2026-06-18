@@ -26,6 +26,8 @@ class SettingsResponse(BaseModel):
     ai_model: str
     ai_has_key: bool
     ai_base_url: str | None
+    abuseipdb_enabled: bool
+    abuseipdb_has_key: bool
 
 
 class SettingsPatch(BaseModel):
@@ -51,6 +53,8 @@ class SettingsPatch(BaseModel):
     ai_model: str | None = None
     ai_api_key: str | None = None  # plaintext in; encrypted at rest; blank/None keeps existing
     ai_base_url: str | None = None
+    abuseipdb_enabled: bool | None = None
+    abuseipdb_api_key: str | None = None  # plaintext in; encrypted at rest; blank/None keeps existing
 
     @field_validator("timezone")
     @classmethod

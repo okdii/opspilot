@@ -66,6 +66,12 @@ const aiTestStatus = ref<'idle' | 'testing' | 'ok' | 'error'>('idle')
 const aiTestMsg = ref('')
 const savingAi = ref(false)
 
+const abuseipdbEnabled = ref(false)
+const abuseipdbApiKey = ref('')
+const abuseipdbHasKey = ref(false)
+const savingAbuseIpdb = ref(false)
+const testingAbuseIpdb = ref(false)
+
 const savingIdentity = ref(false)
 const savingSmtp = ref(false)
 const testing = ref(false)
@@ -94,6 +100,8 @@ async function load() {
     aiModel.value = settings.ai.model
     aiHasKey.value = settings.ai.hasKey
     aiBaseUrl.value = settings.ai.baseUrl
+    abuseipdbEnabled.value = settings.abuseipdb.enabled
+    abuseipdbHasKey.value = settings.abuseipdb.hasKey
   } catch (err) {
     notify.error(getApiError(err) ?? 'Unable to load settings.')
   } finally {
@@ -231,6 +239,36 @@ async function testAi() {
   } catch (err) {
     aiTestStatus.value = 'error'
     aiTestMsg.value = getApiError(err)?.message ?? 'Connection failed'
+  }
+}
+
+async function saveAbuseIpdb() {
+  savingAbuseIpdb.value = true
+  try {
+    const payload: { abuseipdb_enabled: boolean; abuseipdb_api_key?: string } = {
+      abuseipdb_enabled: abuseipdbEnabled.value,
+    }
+    if (abuseipdbApiKey.value) payload.abuseipdb_api_key = abuseipdbApiKey.value
+    await settings.saveAbuseIpdb(payload)
+    abuseipdbApiKey.value = ''
+    abuseipdbHasKey.value = settings.abuseipdb.hasKey
+    notify.success('AbuseIPDB settings saved.')
+  } catch (err) {
+    notify.error(getApiError(err) ?? 'Unable to save AbuseIPDB settings.')
+  } finally {
+    savingAbuseIpdb.value = false
+  }
+}
+
+async function testAbuseIpdb() {
+  testingAbuseIpdb.value = true
+  try {
+    const res = await settings.testAbuseIpdb()
+    notify.success(`AbuseIPDB connected — sample lookup score: ${res.sample_score}`)
+  } catch (err) {
+    notify.error(getApiError(err) ?? 'AbuseIPDB connection failed.')
+  } finally {
+    testingAbuseIpdb.value = false
   }
 }
 </script>
@@ -448,6 +486,43 @@ async function testAi() {
           </button>
         </div>
       </template>
+    </section>
+
+    <!-- Threat Intelligence (AbuseIPDB) -->
+    <section class="card">
+      <h2>Threat Intelligence (AbuseIPDB)</h2>
+      <p class="section-desc">Enriches attacker IPs on the server Security → Attackers tab with crowd-sourced abuse reputation.</p>
+      <div class="field toggle-row">
+        <div>
+          <span class="toggle-label">Enable AbuseIPDB reputation lookups</span>
+          <p class="hint">Public attacker IPs are sent to AbuseIPDB for scoring. Lookups are cached for 7 days.</p>
+        </div>
+        <label class="switch">
+          <input v-model="abuseipdbEnabled" type="checkbox" :disabled="loading" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="field">
+        <label>API Key</label>
+        <input
+          v-model="abuseipdbApiKey"
+          type="password"
+          autocomplete="new-password"
+          :placeholder="abuseipdbHasKey ? '••••••••' : 'Paste your AbuseIPDB API key'"
+          :disabled="loading"
+        />
+        <p class="hint">
+          Get a free key at <code>abuseipdb.com/account/api</code>.<span v-if="abuseipdbHasKey"> Leave blank to keep the existing key.</span>
+        </p>
+      </div>
+      <div class="actions">
+        <button class="primary" :disabled="savingAbuseIpdb || loading" @click="saveAbuseIpdb">
+          <span v-if="savingAbuseIpdb" class="spin"></span><span v-else>Save</span>
+        </button>
+        <button class="ghost" :disabled="testingAbuseIpdb || loading || !abuseipdbHasKey" @click="testAbuseIpdb">
+          <span v-if="testingAbuseIpdb" class="spin dark"></span><span v-else>Test Connection</span>
+        </button>
+      </div>
     </section>
   </div>
 </template>

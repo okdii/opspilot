@@ -54,6 +54,8 @@ def _to_response(s: Settings) -> SettingsResponse:
         ai_model=s.ai_model,
         ai_has_key=s.ai_api_key_encrypted is not None,
         ai_base_url=s.ai_base_url,
+        abuseipdb_enabled=s.abuseipdb_enabled,
+        abuseipdb_has_key=s.abuseipdb_api_key_encrypted is not None,
     )
 
 
@@ -75,6 +77,10 @@ async def patch_settings(body: SettingsPatch, _: AdminUser, db: AsyncSession = D
     ai_key = data.pop("ai_api_key", None)
     if ai_key:
         s.ai_api_key_encrypted = crypto.encrypt(ai_key)
+
+    abuseipdb_key = data.pop("abuseipdb_api_key", None)
+    if abuseipdb_key:
+        s.abuseipdb_api_key_encrypted = crypto.encrypt(abuseipdb_key)
 
     changed_retention = {}
     for key, value in data.items():
@@ -195,3 +201,31 @@ async def ai_test(_: AdminUser, db: AsyncSession = Depends(get_db)):
     except Exception as exc:
         raise HTTPException(502, detail={"error": "ai_error", "message": str(exc)})
     return {"ok": True, "response": text_out.strip(), "prompt_tokens": pt, "completion_tokens": ct}
+
+
+@router.post("/abuseipdb/test", status_code=200)
+async def abuseipdb_test(_: AdminUser, db: AsyncSession = Depends(get_db)):
+    s = await _get_settings_row(db)
+    if not s.abuseipdb_api_key_encrypted:
+        raise HTTPException(
+            400,
+            detail={"error": "not_configured", "message": "Add an AbuseIPDB API key first."},
+        )
+    import httpx
+    key = crypto.decrypt(s.abuseipdb_api_key_encrypted)
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                "https://api.abuseipdb.com/api/v2/check",
+                params={"ipAddress": "8.8.8.8", "maxAgeInDays": 90},
+                headers={"Key": key, "Accept": "application/json"},
+            )
+        if resp.status_code != 200:
+            raise HTTPException(
+                502, detail={"error": "abuseipdb_error", "message": resp.text[:400]})
+        score = resp.json().get("data", {}).get("abuseConfidenceScore")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, detail={"error": "abuseipdb_error", "message": str(e)})
+    return {"ok": True, "sample_score": score}

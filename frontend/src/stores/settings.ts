@@ -34,6 +34,10 @@ export const useSettingsStore = defineStore('settings', () => {
     hasKey: false,
     baseUrl: '',
   })
+  const abuseipdb = ref({
+    enabled: false,
+    hasKey: false,
+  })
   const sessions = ref<Session[]>([])
   const team = ref<{ members: TeamMember[]; pendingInvites: PendingInvite[] }>({
     members: [],
@@ -78,6 +82,10 @@ export const useSettingsStore = defineStore('settings', () => {
       hasKey: data.ai_has_key ?? false,
       baseUrl: data.ai_base_url ?? '',
     }
+    abuseipdb.value = {
+      enabled: data.abuseipdb_enabled ?? false,
+      hasKey: data.abuseipdb_has_key ?? false,
+    }
   }
 
   async function saveGeneral(p: { instance_name: string; base_url: string; timezone: string }) {
@@ -107,6 +115,14 @@ export const useSettingsStore = defineStore('settings', () => {
   async function saveAutoResponse(p: { auto_response_enabled: boolean }) {
     await api.patch('/api/settings', p)
     await fetchSettings()
+  }
+  async function saveAbuseIpdb(p: { abuseipdb_enabled: boolean; abuseipdb_api_key?: string }) {
+    await api.patch('/api/settings', p)
+    await fetchSettings()
+  }
+  async function testAbuseIpdb() {
+    const { data } = await api.post('/api/settings/abuseipdb/test')
+    return data as { ok: boolean; sample_score: number | null }
   }
 
   async function fetchSessions() {
@@ -175,6 +191,7 @@ export const useSettingsStore = defineStore('settings', () => {
     discord,
     autoResponse,
     ai,
+    abuseipdb,
     sessions,
     team,
     isLoading,
@@ -187,6 +204,8 @@ export const useSettingsStore = defineStore('settings', () => {
     saveRetention,
     saveDiscord,
     saveAutoResponse,
+    saveAbuseIpdb,
+    testAbuseIpdb,
     fetchSessions,
     revokeSession,
     revokeAllOtherSessions,
