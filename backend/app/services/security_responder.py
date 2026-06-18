@@ -96,14 +96,26 @@ async def _recent_log_lines(db: AsyncSession, server_id, like: str,
     return [r[0] for r in rows]
 
 
+_IP_LOG_PATTERNS: dict[str, str] = {
+    # JCE exploit: URLs use ?option=com_jce query params, not .php paths
+    "jce_exploit_attempt":   "%com_jce%",
+    # Webshell alerts: file paths contain .php
+    "webshell_upload":       "%.php%",
+    "webshell_execution":    "%.php%",
+    "webshell_command_exec": "%.php%",
+}
+
+
 async def _extract_ip(db: AsyncSession, alert: Alert) -> str | None:
     # probe_scan/ssh messages carry the IP inline (shared regex, see ip_intel).
     inline = ip_intel.extract_inline_ip(alert.message)
     if inline:
         return inline
-    # Otherwise pull from recent access-log lines around the alert.
+    # Otherwise pull from recent access-log lines around the alert using a
+    # pattern matched to the alert type so we hit the right log lines.
     since = (alert.sent_at or _now()) - timedelta(minutes=5)
-    for line in await _recent_log_lines(db, alert.server_id, "%.php%", since):
+    like = _IP_LOG_PATTERNS.get(alert.type, "%.php%")
+    for line in await _recent_log_lines(db, alert.server_id, like, since):
         m = _IPV4.search(line)
         if m:
             return m.group(1)
