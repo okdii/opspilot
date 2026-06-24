@@ -358,12 +358,12 @@ def _log_paths(os_info: OSInfo) -> dict:
 
 # auditd: non-disruptive rules. The web-server uid is resolved remotely
 # (www-data / apache / nginx, falling back to 33) rather than hardcoded.
-_AUDITD_SETUP = """\
+_AUDITD_SETUP_TEMPLATE = """\
 WEBUID=$(id -u www-data 2>/dev/null || id -u apache 2>/dev/null || id -u nginx 2>/dev/null || echo 33)
 ( apt-get install -y auditd >/dev/null 2>&1 || yum install -y audit >/dev/null 2>&1 || true )
 mkdir -p /etc/audit/rules.d
 cat >/etc/audit/rules.d/opspilot.rules <<RULES
--w /var/www -p wa -k webroot_write
+-w {webroot} -p wa -k webroot_write
 -a exit,always -F arch=b64 -F uid=$WEBUID -S execve -k webshell_exec
 -a exit,always -F arch=b32 -F uid=$WEBUID -S execve -k webshell_exec
 -w /root/.ssh/authorized_keys -p wa -k ssh_key_change
@@ -373,6 +373,10 @@ cat >/etc/audit/rules.d/opspilot.rules <<RULES
 RULES
 augenrules --load >/dev/null 2>&1 && echo AUDITD_OK
 """
+
+
+def _build_auditd_setup(webroot: str) -> str:
+    return _AUDITD_SETUP_TEMPLATE.replace("{webroot}", webroot)
 
 # PHP-execution block for upload dirs. nginx loads conf.d/*.conf in the http{}
 # context, but a `location` directive is only valid inside a server{} block — a
@@ -394,7 +398,7 @@ echo PHPBLOCK_SNIPPET
 # Remediation wrapper installed at /usr/local/bin/opspilot-action.
 # The sudoers drop-in pins to this script so a stolen SSH key cannot run
 # arbitrary root commands — only the verbs defined here.
-_OPSPILOT_ACTION_SCRIPT = """\
+_OPSPILOT_ACTION_SCRIPT_TEMPLATE = """\
 #!/usr/bin/env bash
 # /usr/local/bin/opspilot-action — OpsPilot allow-listed remediation wrapper.
 # MANAGED BY OPSPILOT. Reinstalled on every onboarding run.
@@ -440,7 +444,7 @@ _validate_path() {
     [[ "$path" == /* ]] || die "path must be absolute: $path"
     [[ "$path" != *..* ]] || die "path must not contain ..: $path"
     local ok=0
-    for root in /var/www /usr/share/nginx /srv/www /home; do
+    for root in /var/www /usr/share/nginx /srv/www /home{extra_roots_entry}; do
         [[ "$path" == "$root"/* ]] && ok=1 && break
     done
     (( ok )) || die "path not under a web root: $path"
@@ -522,6 +526,17 @@ case "$verb" in
         ;;
 esac
 """
+
+_STANDARD_VALIDATE_ROOTS = frozenset({"/var/www", "/usr/share/nginx", "/srv/www", "/home"})
+
+
+def _build_action_script(extra_root: str | None) -> str:
+    if extra_root and extra_root not in _STANDARD_VALIDATE_ROOTS:
+        entry = f" {extra_root}"
+    else:
+        entry = ""
+    return _OPSPILOT_ACTION_SCRIPT_TEMPLATE.replace("{extra_roots_entry}", entry)
+
 
 # sudoers drop-in template. __SSH_USER__ is replaced with server.ssh_user at install time.
 # Pins the SSH user to ONLY the wrapper script — no other root commands are permitted.
@@ -701,10 +716,10 @@ def _discover_webroot(nginx_t_output: str) -> str:
     return "/var/www/html"
 
 
-async def _setup_auditd(ssh: SSHSession) -> bool:
+async def _setup_auditd(ssh: SSHSession, webroot: str = "/var/www/html") -> bool:
     """Install non-disruptive auditd rules. Best-effort; returns True only on AUDITD_OK."""
     try:
-        r = await ssh.run(_AUDITD_SETUP, sudo=True, timeout=120)
+        r = await ssh.run(_build_auditd_setup(webroot), sudo=True, timeout=120)
         return "AUDITD_OK" in (r.stdout or "")
     except SSHError:
         return False
@@ -984,7 +999,7 @@ async def _step_install_action_wrapper(db, server: Server, ssh: SSHSession) -> N
         ssh_user = server.ssh_user or "opspilot"
 
         # Install the wrapper executable
-        await ssh.upload(_OPSPILOT_ACTION_SCRIPT, "/usr/local/bin/opspilot-action",
+        await ssh.upload(_build_action_script(None), "/usr/local/bin/opspilot-action",
                          mode=0o755, sudo=True)
 
         # Build the sudoers drop-in for this server's SSH user

@@ -37,7 +37,17 @@
     Tag               nginx_access
     DB                /var/lib/fluent-bit/nginx_access.db
     Skip_Long_Lines   On
+    Refresh_Interval  5
 
+{% for extra_path in extra_nginx_log_paths %}
+# ── Nginx vhost access ({{ extra_path }}) ────────────────────────────────────
+[INPUT]
+    Name              tail
+    Path              {{ extra_path }}
+    Tag               nginx_access
+    DB                /var/lib/fluent-bit/{{ extra_path | replace('/', '_') | replace('.', '_') }}.db
+    Skip_Long_Lines   On
+{% endfor %}
 # ── Nginx error ──────────────────────────────────────────────────────────────
 [INPUT]
     Name              tail
