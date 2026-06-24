@@ -1076,8 +1076,10 @@ async def reconfigure_monitoring(server_id, db: AsyncSession) -> ReconfigureResu
             webroot = _discover_webroot(nginx_t_output)
 
             # Step 6: auditd rules
+            auditd_ok = False
             try:
-                if not await _setup_auditd(ssh, webroot):
+                auditd_ok = await _setup_auditd(ssh, webroot)
+                if not auditd_ok:
                     warnings.append("auditd rule update failed or skipped")
             except Exception as e:
                 warnings.append(f"auditd rule update failed: {e}")
@@ -1114,7 +1116,7 @@ async def reconfigure_monitoring(server_id, db: AsyncSession) -> ReconfigureResu
                     php_app_log_path="",
                     web_access_log_path=web_access_log_path,
                     web_error_log_path=web_error_log_path,
-                    auditd_enabled=False,
+                    auditd_enabled=auditd_ok,
                     mariadb_general_enabled=False,
                     extra_nginx_log_paths=extra_logs_added,
                     syslog_path="/var/log/syslog",
