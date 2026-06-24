@@ -197,6 +197,7 @@ async def ai_test(_: AdminUser, db: AsyncSession = Depends(get_db)):
             system="You are a test assistant.",
             user="Reply with exactly: OK",
             max_tokens=10,
+            timeout=30.0,
         )
     except Exception as exc:
         raise HTTPException(502, detail={"error": "ai_error", "message": str(exc)})

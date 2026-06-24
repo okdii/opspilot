@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 class BaseAIProvider(ABC):
     @abstractmethod
     async def complete(
-        self, system: str, user: str, max_tokens: int = 4000
+        self, system: str, user: str, max_tokens: int = 4000, timeout: float | None = None
     ) -> tuple[str, int, int]:
         """Returns (response_text, prompt_tokens, completion_tokens)."""
         ...
@@ -20,9 +20,9 @@ class AnthropicProvider(BaseAIProvider):
         self.api_key = api_key
         self.model = model
 
-    async def complete(self, system: str, user: str, max_tokens: int = 4000) -> tuple[str, int, int]:
+    async def complete(self, system: str, user: str, max_tokens: int = 4000, timeout: float | None = None) -> tuple[str, int, int]:
         import anthropic  # noqa: PLC0415
-        client = anthropic.AsyncAnthropic(api_key=self.api_key, timeout=30.0)
+        client = anthropic.AsyncAnthropic(api_key=self.api_key, timeout=timeout)
         msg = await client.messages.create(
             model=self.model,
             max_tokens=max_tokens,
@@ -37,9 +37,9 @@ class OpenAIProvider(BaseAIProvider):
         self.api_key = api_key
         self.model = model
 
-    async def complete(self, system: str, user: str, max_tokens: int = 4000) -> tuple[str, int, int]:
+    async def complete(self, system: str, user: str, max_tokens: int = 4000, timeout: float | None = None) -> tuple[str, int, int]:
         import openai  # noqa: PLC0415
-        client = openai.AsyncOpenAI(api_key=self.api_key, timeout=30.0)
+        client = openai.AsyncOpenAI(api_key=self.api_key, timeout=timeout)
         resp = await client.chat.completions.create(
             model=self.model,
             max_tokens=max_tokens,
@@ -63,9 +63,9 @@ class CustomProvider(BaseAIProvider):
         self.model = model
         self.api_key = api_key or "not-required"
 
-    async def complete(self, system: str, user: str, max_tokens: int = 4000) -> tuple[str, int, int]:
+    async def complete(self, system: str, user: str, max_tokens: int = 4000, timeout: float | None = None) -> tuple[str, int, int]:
         import openai  # noqa: PLC0415
-        client = openai.AsyncOpenAI(base_url=self.base_url, api_key=self.api_key, timeout=30.0)
+        client = openai.AsyncOpenAI(base_url=self.base_url, api_key=self.api_key, timeout=timeout)
         resp = await client.chat.completions.create(
             model=self.model,
             max_tokens=max_tokens,
@@ -84,7 +84,7 @@ class GeminiProvider(BaseAIProvider):
         self.api_key = api_key
         self.model = model
 
-    async def complete(self, system: str, user: str, max_tokens: int = 4000) -> tuple[str, int, int]:
+    async def complete(self, system: str, user: str, max_tokens: int = 4000, timeout: float | None = None) -> tuple[str, int, int]:
         import google.generativeai as genai  # noqa: PLC0415
         genai.configure(api_key=self.api_key)
         model = genai.GenerativeModel(self.model, system_instruction=system)
