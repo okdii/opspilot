@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import ARRAY, Boolean, DateTime, ForeignKey, Integer, String, Text, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -27,6 +27,9 @@ class Server(Base):
         Boolean, nullable=False, default=False, server_default="false")
     block_ttl_hours: Mapped[int] = mapped_column(
         Integer, nullable=False, default=24, server_default="24")
+    extra_nginx_log_paths: Mapped[list | None] = mapped_column(
+        JSONB, nullable=True, default=list, server_default="'[]'::jsonb")
+    detected_webroot: Mapped[str | None] = mapped_column(String(255), nullable=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
     ingestion_token: Mapped[uuid.UUID] = mapped_column(

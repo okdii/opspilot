@@ -172,6 +172,7 @@ class SecurityAction(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending_approval", server_default="pending_approval")
     actor: Mapped[str] = mapped_column(String(255), nullable=False, default="auto", server_default="auto")
     confidence: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    block_category: Mapped[str | None] = mapped_column(String(20), nullable=True)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     reversal: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
