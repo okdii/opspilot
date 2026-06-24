@@ -74,6 +74,13 @@ class ServerUpdate(BaseModel):
     tags: list[str] | None = None
 
 
+class ReconfigureResult(BaseModel):
+    extra_logs_added: list[str]
+    webroot: str
+    rules_added: int
+    warnings: list[str]
+
+
 class ServerOut(BaseModel):
     id: UUID
     org_id: UUID

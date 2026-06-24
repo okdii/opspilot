@@ -12,7 +12,7 @@ from app.models.other import Alert
 from app.models.server import OnboardingLog, Server
 from app.models.user import UserOrganization
 from app.schemas.onboarding import OnboardingResponse, OnboardingStepOut
-from app.schemas.server import ServerCreate, ServerOut, ServerUpdate
+from app.schemas.server import ReconfigureResult, ServerCreate, ServerOut, ServerUpdate
 from app.services import onboarding as onboarding_service
 from app.services.alerting import OPEN_STATES, resolve_alert
 from app.services.metric_catalog import RANGE_INTERVAL
@@ -211,6 +211,18 @@ async def redeploy_agents(server_id: str, user: AdminUser, db: AsyncSession = De
     if not onboarding_service.schedule(str(server.id), redeploy_only=True):
         raise HTTPException(409, detail={"error": "in_progress", "message": "Onboarding already in progress for this server."})
     return {"ok": True, "message": "Re-deploy queued."}
+
+
+@router.post("/api/servers/{server_id}/reconfigure-monitoring", response_model=ReconfigureResult)
+async def reconfigure_monitoring_endpoint(
+    server_id: str,
+    user: AdminUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Re-push Fluent Bit config, auditd rules, and action wrapper; seed missing alert rules."""
+    result = await onboarding_service.reconfigure_monitoring(server_id, db)
+    await db.commit()
+    return result
 
 
 @router.post("/api/servers/{server_id}/onboard", status_code=202)

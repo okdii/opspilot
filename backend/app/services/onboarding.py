@@ -1035,6 +1035,130 @@ async def _step_install_action_wrapper(db, server: Server, ssh: SSHSession) -> N
                            message=f"action wrapper install skipped (sudoers NOT restricted yet): {exc}")
 
 
+# ── Reconfigure monitoring (Task 7) ─────────────────────────────────────────
+
+async def reconfigure_monitoring(server_id, db: AsyncSession) -> dict:
+    """Re-discover nginx vhost config over SSH, push updated Fluent Bit + auditd + action wrapper,
+    seed any missing default detection rules. Best-effort per step.
+    """
+    import uuid as _uuid
+    from urllib.parse import urlparse
+    from app.routers.alert_rules import create_default_rules
+
+    # Normalise server_id to UUID
+    if isinstance(server_id, str):
+        server_id = _uuid.UUID(server_id)
+
+    # Step 1: load server from DB
+    server = await db.scalar(
+        select(Server).where(Server.id == server_id, Server.is_active == True)
+    )
+    if not server:
+        from fastapi import HTTPException
+        raise HTTPException(404, detail={"error": "not_found", "message": "Server not found."})
+
+    warnings: list[str] = []
+    extra_logs_added: list[str] = []
+    webroot: str = server.detected_webroot or "/var/www/html"
+    rules_added = 0
+
+    # Steps 3–8: all SSH-dependent, best-effort
+    try:
+        async with SSHSession(server) as ssh:
+            # Step 3: run nginx -T once
+            nginx_t_output = await _fetch_nginx_t(ssh)
+
+            # Step 4: discover vhost log paths
+            extra_logs_added = _discover_nginx_vhost_logs(nginx_t_output)
+
+            # Step 5: discover webroot
+            webroot = _discover_webroot(nginx_t_output)
+
+            # Step 6: auditd rules
+            try:
+                if not await _setup_auditd(ssh, webroot):
+                    warnings.append("auditd rule update failed or skipped")
+            except Exception as e:
+                warnings.append(f"auditd rule update failed: {e}")
+
+            # Step 7: push action script
+            try:
+                action_script = _build_action_script(webroot)
+                await ssh.upload(action_script, "/usr/local/bin/opspilot-action",
+                                 mode=0o755, sudo=True)
+            except Exception as e:
+                warnings.append(f"action wrapper update failed: {e}")
+
+            # Step 8: regenerate and push Fluent Bit config
+            try:
+                base = (settings.opspilot_base_url or "http://opspilot-backend:8000").rstrip("/")
+                parsed = urlparse(base)
+                ingest_host = parsed.hostname or "opspilot-backend"
+                ingest_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+                ingest_tls = "On" if parsed.scheme == "https" else "Off"
+
+                web_access_log_path = await _detect_web_access_log(ssh)
+                web_kind = _web_server_kind(web_access_log_path)
+                web_error_log_path = _web_error_log(web_kind)
+
+                tmpl = _template_env.get_template("fluent-bit.conf.j2")
+                conf = tmpl.render(
+                    server_id=str(server.id),
+                    server_name=server.name,
+                    ingest_host=ingest_host,
+                    ingest_port=ingest_port,
+                    ingest_tls=ingest_tls,
+                    ingestion_token=str(server.ingestion_token),
+                    php_fpm_log_path="/var/log/php*-fpm.log",
+                    php_app_log_path="",
+                    web_access_log_path=web_access_log_path,
+                    web_error_log_path=web_error_log_path,
+                    auditd_enabled=False,
+                    mariadb_general_enabled=False,
+                    extra_nginx_log_paths=extra_logs_added,
+                    syslog_path="/var/log/syslog",
+                    auth_log_path="/var/log/auth.log",
+                    mariadb_error_path="/var/log/mysql/error.log",
+                    mariadb_slow_path="/var/log/mysql/slow.log",
+                )
+                parsers_conf = _template_env.get_template("fluent-bit-parsers.conf.j2").render()
+                await ssh.run("mkdir -p /etc/fluent-bit /var/lib/fluent-bit",
+                              sudo=True, raise_on_error=True)
+                await ssh.upload(parsers_conf, "/etc/fluent-bit/parsers-opspilot.conf",
+                                 mode=0o640, sudo=True)
+                await ssh.upload(conf, "/etc/fluent-bit/fluent-bit.conf",
+                                 mode=0o640, sudo=True)
+                await ssh.run("systemctl restart fluent-bit", sudo=True, timeout=15)
+            except Exception as e:
+                warnings.append(f"fluent-bit config push failed: {e}")
+
+    except (SSHAuthError, SSHConnectionError, SSHError) as e:
+        warnings.append(f"SSH connection failed: {e}")
+
+    # Step 9: persist to DB
+    try:
+        server.extra_nginx_log_paths = extra_logs_added
+        server.detected_webroot = webroot
+        await db.flush()
+    except Exception as e:
+        warnings.append(f"DB update failed: {e}")
+
+    # Step 10: seed missing default rules
+    try:
+        _metric_added, rules_added = await create_default_rules(db, server)
+    except Exception as e:
+        warnings.append(f"rule seeding failed: {e}")
+
+    # Step 11: return result
+    from app.schemas.server import ReconfigureResult
+    return ReconfigureResult(
+        extra_logs_added=extra_logs_added,
+        webroot=webroot,
+        rules_added=rules_added,
+        warnings=warnings,
+    )
+
+
 # ── Orchestrator ─────────────────────────────────────────────────────────────
 
 async def _build_db_instances(db, server) -> list[dict]:
