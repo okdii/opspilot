@@ -15,7 +15,7 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, text
+from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
@@ -41,6 +41,7 @@ CONFIDENCE = {
     "db_privilege_change": "high",
     "log_tampering": "high",  # alert-only: intentionally absent from ACTION_PLAN (no safe auto-verb)
     "jce_exploit_attempt": "high",
+    "sppb_exploit": "high",
     "ssh_brute_force": "high",
     "probe_scan": "medium",
 }
@@ -52,6 +53,7 @@ ACTION_PLAN = {
     "webshell_execution":    [("quarantine_file", 1), ("block_ip", 1)],
     "webshell_command_exec": [("kill_pid", 1), ("block_ip", 1)],
     "jce_exploit_attempt":   [("block_ip", 1)],
+    "sppb_exploit":          [("block_ip", 1)],
     "ssh_brute_force":       [("block_ip", 1)],
     "ssh_key_modified":      [("revert_authorized_keys", 2)],
     "db_privilege_change":   [("disable_db_user", 2)],
@@ -101,10 +103,24 @@ async def _recent_log_lines(db: AsyncSession, server_id, like: str,
 _IP_LOG_PATTERNS: dict[str, str] = {
     # JCE exploit: URLs use ?option=com_jce query params, not .php paths
     "jce_exploit_attempt":   "%com_jce%",
+    # SP Page Builder exploit: URLs use ?option=com_sppagebuilder
+    "sppb_exploit":          "%com_sppagebuilder%",
     # Webshell alerts: file paths contain .php
     "webshell_upload":       "%.php%",
     "webshell_execution":    "%.php%",
     "webshell_command_exec": "%.php%",
+}
+
+# Maps alert type → block category. Used to tag SecurityAction rows and gate
+# auto-unblock: "exploit" blocks are permanent and never auto-unblocked by ttl_expiry.
+_BLOCK_CATEGORY: dict[str, str] = {
+    "jce_exploit_attempt":   "exploit",
+    "sppb_exploit":          "exploit",
+    "webshell_upload":       "exploit",
+    "webshell_execution":    "exploit",
+    "webshell_command_exec": "exploit",
+    "probe_scan":            "scanner",
+    "ssh_brute_force":       "ssh",
 }
 
 
@@ -220,6 +236,7 @@ async def _handle_alert(db: AsyncSession, alert: Alert, server: Server,
             server_id=server.id, alert_id=alert.id, action_type=action_type,
             target=target, tier=tier, confidence=confidence, actor="auto",
             status="pending_approval",
+            block_category=_BLOCK_CATEGORY.get(alert.type) if action_type == "block_ip" else None,
         )
         if target is None:
             row.status = "failed"
@@ -291,7 +308,11 @@ async def ttl_expiry() -> None:
             .where(SecurityAction.action_type == "block_ip",
                    SecurityAction.status == "executed",
                    SecurityAction.executed_at.isnot(None),
-                   SecurityAction.executed_at >= _now() - timedelta(days=_TTL_GIVEUP_DAYS))
+                   SecurityAction.executed_at >= _now() - timedelta(days=_TTL_GIVEUP_DAYS),
+                   or_(
+                       SecurityAction.block_category.is_(None),
+                       SecurityAction.block_category != "exploit",
+                   ))
             .order_by(SecurityAction.executed_at.asc())
             .limit(_TTL_BATCH)
         )).all()
