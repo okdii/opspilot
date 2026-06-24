@@ -819,8 +819,16 @@ async def _step_configure_fluent_bit(db, server, ssh: SSHSession, os_info: OSInf
     web_kind = _web_server_kind(web_access_log_path)
     web_error_log_path = _web_error_log(web_kind)
 
+    # ── Gap 1 + Gap 3 fix: discover vhost logs + real webroot ────────────────
+    nginx_t_output = await _fetch_nginx_t(ssh)
+    extra_nginx_log_paths = _discover_nginx_vhost_logs(nginx_t_output)
+    detected_webroot = _discover_webroot(nginx_t_output)
+    server.extra_nginx_log_paths = extra_nginx_log_paths
+    server.detected_webroot = detected_webroot
+    await db.flush()
+
     # (2) auditd — non-disruptive rules; gates the auditd INPUT block.
-    auditd_enabled = await _setup_auditd(ssh)
+    auditd_enabled = await _setup_auditd(ssh, detected_webroot)
 
     # (3) PHP-execution block for upload dirs (web-server-aware, validated-before-reload).
     await _apply_php_block(ssh, web_kind)
@@ -847,6 +855,7 @@ async def _step_configure_fluent_bit(db, server, ssh: SSHSession, os_info: OSInf
         web_error_log_path=web_error_log_path,
         auditd_enabled=auditd_enabled,
         mariadb_general_enabled=mariadb_general_enabled,
+        extra_nginx_log_paths=extra_nginx_log_paths,
         **paths,
     )
     # Multiline/parser definitions must live in a separate parsers file
@@ -999,7 +1008,8 @@ async def _step_install_action_wrapper(db, server: Server, ssh: SSHSession) -> N
         ssh_user = server.ssh_user or "opspilot"
 
         # Install the wrapper executable
-        await ssh.upload(_build_action_script(None), "/usr/local/bin/opspilot-action",
+        action_script = _build_action_script(server.detected_webroot)
+        await ssh.upload(action_script, "/usr/local/bin/opspilot-action",
                          mode=0o755, sudo=True)
 
         # Build the sudoers drop-in for this server's SSH user
