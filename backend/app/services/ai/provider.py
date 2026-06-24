@@ -22,7 +22,7 @@ class AnthropicProvider(BaseAIProvider):
 
     async def complete(self, system: str, user: str, max_tokens: int = 4000) -> tuple[str, int, int]:
         import anthropic  # noqa: PLC0415
-        client = anthropic.AsyncAnthropic(api_key=self.api_key)
+        client = anthropic.AsyncAnthropic(api_key=self.api_key, timeout=30.0)
         msg = await client.messages.create(
             model=self.model,
             max_tokens=max_tokens,
@@ -39,7 +39,7 @@ class OpenAIProvider(BaseAIProvider):
 
     async def complete(self, system: str, user: str, max_tokens: int = 4000) -> tuple[str, int, int]:
         import openai  # noqa: PLC0415
-        client = openai.AsyncOpenAI(api_key=self.api_key)
+        client = openai.AsyncOpenAI(api_key=self.api_key, timeout=30.0)
         resp = await client.chat.completions.create(
             model=self.model,
             max_tokens=max_tokens,
@@ -65,7 +65,7 @@ class CustomProvider(BaseAIProvider):
 
     async def complete(self, system: str, user: str, max_tokens: int = 4000) -> tuple[str, int, int]:
         import openai  # noqa: PLC0415
-        client = openai.AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
+        client = openai.AsyncOpenAI(base_url=self.base_url, api_key=self.api_key, timeout=30.0)
         resp = await client.chat.completions.create(
             model=self.model,
             max_tokens=max_tokens,
