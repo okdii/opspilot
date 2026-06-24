@@ -85,12 +85,14 @@ class GeminiProvider(BaseAIProvider):
         self.model = model
 
     async def complete(self, system: str, user: str, max_tokens: int = 4000, timeout: float | None = None) -> tuple[str, int, int]:
+        import asyncio
         import google.generativeai as genai  # noqa: PLC0415
         genai.configure(api_key=self.api_key)
         model = genai.GenerativeModel(self.model, system_instruction=system)
-        resp = await model.generate_content_async(
+        coro = model.generate_content_async(
             user, generation_config={"max_output_tokens": max_tokens}
         )
+        resp = await (asyncio.wait_for(coro, timeout=timeout) if timeout else coro)
         pt = getattr(resp.usage_metadata, "prompt_token_count", 0) or 0
         ct = getattr(resp.usage_metadata, "candidates_token_count", 0) or 0
         return resp.text, pt, ct

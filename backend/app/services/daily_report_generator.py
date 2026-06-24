@@ -84,6 +84,7 @@ async def generate_and_store(
         system=SYSTEM_PROMPT,
         user=user_prompt,
         max_tokens=4000,
+        timeout=90.0,
     )
 
     # Strip markdown fences if the model added them despite instructions
