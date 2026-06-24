@@ -16,6 +16,34 @@ const redeployDone = ref(false)
 const redeployErrorMsg = ref('')
 const isAdmin = computed(() => auth.user?.role === 'admin')
 
+const reconfiguring = ref(false)
+const reconfigureResult = ref<{
+  extra_logs_added: string[]
+  webroot: string
+  rules_added: number
+  warnings: string[]
+} | null>(null)
+const reconfigureError = ref('')
+
+async function reconfigureMonitoring() {
+  const id = metrics.activeServerId
+  if (!id) return
+  reconfiguring.value = true
+  reconfigureResult.value = null
+  reconfigureError.value = ''
+  try {
+    reconfigureResult.value = await serverStore.reconfigureMonitoring(id)
+  } catch (e: unknown) {
+    const detail = (e as { response?: { data?: { detail?: { message?: string } | string } } })
+      ?.response?.data?.detail
+    reconfigureError.value = typeof detail === 'object'
+      ? (detail?.message ?? 'Unknown error')
+      : (detail ?? 'Request failed')
+  } finally {
+    reconfiguring.value = false
+  }
+}
+
 async function redeployAgents() {
   const id = metrics.activeServerId
   if (!id) return
@@ -290,6 +318,25 @@ function fmtLoad(v: number | null): string {
         {{ redeploying ? 'Reconfiguring…' : redeployDone ? 'Done ✓' : 'Reconfigure Agents' }}
       </button>
       <p v-if="redeployErrorMsg" class="agent-error">Reconfiguration failed: {{ redeployErrorMsg }}</p>
+
+      <div class="agent-divider" />
+
+      <p class="agent-desc">Re-runs log discovery and monitoring configuration for this server. Detects new Nginx virtual host logs, updates the Fluent Bit config, and adds any missing alert rules.</p>
+      <button class="agent-btn" :disabled="reconfiguring" @click="reconfigureMonitoring">
+        {{ reconfiguring ? 'Reconfiguring…' : 'Reconfigure Monitoring' }}
+      </button>
+      <div v-if="reconfigureResult" class="agent-result"
+           :class="reconfigureResult.warnings.length ? 'agent-result--warn' : 'agent-result--ok'">
+        <span v-if="reconfigureResult.extra_logs_added.length">
+          Found {{ reconfigureResult.extra_logs_added.length }} additional log file(s)
+        </span>
+        <span v-else>No new log files</span>
+        <span v-if="reconfigureResult.webroot"> · Webroot: <span class="mono">{{ reconfigureResult.webroot }}</span></span>
+        <span v-if="reconfigureResult.rules_added"> · {{ reconfigureResult.rules_added }} rule(s) added</span>
+        <span v-if="reconfigureResult.warnings.length"> · ⚠ {{ reconfigureResult.warnings.length }} warning(s)</span>
+        <span v-if="!reconfigureResult.warnings.length"> · Monitoring reconfigured successfully</span>
+      </div>
+      <p v-if="reconfigureError" class="agent-error">Reconfigure failed: {{ reconfigureError }}</p>
     </section>
 
   </div>
@@ -378,4 +425,8 @@ function fmtLoad(v: number | null): string {
 .agent-btn:hover:not(:disabled) { border-color: var(--accent-2); color: var(--accent-2); }
 .agent-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .agent-error { font-size: 12px; color: var(--red, #e74c3c); margin-top: 8px; margin-bottom: 0; }
+.agent-divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+.agent-result { font-size: 12px; margin-top: 8px; line-height: 1.5; }
+.agent-result--ok { color: var(--va-success, #4caf50); }
+.agent-result--warn { color: var(--va-warning, #f59e0b); }
 </style>

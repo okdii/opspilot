@@ -54,5 +54,15 @@ export const useServerStore = defineStore('server', () => {
     await api.post(`/api/servers/${id}/onboard`)
   }
 
-  return { servers, loading, fetchByOrg, fetchAll, create, update, remove, redeploy, onboard }
+  async function reconfigureMonitoring(id: string): Promise<{
+    extra_logs_added: string[]
+    webroot: string
+    rules_added: number
+    warnings: string[]
+  }> {
+    const res = await api.post(`/api/servers/${id}/reconfigure-monitoring`)
+    return res.data
+  }
+
+  return { servers, loading, fetchByOrg, fetchAll, create, update, remove, redeploy, onboard, reconfigureMonitoring }
 })
