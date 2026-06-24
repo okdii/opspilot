@@ -52,6 +52,11 @@ DEFAULT_LOG_RULES: list[tuple[str, str, str, int, int]] = [
     ("mariadb_general", "%CREATE USER%", "critical", 1, 300),
     ("mariadb_general", "%GRANT ALL%", "critical", 1, 300),
     ("auth", "%Accepted publickey%", "warning", 1, 300),
+    # ── SP Page Builder CVE-2026-48908 + case-insensitive PHP upload hardening ──
+    ("%access%", "%com_sppagebuilder%uploadCustomIcon%", "critical", 1, 300),
+    ("%access%", "%/media/%.PHP%", "critical", 1, 300),
+    ("%access%", "%/media/%.pHp%", "critical", 1, 300),
+    ("%access%", "%POST%index.php% 200 %", "warning", 10, 60),
 ]
 
 
@@ -82,25 +87,32 @@ async def create_default_rules(db: AsyncSession, server) -> tuple[int, int]:
             )
             metric_added += 1
 
-    existing_log = await db.scalar(
-        select(LogAlertRule.id).where(LogAlertRule.server_id == server_id).limit(1)
-    )
     log_added = 0
-    if existing_log is None:
-        for source, pattern, severity, threshold, window_sec in DEFAULT_LOG_RULES:
-            db.add(
-                LogAlertRule(
-                    server_id=server_id,
-                    source=source,
-                    pattern=pattern,
-                    severity=severity,
-                    threshold=threshold,
-                    window_sec=window_sec,
-                    cooldown_min=60,
-                    enabled=True,
-                )
+    for source, pattern, severity, threshold, window_sec in DEFAULT_LOG_RULES:
+        exists = await db.scalar(
+            select(LogAlertRule.id)
+            .where(
+                LogAlertRule.server_id == server_id,
+                LogAlertRule.source == source,
+                LogAlertRule.pattern == pattern,
             )
-            log_added += 1
+            .limit(1)
+        )
+        if exists:
+            continue
+        db.add(
+            LogAlertRule(
+                server_id=server_id,
+                source=source,
+                pattern=pattern,
+                severity=severity,
+                threshold=threshold,
+                window_sec=window_sec,
+                cooldown_min=60,
+                enabled=True,
+            )
+        )
+        log_added += 1
 
     return metric_added, log_added
 
