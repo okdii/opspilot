@@ -21,6 +21,7 @@ Each step:
 """
 
 import asyncio
+import re
 import shlex
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -637,6 +638,67 @@ def _web_error_log(web_kind: str) -> str:
         "apache-debian": "/var/log/apache2/error.log",
         "apache-rhel": "/var/log/httpd/error_log",
     }.get(web_kind, "")
+
+
+_NGINX_T_SKIP_LOG_PATHS = {
+    "/var/log/nginx/access.log",
+    "off",
+    "stderr",
+    "/dev/stdout",
+    "/dev/stderr",
+}
+
+_STANDARD_WEBROOTS = {
+    "/var/www",
+    "/var/www/html",
+    "/usr/share/nginx/html",
+    "/srv/www",
+    "/usr/share/nginx",
+}
+
+
+async def _fetch_nginx_t(ssh: SSHSession) -> str:
+    """Run `nginx -T` and return merged config stdout. Returns '' on any error."""
+    try:
+        r = await ssh.run("nginx -T 2>/dev/null", timeout=15)
+        return r.stdout or ""
+    except Exception:
+        return ""
+
+
+def _discover_nginx_vhost_logs(nginx_t_output: str) -> list[str]:
+    """Return vhost-specific access_log paths from nginx -T output.
+
+    Excludes /var/log/nginx/access.log (hardcoded in template), 'off',
+    stderr aliases, and duplicates.
+    """
+    if not nginx_t_output:
+        return []
+    seen: set[str] = set()
+    result: list[str] = []
+    for m in re.finditer(r"\baccess_log\s+(\S+)", nginx_t_output):
+        path = m.group(1).rstrip(";")
+        if path in _NGINX_T_SKIP_LOG_PATHS or path in seen:
+            continue
+        seen.add(path)
+        result.append(path)
+    return result
+
+
+def _discover_webroot(nginx_t_output: str) -> str:
+    """Return first non-standard document root from nginx -T output.
+
+    Falls back to /var/www/html if none found or input is empty.
+    """
+    if not nginx_t_output:
+        return "/var/www/html"
+    for m in re.finditer(r"\broot\s+(\S+)", nginx_t_output):
+        path = m.group(1).rstrip(";")
+        if path not in _STANDARD_WEBROOTS and not any(
+            path == r or path.startswith(r + "/") for r in _STANDARD_WEBROOTS
+        ):
+            return path
+    return "/var/www/html"
 
 
 async def _setup_auditd(ssh: SSHSession) -> bool:
