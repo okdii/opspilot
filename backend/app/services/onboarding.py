@@ -37,6 +37,8 @@ from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.other import DBCredential
 from app.models.server import OnboardingLog, Server
+from app.routers.alert_rules import create_default_rules
+from app.schemas.server import ReconfigureResult
 from app.services.ssh import (
     SSHAuthError,
     SSHCommandError,
@@ -1037,13 +1039,12 @@ async def _step_install_action_wrapper(db, server: Server, ssh: SSHSession) -> N
 
 # ── Reconfigure monitoring (Task 7) ─────────────────────────────────────────
 
-async def reconfigure_monitoring(server_id, db: AsyncSession) -> dict:
+async def reconfigure_monitoring(server_id, db: AsyncSession) -> ReconfigureResult:
     """Re-discover nginx vhost config over SSH, push updated Fluent Bit + auditd + action wrapper,
     seed any missing default detection rules. Best-effort per step.
     """
     import uuid as _uuid
     from urllib.parse import urlparse
-    from app.routers.alert_rules import create_default_rules
 
     # Normalise server_id to UUID
     if isinstance(server_id, str):
@@ -1132,7 +1133,7 @@ async def reconfigure_monitoring(server_id, db: AsyncSession) -> dict:
             except Exception as e:
                 warnings.append(f"fluent-bit config push failed: {e}")
 
-    except (SSHAuthError, SSHConnectionError, SSHError) as e:
+    except Exception as e:
         warnings.append(f"SSH connection failed: {e}")
 
     # Step 9: persist to DB
@@ -1150,7 +1151,6 @@ async def reconfigure_monitoring(server_id, db: AsyncSession) -> dict:
         warnings.append(f"rule seeding failed: {e}")
 
     # Step 11: return result
-    from app.schemas.server import ReconfigureResult
     return ReconfigureResult(
         extra_logs_added=extra_logs_added,
         webroot=webroot,
