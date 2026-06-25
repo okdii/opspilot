@@ -209,6 +209,7 @@ class LogAlertRule(Base):
     cooldown_min: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     last_fired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    match_field: Mapped[str | None] = mapped_column(String(50), nullable=True, default=None)
 
     server: Mapped["Server"] = relationship(back_populates="log_alert_rules")
 
