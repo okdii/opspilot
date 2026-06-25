@@ -1,13 +1,13 @@
 """Add match_field to log_alert_rule; delete two false-positive media PHP rules.
 
-Revision ID: 0036_match_field_cleanup_rules
+Revision ID: 0036_match_field_and_rule_cleanup
 Revises: 0035_sppb_detection_rules
 Create Date: 2026-06-25
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0036_match_field_cleanup_rules"
+revision = "0036_match_field_and_rule_cleanup"
 down_revision = "0035_sppb_detection_rules"
 branch_labels = None
 depends_on = None
