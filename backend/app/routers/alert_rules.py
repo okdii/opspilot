@@ -63,7 +63,7 @@ DEFAULT_LOG_RULES: list[tuple[str, str, str, int, int, str | None]] = [
 
 
 async def create_default_rules(db: AsyncSession, server) -> tuple[int, int]:
-    """Insert the 4 default AlertRules + 5 default LogAlertRules for a new server.
+    """Insert the default AlertRules and LogAlertRules for a new server.
 
     Idempotent: skips creation if the server already has any rule of that kind.
     Does NOT commit — the caller owns the transaction. Returns (metric_count,
