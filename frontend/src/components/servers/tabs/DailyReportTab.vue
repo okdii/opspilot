@@ -159,7 +159,7 @@ function uptimeColor(pct: number): string {
 </script>
 
 <template>
-  <div class="dr-wrap">
+  <div>
 
     <!-- Date nav -->
     <div class="datenav">
@@ -401,7 +401,6 @@ function uptimeColor(pct: number): string {
 </template>
 
 <style scoped>
-.dr-wrap { padding: 4px 0 32px; max-width: 960px; }
 
 /* Date nav */
 .datenav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
