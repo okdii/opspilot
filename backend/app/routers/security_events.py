@@ -19,7 +19,7 @@ async def _check_access(server_id: str, user: CurrentUser, db: AsyncSession) -> 
 
 
 SECURITY_TYPES = [
-    "jce_exploit_attempt", "webshell_upload", "webshell_execution",
+    "jce_exploit_attempt", "sppb_exploit", "webshell_upload", "webshell_execution",
     "webshell_command_exec", "probe_scan", "new_ssh_login",
     "ssh_key_modified", "db_privilege_change", "log_tampering",
     "log_ingestion_silent",
@@ -28,6 +28,7 @@ SECURITY_TYPES = [
 STAGE = {
     "probe_scan": "Recon",
     "jce_exploit_attempt": "Exploit",
+    "sppb_exploit": "Exploit",
     "webshell_upload": "Upload",
     "webshell_execution": "Execute",
     "webshell_command_exec": "Execute",
