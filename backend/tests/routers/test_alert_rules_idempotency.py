@@ -8,9 +8,26 @@ def test_sppb_rule_present():
     assert any("com_sppagebuilder" in p and "uploadCustomIcon" in p for p in patterns)
 
 
-def test_php_uppercase_rule_present():
+def test_field_scoped_media_php_rule_present():
+    """Field-scoped rule replaces the deleted case-variant rules."""
+    field_rules = [(p, mf) for _, p, _, _, _, mf in DEFAULT_LOG_RULES if mf == "url"]
+    assert any("%/media/%.php%" in p for p, _ in field_rules)
+
+
+def test_bad_uppercase_php_rules_absent():
+    """False-positive rules that match Referer must not be seeded."""
     patterns = [p for _, p, *_ in DEFAULT_LOG_RULES]
-    assert any("/media/%.PHP%" in p for p in patterns)
+    assert "%/media/%.PHP%" not in patterns
+    assert "%/media/%.pHp%" not in patterns
+
+
+def test_post_php_threshold_raised():
+    """Broad POST+php rule must have threshold >= 10 to avoid jsvisit_counter noise."""
+    for _, pattern, _, threshold, *_ in DEFAULT_LOG_RULES:
+        if pattern == "%POST%.php% 200 %":
+            assert threshold >= 10
+            return
+    pytest.fail("%POST%.php% 200 % rule not found")
 
 
 def test_sppb_rule_is_critical():

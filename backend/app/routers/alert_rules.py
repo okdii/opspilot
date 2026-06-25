@@ -28,35 +28,37 @@ DEFAULT_METRIC_RULES: list[tuple[str, float]] = [
     ("disk_inode", 90.0),
 ]
 
-# 5 log rules: (source, pattern, severity, threshold, window_sec).
-DEFAULT_LOG_RULES: list[tuple[str, str, str, int, int]] = [
-    ("php_app", "%Fatal error%", "critical", 1, 300),
-    ("nginx_access", '%" 5__ %', "warning", 10, 300),
-    ("auth", "%Failed password%", "critical", 5, 300),
-    ("mariadb_error", "%ERROR%", "critical", 1, 300),
-    ("mariadb_slow", "%Query_time%", "warning", 5, 300),
+# 6-tuple log rules: (source, pattern, severity, threshold, window_sec, match_field).
+DEFAULT_LOG_RULES: list[tuple[str, str, str, int, int, str | None]] = [
+    ("php_app", "%Fatal error%", "critical", 1, 300, None),
+    ("nginx_access", '%" 5__ %', "warning", 10, 300, None),
+    ("auth", "%Failed password%", "critical", 5, 300, None),
+    ("mariadb_error", "%ERROR%", "critical", 1, 300, None),
+    ("mariadb_slow", "%Query_time%", "warning", 5, 300, None),
     # ── Security detection (Part 1) ───────────────────────────────────
-    ("%access%", "%com_jce%profiles.import%", "critical", 1, 300),
-    ("%access%", "%POST%.php% 200 %", "critical", 1, 300),
-    ("%access%", "%/images/%.php% 200 %", "critical", 1, 300),
-    ("%access%", "%/media/%.php% 200 %", "critical", 1, 300),
-    ("%access%", "%/uploads/%.php% 200 %", "critical", 1, 300),
-    ("%access%", "%/files/%.php% 200 %", "critical", 1, 300),
-    ("%access%", "%/tmp/%.php% 200 %", "critical", 1, 300),
-    ("%access%", "%/cache/%.php% 200 %", "critical", 1, 300),
-    ("%access%", "% 404 %", "warning", 20, 300),
-    ("auditd", "%webroot_write%", "critical", 1, 300),
-    ("auditd", "%webshell_exec%", "critical", 1, 300),
-    ("auditd", "%ssh_key_change%", "critical", 1, 300),
-    ("auditd", "%log_tamper%", "critical", 1, 300),
-    ("mariadb_general", "%CREATE USER%", "critical", 1, 300),
-    ("mariadb_general", "%GRANT ALL%", "critical", 1, 300),
-    ("auth", "%Accepted publickey%", "warning", 1, 300),
-    # ── SP Page Builder CVE-2026-48908 + case-insensitive PHP upload hardening ──
-    ("%access%", "%com_sppagebuilder%uploadCustomIcon%", "critical", 1, 300),
-    ("%access%", "%/media/%.PHP%", "critical", 1, 300),
-    ("%access%", "%/media/%.pHp%", "critical", 1, 300),
-    ("%access%", "%POST%index.php% 200 %", "warning", 10, 60),
+    ("%access%", "%com_jce%profiles.import%", "critical", 1, 300, None),
+    ("%access%", "%POST%.php% 200 %", "critical", 10, 300, None),
+    ("%access%", "%/images/%.php% 200 %", "critical", 1, 300, None),
+    ("%access%", "%/media/%.php% 200 %", "critical", 1, 300, None),
+    ("%access%", "%/uploads/%.php% 200 %", "critical", 1, 300, None),
+    ("%access%", "%/files/%.php% 200 %", "critical", 1, 300, None),
+    ("%access%", "%/tmp/%.php% 200 %", "critical", 1, 300, None),
+    ("%access%", "%/cache/%.php% 200 %", "critical", 1, 300, None),
+    ("%access%", "% 404 %", "warning", 20, 300, None),
+    ("auditd", "%webroot_write%", "critical", 1, 300, None),
+    ("auditd", "%webshell_exec%", "critical", 1, 300, None),
+    ("auditd", "%ssh_key_change%", "critical", 1, 300, None),
+    ("auditd", "%log_tamper%", "critical", 1, 300, None),
+    ("mariadb_general", "%CREATE USER%", "critical", 1, 300, None),
+    ("mariadb_general", "%GRANT ALL%", "critical", 1, 300, None),
+    ("auth", "%Accepted publickey%", "warning", 1, 300, None),
+    # ── SP Page Builder CVE-2026-48908 ────────────────────────────────
+    ("%access%", "%com_sppagebuilder%uploadCustomIcon%", "critical", 1, 300, None),
+    ("%access%", "%POST%index.php% 200 %", "warning", 10, 60, None),
+    # ── Field-scoped rules (match request URI only, not Referer) ──────
+    # %/media/%.PHP% and %/media/%.pHp% removed: they match Referer index.php
+    # on every Joomla asset load. This rule replaces them by scoping to raw->>'url'.
+    ("%access%", "%/media/%.php%", "critical", 1, 300, "url"),
 ]
 
 
@@ -88,7 +90,7 @@ async def create_default_rules(db: AsyncSession, server) -> tuple[int, int]:
             metric_added += 1
 
     log_added = 0
-    for source, pattern, severity, threshold, window_sec in DEFAULT_LOG_RULES:
+    for source, pattern, severity, threshold, window_sec, match_field in DEFAULT_LOG_RULES:
         exists = await db.scalar(
             select(LogAlertRule.id)
             .where(
@@ -110,6 +112,7 @@ async def create_default_rules(db: AsyncSession, server) -> tuple[int, int]:
                 window_sec=window_sec,
                 cooldown_min=60,
                 enabled=True,
+                match_field=match_field,
             )
         )
         log_added += 1
