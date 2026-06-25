@@ -61,6 +61,13 @@ def _derive_type(rule: LogAlertRule) -> str:
         return "new_ssh_login"
     if " 404 " in pat:
         return "probe_scan"
+    # Field-scoped rules (match_field set) match raw JSONB fields, not the full
+    # message — the URL match itself is the high-confidence signal.
+    if rule.match_field and ".php" in pat:
+        return "webshell_execution"
+    # SP Page Builder CVE-2026-48908 — must precede generic .php checks.
+    if "sppagebuilder" in pat or "uploadcustomicon" in pat:
+        return "sppb_exploit"
     # POST to a .php = upload attempt; check before the generic execution rule
     # so the seeded `%POST%.php% 200 %` rule classifies as upload, while a GET
     # to a .php in an upload dir (no "post") falls through to execution.
@@ -84,25 +91,52 @@ def _derive_type(rule: LogAlertRule) -> str:
 
 
 async def _general_count(db, rule: LogAlertRule) -> int:
-    """ILIKE count of matching rows in the rule's recent window."""
-    row = await db.execute(
-        text(
-            """
-            SELECT COUNT(*) AS cnt
-            FROM server_logs
-            WHERE server_id = :sid
-              AND source LIKE :source
-              AND message ILIKE :pattern
-              AND time > now() - make_interval(secs => :win)
-            """
-        ),
-        {
-            "sid": str(rule.server_id),
-            "source": rule.source,
-            "pattern": rule.pattern,
-            "win": rule.window_sec,
-        },
-    )
+    """Count matching rows in the rule's recent window.
+
+    When ``rule.match_field`` is set, matches the named key in the ``raw``
+    JSONB column (e.g. ``raw->>'url'``) instead of the full message.
+    ``raw->>key`` returns NULL for rows that predate enrichment or use a
+    non-nginx source — ILIKE on NULL is NULL (falsy), so they are excluded.
+    """
+    if rule.match_field:
+        row = await db.execute(
+            text(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM server_logs
+                WHERE server_id = :sid
+                  AND source LIKE :source
+                  AND raw->>:field ILIKE :pattern
+                  AND time > now() - make_interval(secs => :win)
+                """
+            ),
+            {
+                "sid": str(rule.server_id),
+                "source": rule.source,
+                "field": rule.match_field,
+                "pattern": rule.pattern,
+                "win": rule.window_sec,
+            },
+        )
+    else:
+        row = await db.execute(
+            text(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM server_logs
+                WHERE server_id = :sid
+                  AND source LIKE :source
+                  AND message ILIKE :pattern
+                  AND time > now() - make_interval(secs => :win)
+                """
+            ),
+            {
+                "sid": str(rule.server_id),
+                "source": rule.source,
+                "pattern": rule.pattern,
+                "win": rule.window_sec,
+            },
+        )
     return int(row.scalar_one() or 0)
 
 
