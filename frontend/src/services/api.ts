@@ -299,6 +299,18 @@ export async function getDailyReport(
   return data
 }
 
+export async function getDailyReportAlerts(
+  serverId: string,
+  reportDate: string,
+  page: number,
+  pageSize: number,
+): Promise<{ items: any[]; total: number; page: number; page_size: number }> {
+  const { data } = await api.get(`/api/servers/${serverId}/daily-report/alerts`, {
+    params: { report_date: reportDate, page, page_size: pageSize },
+  })
+  return data
+}
+
 export async function regenerateDailyReport(
   serverId: string,
   reportDate: string,

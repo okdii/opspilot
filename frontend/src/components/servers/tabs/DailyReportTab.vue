@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { getDailyReport, regenerateDailyReport } from '@/services/api'
+import { getDailyReport, getDailyReportAlerts, regenerateDailyReport } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import type { DailyReport, DailyReportFinding } from '@/types'
+import Pager from '@/components/ui/Pager.vue'
 
 const props = defineProps<{ serverId: string }>()
 const auth = useAuthStore()
@@ -60,6 +61,7 @@ async function load() {
     } else {
       report.value = data
       pageStatus.value = 'loaded'
+      loadAlerts()
     }
   } catch {
     pageStatus.value = 'error'
@@ -81,8 +83,31 @@ async function regenerate() {
   }
 }
 
+// ── Alerts table (server-side paginated) ─────────────────────────────────────
+const alertPage     = ref(0)
+const alertPageSize = ref(10)
+const alertTotal    = ref(0)
+const alertRows     = ref<any[]>([])
+const alertLoading  = ref(false)
+
+async function loadAlerts() {
+  alertLoading.value = true
+  try {
+    const res = await getDailyReportAlerts(props.serverId, selectedDate.value, alertPage.value, alertPageSize.value)
+    alertRows.value  = res.items
+    alertTotal.value = res.total
+  } finally {
+    alertLoading.value = false
+  }
+}
+
+function onAlertPage(p: number) {
+  alertPage.value = p
+  loadAlerts()
+}
+
 onMounted(load)
-watch(selectedDate, load)
+watch(selectedDate, () => { alertPage.value = 0; load() })
 
 // ── Score / band helpers ──────────────────────────────────────────────────────
 const bandColor = computed(() => {
@@ -340,18 +365,48 @@ function uptimeColor(pct: number): string {
         </div>
       </div>
 
-      <!-- Alerts section -->
-      <div class="section" v-if="snap?.alerts?.length">
-        <div class="sec-hdr"><span class="sec-title">🔔 Alerts</span><span class="sec-sub">{{ snap.alerts.length }} fired</span></div>
+      <!-- Alerts table (server-side paginated) -->
+      <div class="section" v-if="alertTotal > 0 || alertLoading">
+        <div class="sec-hdr">
+          <span class="sec-title">🔔 Alerts</span>
+          <span class="sec-sub">{{ alertTotal }} fired</span>
+        </div>
         <div class="sec-card">
-          <div v-for="(a, i) in snap.alerts" :key="i" class="alert-row">
-            <span class="a-dot" :style="{ background: a.severity === 'critical' ? 'var(--red)' : 'var(--amber)' }"></span>
-            <div class="a-body">
-              <div class="a-msg">{{ a.message }}</div>
-              <div class="a-meta">Fired {{ a.fired_at }}{{ a.resolved_at ? ` · Resolved ${a.resolved_at}` : '' }}</div>
-            </div>
-            <div class="a-dur">{{ a.duration_min != null ? `${a.duration_min} min` : '—' }}</div>
-          </div>
+          <table class="at-table">
+            <thead>
+              <tr>
+                <th>Severity</th>
+                <th>Type</th>
+                <th>Message</th>
+                <th>State</th>
+                <th>Fired</th>
+                <th>Resolved</th>
+                <th>Duration</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="alertLoading">
+                <td colspan="7" class="at-empty">Loading…</td>
+              </tr>
+              <tr v-else-if="alertRows.length === 0">
+                <td colspan="7" class="at-empty">No alerts</td>
+              </tr>
+              <tr v-for="a in alertRows" :key="a.id" v-else>
+                <td>
+                  <span class="at-sev" :class="'at-sev--' + a.severity">{{ a.severity }}</span>
+                </td>
+                <td class="at-type">{{ a.type }}</td>
+                <td class="at-msg">{{ a.message }}</td>
+                <td>
+                  <span class="at-state" :class="'at-state--' + a.state">{{ a.state }}</span>
+                </td>
+                <td class="at-time">{{ a.fired_at ?? '—' }}</td>
+                <td class="at-time">{{ a.resolved_at ?? '—' }}</td>
+                <td class="at-dur">{{ a.duration_min != null ? a.duration_min + ' min' : '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <Pager :page="alertPage" :page-size="alertPageSize" :total="alertTotal" @update:page="onAlertPage" />
         </div>
       </div>
 
@@ -512,14 +567,27 @@ function uptimeColor(pct: number): string {
 .svc-pct { font-size: 12px; font-weight: 600; text-align: right; margin-top: 4px; }
 .svc-inc { font-size: 12px; min-width: 120px; text-align: right; }
 
-/* Alerts */
-.alert-row { display: flex; align-items: flex-start; padding: 12px 18px; border-bottom: 1px solid var(--border); gap: 10px; }
-.alert-row:last-child { border-bottom: none; }
-.a-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
-.a-body { flex: 1; }
-.a-msg  { font-size: 13px; font-weight: 500; }
-.a-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.a-dur  { font-size: 12px; color: var(--muted); white-space: nowrap; }
+/* Alerts table */
+.at-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.at-table th { padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.at-table td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.at-table tr:last-child td { border-bottom: none; }
+.at-table tbody tr:hover { background: rgba(255,255,255,.02); }
+.at-empty { text-align: center; color: var(--muted); padding: 24px !important; }
+.at-sev { font-size: 11px; font-weight: 700; letter-spacing: .04em; padding: 2px 8px; border-radius: 5px; text-transform: uppercase; }
+.at-sev--critical { background: rgba(239,68,68,.15);  color: var(--red);   border: 1px solid rgba(239,68,68,.25); }
+.at-sev--warning  { background: rgba(245,158,11,.15); color: var(--amber); border: 1px solid rgba(245,158,11,.25); }
+.at-sev--info     { background: rgba(59,130,246,.15); color: var(--blue);  border: 1px solid rgba(59,130,246,.25); }
+.at-state { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 5px; text-transform: capitalize; }
+.at-state--resolved   { background: rgba(34,197,94,.1);  color: var(--green); }
+.at-state--firing     { background: rgba(239,68,68,.1);  color: var(--red); }
+.at-state--acked      { background: rgba(245,158,11,.1); color: var(--amber); }
+.at-state--snoozed    { background: rgba(99,102,241,.1); color: var(--accent-2); }
+.at-state--suppressed { background: rgba(148,163,184,.1); color: var(--muted); }
+.at-type { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.at-msg  { max-width: 340px; }
+.at-time { color: var(--muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.at-dur  { color: var(--muted); font-size: 12px; white-space: nowrap; text-align: right; }
 
 /* Jobs */
 .job-row { display: flex; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--border); gap: 12px; }
