@@ -105,10 +105,12 @@ _IP_LOG_PATTERNS: dict[str, str] = {
     "jce_exploit_attempt":   "%com_jce%",
     # SP Page Builder exploit: URLs use ?option=com_sppagebuilder
     "sppb_exploit":          "%com_sppagebuilder%",
-    # Webshell alerts: file paths contain .php
-    "webshell_upload":       "%.php%",
-    "webshell_execution":    "%.php%",
-    "webshell_command_exec": "%.php%",
+    # Webshell alerts: restrict to POST to exclude HEAD/GET monitoring probes
+    # (UptimeRobot, pingdom etc. use HEAD /index.php and would otherwise be
+    # picked as the "newest" matching line ahead of the actual attack lines)
+    "webshell_upload":       "%POST%.php%",
+    "webshell_execution":    "%POST%.php%",
+    "webshell_command_exec": "%POST%.php%",
 }
 
 # Maps alert type → block category. Used to tag SecurityAction rows and gate
@@ -129,15 +131,20 @@ async def _extract_ip(db: AsyncSession, alert: Alert) -> str | None:
     inline = ip_intel.extract_inline_ip(alert.message)
     if inline:
         return inline
-    # Otherwise pull from recent access-log lines around the alert using a
-    # pattern matched to the alert type so we hit the right log lines.
+    # Pull from recent access-log lines and return the MOST FREQUENT IP.
+    # Majority-vote prevents a single stray monitoring probe (HEAD /index.php)
+    # from outranking the attacker's burst of POST requests.
     since = (alert.sent_at or _now()) - timedelta(minutes=5)
-    like = _IP_LOG_PATTERNS.get(alert.type, "%.php%")
+    like = _IP_LOG_PATTERNS.get(alert.type, "%POST%.php%")
+    counts: dict[str, int] = {}
     for line in await _recent_log_lines(db, alert.server_id, like, since):
         m = _IPV4.search(line)
         if m:
-            return m.group(1)
-    return None
+            ip = m.group(1)
+            counts[ip] = counts.get(ip, 0) + 1
+    if not counts:
+        return None
+    return max(counts, key=lambda ip: counts[ip])
 
 
 async def _extract_file(db: AsyncSession, alert: Alert) -> str | None:
@@ -147,9 +154,10 @@ async def _extract_file(db: AsyncSession, alert: Alert) -> str | None:
         m = re.search(r'name="?(/[^"\s]+\.php)', line)
         if m:
             return m.group(1)
-    # Fall back to an access-log .php request path → map under default web root.
-    for line in await _recent_log_lines(db, alert.server_id, "%.php%", since):
-        m = re.search(r'"(?:GET|POST)\s+(/\S+\.php)', line)
+    # Fall back to POST access-log lines only — GET/HEAD monitoring probes
+    # (UptimeRobot HEAD /index.php/ms/) would otherwise produce bogus paths.
+    for line in await _recent_log_lines(db, alert.server_id, "%POST%.php%", since):
+        m = re.search(r'"POST\s+(/\S+\.php)', line)
         if m:
             return "/var/www/html" + m.group(1).split("?")[0]
     return None
