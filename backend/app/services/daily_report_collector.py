@@ -34,7 +34,7 @@ async def _metrics(db: AsyncSession, sid: str, day_start: datetime, day_end: dat
             ROUND(AVG(avg_value)::numeric, 2) AS day_avg,
             ROUND(MAX(avg_value)::numeric, 2) AS day_max
         FROM server_metrics_hourly
-        WHERE server_id = :sid::uuid
+        WHERE server_id = CAST(:sid AS uuid)
           AND bucket >= :day_start AND bucket < :day_end
           AND metric_name IN (
               'cpu.usage_idle', 'cpu.usage_iowait',
@@ -49,7 +49,7 @@ async def _metrics(db: AsyncSession, sid: str, day_start: datetime, day_end: dat
     peak_stmt = text("""
         SELECT bucket, ROUND((100 - avg_value)::numeric, 2) AS cpu_pct
         FROM server_metrics_hourly
-        WHERE server_id = :sid::uuid AND bucket >= :day_start AND bucket < :day_end
+        WHERE server_id = CAST(:sid AS uuid) AND bucket >= :day_start AND bucket < :day_end
           AND metric_name = 'cpu.usage_idle'
         ORDER BY avg_value ASC LIMIT 1
     """)
@@ -60,7 +60,7 @@ async def _metrics(db: AsyncSession, sid: str, day_start: datetime, day_end: dat
     disk_stmt = text("""
         SELECT ROUND(avg_value::numeric, 2)
         FROM server_metrics_hourly
-        WHERE server_id = :sid::uuid AND bucket >= :day_start AND bucket < :day_end
+        WHERE server_id = CAST(:sid AS uuid) AND bucket >= :day_start AND bucket < :day_end
           AND metric_name = 'disk.used_percent'
         ORDER BY bucket DESC LIMIT 1
     """)
@@ -209,7 +209,7 @@ async def _logs(
     sev_stmt = text("""
         SELECT COALESCE(NULLIF(severity, ''), 'info') AS sev, COUNT(*) AS n
         FROM server_logs
-        WHERE server_id = :sid::uuid AND time >= :day_start AND time < :day_end
+        WHERE server_id = CAST(:sid AS uuid) AND time >= :day_start AND time < :day_end
         GROUP BY sev
     """)
     sev_rows = (await db.execute(sev_stmt, {"sid": sid, "day_start": day_start, "day_end": day_end})).all()
@@ -224,7 +224,7 @@ async def _logs(
     err_stmt = text("""
         SELECT LEFT(message, 120) AS msg, COUNT(*) AS n, source
         FROM server_logs
-        WHERE server_id = :sid::uuid AND time >= :day_start AND time < :day_end
+        WHERE server_id = CAST(:sid AS uuid) AND time >= :day_start AND time < :day_end
           AND severity IN ('error', 'fatal')
         GROUP BY LEFT(message, 120), source
         ORDER BY n DESC
@@ -237,7 +237,7 @@ async def _logs(
         SELECT COUNT(*) AS n,
                raw->>'remote_host' AS remote_host
         FROM server_logs
-        WHERE server_id = :sid::uuid AND time >= :day_start AND time < :day_end
+        WHERE server_id = CAST(:sid AS uuid) AND time >= :day_start AND time < :day_end
           AND source IN ('auth', 'syslog')
           AND (message ILIKE '%failed password%' OR message ILIKE '%invalid user%'
                OR message ILIKE '%authentication failure%')
@@ -253,7 +253,7 @@ async def _logs(
                ROUND(AVG((raw->>'query_time')::float)::numeric, 2) AS avg_s,
                ROUND(MAX((raw->>'query_time')::float)::numeric, 2) AS max_s
         FROM server_logs
-        WHERE server_id = :sid::uuid AND time >= :day_start AND time < :day_end
+        WHERE server_id = CAST(:sid AS uuid) AND time >= :day_start AND time < :day_end
           AND source = 'mariadb_slow'
           AND raw->>'query_time' ~ '^[0-9.]+$'
     """)
@@ -265,7 +265,7 @@ async def _logs(
     src_stmt = text("""
         SELECT source, COUNT(*) AS n
         FROM server_logs
-        WHERE server_id = :sid::uuid AND time >= :day_start AND time < :day_end
+        WHERE server_id = CAST(:sid AS uuid) AND time >= :day_start AND time < :day_end
         GROUP BY source
         ORDER BY n DESC
     """)
