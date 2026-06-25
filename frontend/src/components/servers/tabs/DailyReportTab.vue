@@ -173,6 +173,110 @@ function actionClass(sev: string): string {
   return { danger: 'al-danger', warn: 'al-warn', info: 'al-info', ok: 'al-ok' }[sev] ?? 'al-info'
 }
 
+// ── Copy as Markdown ──────────────────────────────────────────────────────────
+const copied = ref(false)
+
+function buildMarkdown(): string {
+  if (!report.value) return ''
+  const r = report.value
+  const s = r.data_snapshot ?? null
+  const lines: string[] = []
+
+  lines.push(`# Daily Server Report — ${formattedDate()}`)
+  lines.push('')
+  lines.push(`**Score:** ${r.score}/100 — ${bandLabel.value}`)
+  lines.push(`**Model:** ${r.ai_model}${r.generated_at ? ' · ' + new Date(r.generated_at).toLocaleString() : ''}`)
+  lines.push(`**Findings:** ${criticalCount.value} critical · ${warningCount.value} warnings · ${healthyCount.value} healthy`)
+  lines.push('')
+  lines.push('## Summary')
+  lines.push('')
+  lines.push(r.narrative ?? '')
+
+  for (const group of findingGroups.value) {
+    lines.push('')
+    lines.push(`## ${group.title}`)
+    for (const f of group.findings) {
+      lines.push('')
+      lines.push(`### ${f.icon} ${f.title} [${badgeLabel(f.severity)}]`)
+      lines.push('')
+      lines.push(f.description)
+      lines.push('')
+      lines.push(`**${actionLabel(f.severity)}:** ${f.fix}`)
+    }
+  }
+
+  if (s?.metrics) {
+    lines.push('')
+    lines.push('## Metrics')
+    lines.push('')
+    lines.push(`- Avg CPU: ${s.metrics.cpu_avg_pct?.toFixed(0) ?? '—'}%`)
+    lines.push(`- Peak RAM: ${s.metrics.ram_avg_pct?.toFixed(0) ?? '—'}%`)
+    lines.push(`- Disk /: ${s.metrics.disk_eod_pct?.toFixed(0) ?? '—'}%`)
+    lines.push(`- Alerts Fired: ${s.alerts?.length ?? 0}`)
+    if (s.jobs) lines.push(`- Jobs: ${s.jobs.filter((j: any) => j.runs.some((rr: any) => rr.outcome === 'success')).length}/${s.jobs.length} succeeded`)
+  }
+
+  if (s?.services?.length) {
+    lines.push('')
+    lines.push('## Services')
+    lines.push('')
+    lines.push('| Service | Type | Uptime | Incidents |')
+    lines.push('|---------|------|--------|-----------|')
+    for (const svc of s.services) {
+      lines.push(`| ${svc.name} | ${svc.type}${svc.url ? ' · ' + svc.url : ''} | ${svc.uptime_pct}% | ${svc.incident_count ? svc.incident_count + ' incident · ' + svc.total_down_min + ' min' : '0 incidents'} |`)
+    }
+  }
+
+  if (alertRows.value.length) {
+    lines.push('')
+    lines.push(`## Alerts${alertTotal.value > alertRows.value.length ? ' (first ' + alertRows.value.length + ' of ' + alertTotal.value + ')' : ''}`)
+    lines.push('')
+    lines.push('| Severity | Type | Message | State | Fired | Resolved | Duration |')
+    lines.push('|----------|------|---------|-------|-------|----------|----------|')
+    for (const a of alertRows.value) {
+      lines.push(`| ${a.severity} | ${a.type} | ${a.message} | ${a.state} | ${a.fired_at ?? '—'} | ${a.resolved_at ?? '—'} | ${a.duration_min != null ? a.duration_min + ' min' : '—'} |`)
+    }
+  }
+
+  if (s?.jobs?.length) {
+    lines.push('')
+    lines.push('## Cron & Backup Jobs')
+    lines.push('')
+    for (const job of s.jobs) {
+      const run = job.runs[0]
+      const icon = run?.outcome === 'success' ? '✓' : '✗'
+      const meta = run ? `Ran ${run.ran_at}${run.duration_sec ? ' · ' + run.duration_sec + 's' : ''}` : 'No runs recorded'
+      lines.push(`- ${icon} **${job.name}** — ${meta} [${run?.outcome === 'success' ? 'Success' : 'Missed'}]`)
+    }
+  }
+
+  if (s?.logs) {
+    lines.push('')
+    lines.push('## Log Volume')
+    lines.push('')
+    lines.push(`Total: ${s.logs.total_lines.toLocaleString()} lines`)
+    lines.push('')
+    for (const src of s.logs.sources) {
+      lines.push(`- ${src.source}: ${src.count.toLocaleString()}`)
+    }
+    if (s.logs.failed_logins?.length) {
+      lines.push(`- ⚠ ${s.logs.failed_logins[0].count} failed logins${s.logs.failed_logins[0].remote_host ? ' from ' + s.logs.failed_logins[0].remote_host : ''}`)
+    }
+    if (s.logs.slow_queries) {
+      lines.push(`- ⚠ ${s.logs.slow_queries.count} slow queries — avg ${s.logs.slow_queries.avg_sec}s`)
+    }
+  }
+
+  return lines.join('\n')
+}
+
+async function copyMarkdown() {
+  const md = buildMarkdown()
+  await navigator.clipboard.writeText(md)
+  copied.value = true
+  setTimeout(() => { copied.value = false }, 2000)
+}
+
 // ── Data section helpers ──────────────────────────────────────────────────────
 const snap = computed(() => report.value?.data_snapshot ?? null)
 
@@ -275,6 +379,9 @@ function uptimeColor(pct: number): string {
         <div class="ai-hdr">
           <div class="ai-badge">⬡ AI Analysis</div>
           <span class="ai-meta">{{ report.ai_model }} · {{ report.generated_at ? new Date(report.generated_at).toLocaleString() : '' }}</span>
+          <button class="ai-copy" @click="copyMarkdown">
+            {{ copied ? '✓ Copied' : '⎘ Copy as Markdown' }}
+          </button>
           <button v-if="auth.isAdmin" class="ai-regen" @click="regenerate" :disabled="regenerating">
             {{ regenerating ? '…' : '↻ Regenerate' }}
           </button>
@@ -504,6 +611,8 @@ function uptimeColor(pct: number): string {
 .ai-hdr { display: flex; align-items: center; gap: 12px; padding: 13px 20px; border-bottom: 1px solid var(--border); }
 .ai-badge { background: rgba(99,102,241,.15); border: 1px solid rgba(99,102,241,.28); border-radius: 20px; padding: 4px 14px; font-size: 12px; font-weight: 600; color: var(--accent-2); }
 .ai-meta { font-size: 12px; color: var(--muted); flex: 1; }
+.ai-copy  { background: none; border: 1px solid var(--border); border-radius: 7px; color: var(--muted); font-size: 12px; cursor: pointer; padding: 4px 12px; transition: color .15s, border-color .15s; }
+.ai-copy:hover { color: var(--text); border-color: var(--accent-2); }
 .ai-regen { background: none; border: none; color: var(--accent-2); font-size: 12px; cursor: pointer; }
 
 /* Narrative */
