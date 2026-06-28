@@ -4,11 +4,20 @@ Queries server_metrics_hourly, alert, service, incident, monitored_job,
 job_run, and server_logs for a given server + calendar date (UTC).
 Returns a dict that is both stored in data_snapshot and sent to the AI.
 """
+import logging
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+log = logging.getLogger(__name__)
+
+_EMPTY_ACCESS_LOG_SECURITY = {
+    "status_distribution": {},
+    "top_ips": [],
+    "top_security_paths": [],
+}
 
 
 async def collect_for_date(
@@ -18,13 +27,19 @@ async def collect_for_date(
     day_start = datetime(report_date.year, report_date.month, report_date.day, tzinfo=timezone.utc)
     day_end = day_start + timedelta(days=1)
 
+    try:
+        access_security = await _access_log_security(db, sid, day_start, day_end)
+    except Exception:
+        log.exception("access_log_security query failed for server %s — skipping", sid)
+        access_security = _EMPTY_ACCESS_LOG_SECURITY
+
     return {
         "metrics": await _metrics(db, sid, day_start, day_end),
         "alerts": await _alerts(db, server_id, day_start, day_end),
         "services": await _services(db, server_id, day_start, day_end),
         "jobs": await _jobs(db, server_id, day_start, day_end),
         "logs": await _logs(db, sid, day_start, day_end),
-        "access_log_security": await _access_log_security(db, sid, day_start, day_end),
+        "access_log_security": access_security,
     }
 
 
@@ -286,49 +301,58 @@ async def _logs(
 async def _access_log_security(
     db: AsyncSession, sid: str, day_start: datetime, day_end: datetime
 ) -> dict:
+    """Query access-log HTTP security summary for the day.
+
+    Uses CTEs to extract regex groups once per row (status code, IP, path)
+    instead of re-evaluating the same regexp_match() in every FILTER clause.
+    Falls back to empty data on any error so the daily report still generates.
+    """
     params = {"sid": sid, "day_start": day_start, "day_end": day_end}
 
+    # CTE extracts status code and IP once per row — avoids 4-5 regex calls per row
+    # in the original FILTER-per-column approach.
     dist_stmt = text(r"""
+        WITH parsed AS (
+            SELECT (regexp_match(message, ' (\d{3}) '))[1] AS sc
+            FROM server_logs
+            WHERE server_id = CAST(:sid AS uuid)
+              AND time >= :day_start AND time < :day_end
+              AND source LIKE '%access%'
+        )
         SELECT
             CASE
-                WHEN (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 200 AND 299 THEN '2xx'
-                WHEN (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 300 AND 399 THEN '3xx'
-                WHEN (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 400 AND 499 THEN '4xx'
-                WHEN (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 500 AND 599 THEN '5xx'
+                WHEN sc::int BETWEEN 200 AND 299 THEN '2xx'
+                WHEN sc::int BETWEEN 300 AND 399 THEN '3xx'
+                WHEN sc::int BETWEEN 400 AND 499 THEN '4xx'
+                WHEN sc::int BETWEEN 500 AND 599 THEN '5xx'
                 ELSE 'other'
             END AS status_class,
             COUNT(*) AS n
-        FROM server_logs
-        WHERE server_id = CAST(:sid AS uuid)
-          AND time >= :day_start AND time < :day_end
-          AND source LIKE '%access%'
-          AND (regexp_match(message, '(\d{3}) '))[1] IS NOT NULL
+        FROM parsed
+        WHERE sc IS NOT NULL
         GROUP BY status_class
     """)
     dist_rows = (await db.execute(dist_stmt, params)).all()
     status_distribution = {r[0]: int(r[1]) for r in dist_rows}
 
     ip_stmt = text(r"""
+        WITH parsed AS (
+            SELECT
+                (regexp_match(message, '^(\S+)'))[1]   AS ip,
+                (regexp_match(message, ' (\d{3}) '))[1] AS sc
+            FROM server_logs
+            WHERE server_id = CAST(:sid AS uuid)
+              AND time >= :day_start AND time < :day_end
+              AND source LIKE '%access%'
+        )
         SELECT
-            (regexp_match(message, '^(\S+)'))[1] AS ip,
-            COUNT(*) AS total,
-            COUNT(*) FILTER (
-                WHERE (regexp_match(message, '(\d{3}) '))[1] IS NOT NULL
-                  AND (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 200 AND 299
-            ) AS cnt_2xx,
-            COUNT(*) FILTER (
-                WHERE (regexp_match(message, '(\d{3}) '))[1] IS NOT NULL
-                  AND (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 400 AND 499
-            ) AS cnt_4xx,
-            COUNT(*) FILTER (
-                WHERE (regexp_match(message, '(\d{3}) '))[1] IS NOT NULL
-                  AND (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 500 AND 599
-            ) AS cnt_5xx
-        FROM server_logs
-        WHERE server_id = CAST(:sid AS uuid)
-          AND time >= :day_start AND time < :day_end
-          AND source LIKE '%access%'
-          AND (regexp_match(message, '^(\S+)'))[1] IS NOT NULL
+            ip,
+            COUNT(*)                                                          AS total,
+            COUNT(*) FILTER (WHERE sc IS NOT NULL AND sc::int BETWEEN 200 AND 299) AS cnt_2xx,
+            COUNT(*) FILTER (WHERE sc IS NOT NULL AND sc::int BETWEEN 400 AND 499) AS cnt_4xx,
+            COUNT(*) FILTER (WHERE sc IS NOT NULL AND sc::int BETWEEN 500 AND 599) AS cnt_5xx
+        FROM parsed
+        WHERE ip IS NOT NULL
         GROUP BY ip
         ORDER BY total DESC
         LIMIT 10
@@ -340,35 +364,32 @@ async def _access_log_security(
     ]
 
     path_stmt = text(r"""
+        WITH parsed AS (
+            SELECT
+                (regexp_match(message, '"(?:GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH) (\S+)'))[1] AS path,
+                (regexp_match(message, ' (\d{3}) '))[1]                                         AS sc
+            FROM server_logs
+            WHERE server_id = CAST(:sid AS uuid)
+              AND time >= :day_start AND time < :day_end
+              AND source LIKE '%access%'
+              AND (
+                message ILIKE '%.php%'
+                OR message ILIKE '%/wp-admin%'
+                OR message ILIKE '%/xmlrpc%'
+                OR message ILIKE '%/.env%'
+                OR message ILIKE '%/shell%'
+                OR message ILIKE '%/admin%'
+                OR message ILIKE '%/config%'
+              )
+        )
         SELECT
-            (regexp_match(message, '"(?:GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH) (\S+)'))[1] AS path,
-            COUNT(*) AS total,
-            COUNT(*) FILTER (
-                WHERE (regexp_match(message, '(\d{3}) '))[1] IS NOT NULL
-                  AND (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 200 AND 299
-            ) AS cnt_2xx,
-            COUNT(*) FILTER (
-                WHERE (regexp_match(message, '(\d{3}) '))[1] IS NOT NULL
-                  AND (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 400 AND 499
-            ) AS cnt_4xx,
-            COUNT(*) FILTER (
-                WHERE (regexp_match(message, '(\d{3}) '))[1] IS NOT NULL
-                  AND (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 500 AND 599
-            ) AS cnt_5xx
-        FROM server_logs
-        WHERE server_id = CAST(:sid AS uuid)
-          AND time >= :day_start AND time < :day_end
-          AND source LIKE '%access%'
-          AND (
-            message ILIKE '%.php%'
-            OR message ILIKE '%/wp-admin%'
-            OR message ILIKE '%/xmlrpc%'
-            OR message ILIKE '%/.env%'
-            OR message ILIKE '%/shell%'
-            OR message ILIKE '%/admin%'
-            OR message ILIKE '%/config%'
-          )
-          AND (regexp_match(message, '"(?:GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH) (\S+)'))[1] IS NOT NULL
+            path,
+            COUNT(*)                                                          AS total,
+            COUNT(*) FILTER (WHERE sc IS NOT NULL AND sc::int BETWEEN 200 AND 299) AS cnt_2xx,
+            COUNT(*) FILTER (WHERE sc IS NOT NULL AND sc::int BETWEEN 400 AND 499) AS cnt_4xx,
+            COUNT(*) FILTER (WHERE sc IS NOT NULL AND sc::int BETWEEN 500 AND 599) AS cnt_5xx
+        FROM parsed
+        WHERE path IS NOT NULL
         GROUP BY path
         ORDER BY total DESC
         LIMIT 10
