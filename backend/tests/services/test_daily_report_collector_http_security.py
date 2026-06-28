@@ -23,7 +23,7 @@ def _db(*row_lists):
 
 
 def test_returns_expected_top_level_keys():
-    db = _db([("2xx", 10)], [("1.2.3.4", 10, 10, 0, 0)], [("/shell.php", 1, 1, 0)])
+    db = _db([("2xx", 10)], [("1.2.3.4", 10, 10, 0, 0)], [("/shell.php", 1, 1, 0, 0)])
     result = asyncio.run(_access_log_security(db, SID, DAY_START, DAY_END))
     assert set(result.keys()) == {"status_distribution", "top_ips", "top_security_paths"}
 
@@ -46,11 +46,11 @@ def test_top_ips_shape():
 
 
 def test_top_security_paths_shape():
-    db = _db([], [], [("/wp-admin/install.php", 55, 0, 55)])
+    db = _db([], [], [("/wp-admin/install.php", 55, 0, 55, 0)])
     result = asyncio.run(_access_log_security(db, SID, DAY_START, DAY_END))
     assert len(result["top_security_paths"]) == 1
     p = result["top_security_paths"][0]
-    assert p == {"path": "/wp-admin/install.php", "total": 55, "cnt_2xx": 0, "cnt_4xx": 55}
+    assert p == {"path": "/wp-admin/install.php", "total": 55, "cnt_2xx": 0, "cnt_4xx": 55, "cnt_5xx": 0}
 
 
 def test_empty_rows_return_empty_collections():

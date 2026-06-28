@@ -350,7 +350,11 @@ async def _access_log_security(
             COUNT(*) FILTER (
                 WHERE (regexp_match(message, '(\d{3}) '))[1] IS NOT NULL
                   AND (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 400 AND 499
-            ) AS cnt_4xx
+            ) AS cnt_4xx,
+            COUNT(*) FILTER (
+                WHERE (regexp_match(message, '(\d{3}) '))[1] IS NOT NULL
+                  AND (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 500 AND 599
+            ) AS cnt_5xx
         FROM server_logs
         WHERE server_id = CAST(:sid AS uuid)
           AND time >= :day_start AND time < :day_end
@@ -371,7 +375,7 @@ async def _access_log_security(
     """)
     path_rows = (await db.execute(path_stmt, params)).all()
     top_security_paths = [
-        {"path": r[0], "total": int(r[1]), "cnt_2xx": int(r[2]), "cnt_4xx": int(r[3])}
+        {"path": r[0], "total": int(r[1]), "cnt_2xx": int(r[2]), "cnt_4xx": int(r[3]), "cnt_5xx": int(r[4])}
         for r in path_rows
     ]
 
