@@ -27,6 +27,15 @@ function tierLabel(a: SecurityActionRow): string {
   if (a.confidence) bits.push(a.confidence)
   return bits.join(' · ')
 }
+
+// Extract HTTP status code from the quoted pattern in the alert message.
+// e.g. "matched '%POST%.php% 200 %' on %access%" → "200"
+function httpStatus(msg: string): string | null {
+  const pat = msg.match(/'([^']+)'/)
+  if (!pat) return null
+  const code = pat[1].match(/ (\d{3}) /)
+  return code ? code[1] : null
+}
 </script>
 
 <template>
@@ -41,6 +50,7 @@ function tierLabel(a: SecurityActionRow): string {
             <time class="det__clock" :datetime="inc.at">{{ clock(inc.at) }}</time>
             <span class="det__type">{{ inc.type }}</span>
             <span class="det__stage">{{ inc.stage }}</span>
+            <span v-if="httpStatus(inc.message)" class="det__http">{{ httpStatus(inc.message) }}</span>
             <span class="det__sev">{{ inc.severity }}</span>
             <span v-if="inc.state === 'resolved'" class="det__resolved">resolved</span>
             <time class="det__rel">{{ relativeTime(inc.at) }}</time>
@@ -103,6 +113,10 @@ function tierLabel(a: SecurityActionRow): string {
 .det__type { font-weight: 600; font-size: 13.5px; color: var(--text, #e8edf6); font-family: monospace; }
 .det__stage { font-size: 11px; padding: 1px 7px; border-radius: 5px;
   background: var(--surface-2, #1a2336); color: var(--muted, #9aa4b2); border: 1px solid var(--border, #243049); }
+.det__http {
+  font-size: 11px; padding: 1px 7px; border-radius: 4px; font-family: monospace; font-weight: 700;
+  background: var(--surface-2, #1a2336); color: var(--muted, #9aa4b2); border: 1px solid var(--border, #243049);
+}
 .det__sev { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; font-weight: 700; }
 .sev-critical .det__sev { color: #f87171; }
 .sev-warning  .det__sev { color: #fbbf24; }
