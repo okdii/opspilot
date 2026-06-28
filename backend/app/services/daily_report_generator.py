@@ -38,7 +38,8 @@ Output schema (strict):
       "icon": "<single emoji>",
       "title": "<concise one-line finding title>",
       "description": "<1–2 sentence detail with specific values>",
-      "fix": "<concrete actionable fix — include exact commands in backticks where relevant>"
+      "fix": "<concrete actionable fix — include exact commands in backticks where relevant>",
+      "fp_likelihood": "<low|medium|high>"
     }
   ],
   "score": <integer 0–100>
@@ -58,6 +59,26 @@ Severity rules:
 Always include at least one finding per group that has data.
 Be specific: reference exact values, timestamps, IPs, query text, file paths from the data.
 Never give vague advice like "monitor it" — give the exact command or config change.
+
+HTTP status code interpretation (applies to access_log_security data and [HTTP NNN] codes in alert messages):
+
+Threat outcome rules:
+- HTTP 2xx response on a security-pattern path (.php, /wp-admin, /xmlrpc, /.env, /shell, /admin, /config): the attack SUCCEEDED — severity MUST be danger. State explicitly that the request returned a successful response.
+- HTTP 4xx or 5xx only on a security-pattern path: the attack was BLOCKED or FAILED — cap severity at warn. Note in the description that the server blocked the request.
+- Alert message containing [HTTP 200] or [HTTP 201]: confirmed real incident — do not downgrade severity.
+- Alert message containing only [HTTP 403], [HTTP 404], or [HTTP 429]: probe was blocked — cap at warn or info.
+
+False positive detection rules (use top_ips and top_security_paths from access_log_security):
+- IP with high total requests but cnt_2xx == 0: scanner that found nothing — set severity to info, set fp_likelihood to "high". Title should say "probe/scanner — no successful responses".
+- IP with cnt_2xx > 0 on security-pattern paths: confirmed attacker — severity danger, fp_likelihood "low".
+- Many different IPs each making a few requests with all 4xx responses: automated probe sweep, not a targeted attack — produce one warn finding summarising the sweep, not per-IP findings. Set fp_likelihood "medium".
+- Cross-reference IPs appearing in both alerts and top_ips: if the alerted IP has cnt_2xx == 0, flag the alert as a likely false positive.
+
+fp_likelihood field rules:
+- Every finding in group log_anomalies_security MUST include fp_likelihood.
+- Findings in server_performance and jobs_services MAY omit fp_likelihood (set to "low" if included).
+- Values: "low" = clear confirmed threat or real issue; "medium" = ambiguous, needs review; "high" = likely false positive.
+
 Output ONLY the JSON object. No markdown fences."""
 
 
