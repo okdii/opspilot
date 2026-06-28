@@ -147,7 +147,7 @@ async def _extract_ip(db: AsyncSession, alert: Alert) -> str | None:
     return max(counts, key=lambda ip: counts[ip])
 
 
-async def _extract_file(db: AsyncSession, alert: Alert) -> str | None:
+async def _extract_file(db: AsyncSession, alert: Alert, server: Server) -> str | None:
     since = (alert.sent_at or _now()) - timedelta(minutes=5)
     # Prefer auditd webroot_write (carries the absolute path under name="…").
     for line in await _recent_log_lines(db, alert.server_id, "%webroot_write%", since):
@@ -156,10 +156,11 @@ async def _extract_file(db: AsyncSession, alert: Alert) -> str | None:
             return m.group(1)
     # Fall back to POST access-log lines only — GET/HEAD monitoring probes
     # (UptimeRobot HEAD /index.php/ms/) would otherwise produce bogus paths.
+    webroot = (server.detected_webroot or "/var/www/html").rstrip("/")
     for line in await _recent_log_lines(db, alert.server_id, "%POST%.php%", since):
         m = re.search(r'"POST\s+(/\S+\.php)', line)
         if m:
-            return "/var/www/html" + m.group(1).split("?")[0]
+            return webroot + m.group(1).split("?")[0]
     return None
 
 
@@ -187,7 +188,13 @@ async def _resolve_target(db: AsyncSession, alert: Alert, action_type: str,
     if action_type in ("block_ip",):
         return await _extract_ip(db, alert)
     if action_type == "quarantine_file":
-        return await _extract_file(db, alert)
+        if " 200 " not in (alert.message or ""):
+            logger.info(
+                "quarantine skipped for alert %s: non-200 response (file not served)",
+                alert.id,
+            )
+            return None
+        return await _extract_file(db, alert, server)
     if action_type == "kill_pid":
         return await _extract_pid(db, alert)
     if action_type == "revert_authorized_keys":
