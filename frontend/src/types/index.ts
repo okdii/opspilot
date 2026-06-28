@@ -43,6 +43,7 @@ export interface Server {
   status: 'pending' | 'online' | 'offline' | 'maintenance'
   last_seen_at: string | null
   active_alert_count: number
+  detected_webroot: string | null
   created_at: string
 }
 

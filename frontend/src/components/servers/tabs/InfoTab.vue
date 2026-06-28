@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useMetricsStore } from '@/stores/metrics'
 import { useServerStore } from '@/stores/server'
 import { useAuthStore } from '@/stores/auth'
-import { getServer } from '@/services/api'
+import { getServer, patchServer } from '@/services/api'
 import { formatUptime, humanBytes, labeledList, realMounts, scalarValue, usageColor } from '@/utils/metrics'
 import type { Server } from '@/types'
 
@@ -62,10 +62,36 @@ async function redeployAgents() {
   }
 }
 
+const webrootEdit = ref<string>('')
+const webrootSaving = ref(false)
+const webrootSaved = ref(false)
+const webrootError = ref('')
+
+async function saveWebroot() {
+  const id = metrics.activeServerId
+  if (!id) return
+  webrootSaving.value = true
+  webrootSaved.value = false
+  webrootError.value = ''
+  try {
+    const updated = await patchServer(id, { detected_webroot: webrootEdit.value || null })
+    if (server.value) server.value.detected_webroot = updated.detected_webroot
+    webrootSaved.value = true
+    setTimeout(() => { webrootSaved.value = false }, 2000)
+  } catch {
+    webrootError.value = 'Failed to save web root'
+  } finally {
+    webrootSaving.value = false
+  }
+}
+
 onMounted(async () => {
   const id = metrics.activeServerId
   if (id) {
-    try { server.value = await getServer(id) } catch { /* degrade gracefully */ }
+    try {
+      server.value = await getServer(id)
+      webrootEdit.value = server.value.detected_webroot ?? ''
+    } catch { /* degrade gracefully */ }
   }
 })
 
@@ -337,6 +363,22 @@ function fmtLoad(v: number | null): string {
         <span v-if="!reconfigureResult.warnings.length"> · Monitoring reconfigured successfully</span>
       </div>
       <p v-if="reconfigureError" class="agent-error">Reconfigure failed: {{ reconfigureError }}</p>
+
+      <div class="agent-divider" />
+
+      <p class="agent-desc">Web root path used when quarantining uploaded webshells. Auto-detected during onboarding; override here if your site root differs.</p>
+      <div class="webroot-row">
+        <input
+          v-model="webrootEdit"
+          class="webroot-input"
+          placeholder="/var/www/html"
+          spellcheck="false"
+        />
+        <button class="agent-btn webroot-btn" :disabled="webrootSaving" @click="saveWebroot">
+          {{ webrootSaving ? 'Saving…' : webrootSaved ? 'Saved ✓' : 'Save' }}
+        </button>
+      </div>
+      <p v-if="webrootError" class="agent-error">{{ webrootError }}</p>
     </section>
 
   </div>
@@ -429,4 +471,8 @@ function fmtLoad(v: number | null): string {
 .agent-result { font-size: 12px; margin-top: 8px; line-height: 1.5; }
 .agent-result--ok { color: var(--va-success, #4caf50); }
 .agent-result--warn { color: var(--va-warning, #f59e0b); }
+.webroot-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.webroot-input { flex: 1; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 7px 12px; font-size: 13px; color: var(--text); font-family: monospace; }
+.webroot-input:focus { outline: none; border-color: var(--accent); }
+.webroot-btn { padding: 7px 18px; }
 </style>

@@ -82,6 +82,11 @@ export async function getServer(serverId: string): Promise<Server> {
   return data
 }
 
+export async function patchServer(serverId: string, payload: { detected_webroot?: string | null }): Promise<Server> {
+  const { data } = await api.patch<Server>(`/api/servers/${serverId}`, payload)
+  return data
+}
+
 export async function getMetrics(
   serverId: string,
   range: MetricRange,
