@@ -167,7 +167,7 @@ class LogRuleIn(BaseModel):
     window_sec: int = Field(ge=10, le=3600)
     cooldown_min: int = 60
     enabled: bool = True
-    exclude_pattern: str | None = None
+    exclude_pattern: str | None = Field(default=None, max_length=255)
 
 
 class LogRulePatch(BaseModel):
@@ -178,7 +178,7 @@ class LogRulePatch(BaseModel):
     window_sec: int | None = Field(default=None, ge=10, le=3600)
     cooldown_min: int | None = None
     enabled: bool | None = None
-    exclude_pattern: str | None = None
+    exclude_pattern: str | None = Field(default=None, max_length=255)
 
 
 class LogRuleOut(BaseModel):
