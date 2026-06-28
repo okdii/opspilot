@@ -1,5 +1,4 @@
 """Tests for Task 2: exclude_pattern in API schemas and default rules."""
-import pytest
 from app.routers.alert_rules import (
     DEFAULT_LOG_RULES,
     LogRuleIn,

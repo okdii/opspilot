@@ -32,7 +32,7 @@ def test_quarantine_not_skipped_when_200_in_message():
     server = _server("/srv/www")
     with patch("app.services.security_responder._recent_log_lines", new_callable=AsyncMock) as mock:
         mock.return_value = []  # _extract_file returns None but gate is passed
-        result = asyncio.run(_resolve_target(None, alert, "quarantine_file", server))
+        asyncio.run(_resolve_target(None, alert, "quarantine_file", server))
     mock.assert_called()  # gate was passed, _extract_file ran
 
 
