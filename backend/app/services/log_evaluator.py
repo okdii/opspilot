@@ -107,6 +107,7 @@ async def _general_count(db, rule: LogAlertRule) -> int:
                 WHERE server_id = :sid
                   AND source LIKE :source
                   AND raw->>:field ILIKE :pattern
+                  AND (:excl IS NULL OR message NOT ILIKE :excl)
                   AND time > now() - make_interval(secs => :win)
                 """
             ),
@@ -115,6 +116,7 @@ async def _general_count(db, rule: LogAlertRule) -> int:
                 "source": rule.source,
                 "field": rule.match_field,
                 "pattern": rule.pattern,
+                "excl": rule.exclude_pattern,
                 "win": rule.window_sec,
             },
         )
@@ -127,6 +129,7 @@ async def _general_count(db, rule: LogAlertRule) -> int:
                 WHERE server_id = :sid
                   AND source LIKE :source
                   AND message ILIKE :pattern
+                  AND (:excl IS NULL OR message NOT ILIKE :excl)
                   AND time > now() - make_interval(secs => :win)
                 """
             ),
@@ -134,6 +137,7 @@ async def _general_count(db, rule: LogAlertRule) -> int:
                 "sid": str(rule.server_id),
                 "source": rule.source,
                 "pattern": rule.pattern,
+                "excl": rule.exclude_pattern,
                 "win": rule.window_sec,
             },
         )
