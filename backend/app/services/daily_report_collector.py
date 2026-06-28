@@ -24,6 +24,7 @@ async def collect_for_date(
         "services": await _services(db, server_id, day_start, day_end),
         "jobs": await _jobs(db, server_id, day_start, day_end),
         "logs": await _logs(db, sid, day_start, day_end),
+        "access_log_security": await _access_log_security(db, sid, day_start, day_end),
     }
 
 
@@ -279,4 +280,103 @@ async def _logs(
         "failed_logins": failed_logins,
         "slow_queries": slow_queries,
         "sources": sources,
+    }
+
+
+async def _access_log_security(
+    db: AsyncSession, sid: str, day_start: datetime, day_end: datetime
+) -> dict:
+    params = {"sid": sid, "day_start": day_start, "day_end": day_end}
+
+    dist_stmt = text(r"""
+        SELECT
+            CASE
+                WHEN (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 200 AND 299 THEN '2xx'
+                WHEN (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 300 AND 399 THEN '3xx'
+                WHEN (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 400 AND 499 THEN '4xx'
+                WHEN (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 500 AND 599 THEN '5xx'
+                ELSE 'other'
+            END AS status_class,
+            COUNT(*) AS n
+        FROM server_logs
+        WHERE server_id = CAST(:sid AS uuid)
+          AND time >= :day_start AND time < :day_end
+          AND source LIKE '%access%'
+          AND (regexp_match(message, '(\d{3}) '))[1] IS NOT NULL
+        GROUP BY status_class
+    """)
+    dist_rows = (await db.execute(dist_stmt, params)).all()
+    status_distribution = {r[0]: int(r[1]) for r in dist_rows}
+
+    ip_stmt = text(r"""
+        SELECT
+            (regexp_match(message, '^(\S+)'))[1] AS ip,
+            COUNT(*) AS total,
+            COUNT(*) FILTER (
+                WHERE (regexp_match(message, '(\d{3}) '))[1] IS NOT NULL
+                  AND (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 200 AND 299
+            ) AS cnt_2xx,
+            COUNT(*) FILTER (
+                WHERE (regexp_match(message, '(\d{3}) '))[1] IS NOT NULL
+                  AND (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 400 AND 499
+            ) AS cnt_4xx,
+            COUNT(*) FILTER (
+                WHERE (regexp_match(message, '(\d{3}) '))[1] IS NOT NULL
+                  AND (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 500 AND 599
+            ) AS cnt_5xx
+        FROM server_logs
+        WHERE server_id = CAST(:sid AS uuid)
+          AND time >= :day_start AND time < :day_end
+          AND source LIKE '%access%'
+          AND (regexp_match(message, '^(\S+)'))[1] IS NOT NULL
+        GROUP BY ip
+        ORDER BY total DESC
+        LIMIT 10
+    """)
+    ip_rows = (await db.execute(ip_stmt, params)).all()
+    top_ips = [
+        {"ip": r[0], "total": int(r[1]), "cnt_2xx": int(r[2]), "cnt_4xx": int(r[3]), "cnt_5xx": int(r[4])}
+        for r in ip_rows
+    ]
+
+    path_stmt = text(r"""
+        SELECT
+            (regexp_match(message, '"(?:GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH) (\S+)'))[1] AS path,
+            COUNT(*) AS total,
+            COUNT(*) FILTER (
+                WHERE (regexp_match(message, '(\d{3}) '))[1] IS NOT NULL
+                  AND (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 200 AND 299
+            ) AS cnt_2xx,
+            COUNT(*) FILTER (
+                WHERE (regexp_match(message, '(\d{3}) '))[1] IS NOT NULL
+                  AND (regexp_match(message, '(\d{3}) '))[1]::int BETWEEN 400 AND 499
+            ) AS cnt_4xx
+        FROM server_logs
+        WHERE server_id = CAST(:sid AS uuid)
+          AND time >= :day_start AND time < :day_end
+          AND source LIKE '%access%'
+          AND (
+            message ILIKE '%.php%'
+            OR message ILIKE '%/wp-admin%'
+            OR message ILIKE '%/xmlrpc%'
+            OR message ILIKE '%/.env%'
+            OR message ILIKE '%/shell%'
+            OR message ILIKE '%/admin%'
+            OR message ILIKE '%/config%'
+          )
+          AND (regexp_match(message, '"(?:GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH) (\S+)'))[1] IS NOT NULL
+        GROUP BY path
+        ORDER BY total DESC
+        LIMIT 10
+    """)
+    path_rows = (await db.execute(path_stmt, params)).all()
+    top_security_paths = [
+        {"path": r[0], "total": int(r[1]), "cnt_2xx": int(r[2]), "cnt_4xx": int(r[3])}
+        for r in path_rows
+    ]
+
+    return {
+        "status_distribution": status_distribution,
+        "top_ips": top_ips,
+        "top_security_paths": top_security_paths,
     }
