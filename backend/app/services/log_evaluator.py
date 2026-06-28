@@ -217,6 +217,42 @@ async def _per_ip_offenders(db, rule: LogAlertRule, pattern: str) -> list[tuple[
     return [(r.source_ip, int(r.cnt)) for r in rows if r.source_ip]
 
 
+async def _http_status_summary(db, rule: LogAlertRule) -> str | None:
+    """Return distinct HTTP status codes from recent matching access-log lines.
+
+    Uses a regex on the CLF message field to extract the 3-digit code that
+    follows the closing quote of the request line: ``"GET /path HTTP/1.1" 200 ...``.
+    Only runs for rules whose source contains 'access'. Returns a
+    comma-separated string like ``"200"`` or ``"200, 403"``, or ``None``.
+    """
+    if "access" not in (rule.source or "").lower():
+        return None
+    rows = await db.execute(
+        text(
+            r"""
+            SELECT DISTINCT (regexp_match(message, '" (\d{3}) '))[1] AS code
+            FROM server_logs
+            WHERE server_id = :sid
+              AND source LIKE :source
+              AND message ILIKE :pattern
+              AND (:excl IS NULL OR message NOT ILIKE :excl)
+              AND time > now() - make_interval(secs => :win)
+              AND (regexp_match(message, '" (\d{3}) '))[1] IS NOT NULL
+            LIMIT 10
+            """
+        ),
+        {
+            "sid": str(rule.server_id),
+            "source": rule.source,
+            "pattern": rule.pattern,
+            "excl": rule.exclude_pattern,
+            "win": rule.window_sec,
+        },
+    )
+    codes = sorted(r.code for r in rows if r.code)
+    return ", ".join(codes) if codes else None
+
+
 async def _clear_or_resolve(db, alert_type: str, server_id) -> None:
     """Tick the auto-resolve counter for any open alert of this (type, server).
 
@@ -321,10 +357,12 @@ async def log_alert_evaluator() -> None:
                 count = await _general_count(db, rule)
                 if count >= rule.threshold:
                     await _reset_clear_count(db, alert_type, rule.server_id)
+                    http_codes = await _http_status_summary(db, rule)
+                    http_suffix = f" [HTTP {http_codes}]" if http_codes else ""
                     msg = (
                         f"{count} log line(s) matched '{rule.pattern}' on "
                         f"{rule.source} in the last {rule.window_sec}s "
-                        f"(threshold {rule.threshold})"
+                        f"(threshold {rule.threshold}){http_suffix}"
                     )
                     fired = await fire_alert(
                         db,

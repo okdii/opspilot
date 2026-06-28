@@ -28,9 +28,12 @@ function tierLabel(a: SecurityActionRow): string {
   return bits.join(' · ')
 }
 
-// Extract HTTP status code from the quoted pattern in the alert message.
-// e.g. "matched '%POST%.php% 200 %' on %access%" → "200"
+// Extract HTTP status code(s) from the alert message.
+// New alerts carry "[HTTP 200]" appended by the backend evaluator.
+// Older alerts fall back to extracting from the quoted pattern string.
 function httpStatus(msg: string): string | null {
+  const marker = msg.match(/\[HTTP ([^\]]+)\]/)
+  if (marker) return marker[1]
   const pat = msg.match(/'([^']+)'/)
   if (!pat) return null
   const code = pat[1].match(/ (\d{3}) /)
