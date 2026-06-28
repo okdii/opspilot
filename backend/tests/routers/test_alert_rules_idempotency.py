@@ -10,7 +10,7 @@ def test_sppb_rule_present():
 
 def test_field_scoped_media_php_rule_present():
     """Field-scoped rule replaces the deleted case-variant rules."""
-    field_rules = [(p, mf) for _, p, _, _, _, mf in DEFAULT_LOG_RULES if mf == "url"]
+    field_rules = [(p, mf) for _, p, _, _, _, mf, *_ in DEFAULT_LOG_RULES if mf == "url"]
     assert any("%/media/%.php%" in p for p, _ in field_rules)
 
 

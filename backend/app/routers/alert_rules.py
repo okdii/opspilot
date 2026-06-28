@@ -28,37 +28,37 @@ DEFAULT_METRIC_RULES: list[tuple[str, float]] = [
     ("disk_inode", 90.0),
 ]
 
-# 6-tuple log rules: (source, pattern, severity, threshold, window_sec, match_field).
-DEFAULT_LOG_RULES: list[tuple[str, str, str, int, int, str | None]] = [
-    ("php_app", "%Fatal error%", "critical", 1, 300, None),
-    ("nginx_access", '%" 5__ %', "warning", 10, 300, None),
-    ("auth", "%Failed password%", "critical", 5, 300, None),
-    ("mariadb_error", "%ERROR%", "critical", 1, 300, None),
-    ("mariadb_slow", "%Query_time%", "warning", 5, 300, None),
-    # ── Security detection (Part 1) ───────────────────────────────────
-    ("%access%", "%com_jce%profiles.import%", "critical", 1, 300, None),
-    ("%access%", "%POST%.php% 200 %", "critical", 10, 300, None),
-    ("%access%", "%/images/%.php% 200 %", "critical", 1, 300, None),
-    ("%access%", "%/media/%.php% 200 %", "critical", 1, 300, None),
-    ("%access%", "%/uploads/%.php% 200 %", "critical", 1, 300, None),
-    ("%access%", "%/files/%.php% 200 %", "critical", 1, 300, None),
-    ("%access%", "%/tmp/%.php% 200 %", "critical", 1, 300, None),
-    ("%access%", "%/cache/%.php% 200 %", "critical", 1, 300, None),
-    ("%access%", "% 404 %", "warning", 20, 300, None),
-    ("auditd", "%webroot_write%", "critical", 1, 300, None),
-    ("auditd", "%webshell_exec%", "critical", 1, 300, None),
-    ("auditd", "%ssh_key_change%", "critical", 1, 300, None),
-    ("auditd", "%log_tamper%", "critical", 1, 300, None),
-    ("mariadb_general", "%CREATE USER%", "critical", 1, 300, None),
-    ("mariadb_general", "%GRANT ALL%", "critical", 1, 300, None),
-    ("auth", "%Accepted publickey%", "warning", 1, 300, None),
-    # ── SP Page Builder CVE-2026-48908 ────────────────────────────────
-    ("%access%", "%com_sppagebuilder%uploadCustomIcon%", "critical", 1, 300, None),
-    ("%access%", "%POST%index.php% 200 %", "warning", 10, 60, None),
-    # ── Field-scoped rules (match request URI only, not Referer) ──────
+# 7-tuple log rules: (source, pattern, severity, threshold, window_sec, match_field, exclude_pattern).
+DEFAULT_LOG_RULES: list[tuple[str, str, str, int, int, str | None, str | None]] = [
+    ("php_app",         "%Fatal error%",                        "critical",  1,  300, None, None),
+    ("nginx_access",    '%" 5__ %',                             "warning",  10,  300, None, None),
+    ("auth",            "%Failed password%",                    "critical",  5,  300, None, None),
+    ("mariadb_error",   "%ERROR%",                              "critical",  1,  300, None, None),
+    ("mariadb_slow",    "%Query_time%",                         "warning",   5,  300, None, None),
+    # ── Security detection (Part 1) ──────────────────────────────────────
+    ("%access%",        "%com_jce%profiles.import%",            "critical",  1,  300, None, None),
+    ("%access%",        "%POST%.php% 200 %",                    "critical", 10,  300, None, "%jsvisit_counter%"),
+    ("%access%",        "%/images/%.php% 200 %",                "critical",  1,  300, None, None),
+    ("%access%",        "%/media/%.php% 200 %",                 "critical",  1,  300, None, None),
+    ("%access%",        "%/uploads/%.php% 200 %",               "critical",  1,  300, None, None),
+    ("%access%",        "%/files/%.php% 200 %",                 "critical",  1,  300, None, None),
+    ("%access%",        "%/tmp/%.php% 200 %",                   "critical",  1,  300, None, None),
+    ("%access%",        "%/cache/%.php% 200 %",                 "critical",  1,  300, None, None),
+    ("%access%",        "% 404 %",                              "warning",  20,  300, None, None),
+    ("auditd",          "%webroot_write%",                      "critical",  1,  300, None, None),
+    ("auditd",          "%webshell_exec%",                      "critical",  1,  300, None, None),
+    ("auditd",          "%ssh_key_change%",                     "critical",  1,  300, None, None),
+    ("auditd",          "%log_tamper%",                         "critical",  1,  300, None, None),
+    ("mariadb_general", "%CREATE USER%",                        "critical",  1,  300, None, None),
+    ("mariadb_general", "%GRANT ALL%",                          "critical",  1,  300, None, None),
+    ("auth",            "%Accepted publickey%",                 "warning",   1,  300, None, None),
+    # ── SP Page Builder CVE-2026-48908 ───────────────────────────────────
+    ("%access%",        "%com_sppagebuilder%uploadCustomIcon%", "critical",  1,  300, None, "%/administrator/%"),
+    ("%access%",        "%POST%index.php% 200 %",               "warning",  10,   60, None, None),
+    # ── Field-scoped rules ────────────────────────────────────────────────
     # %/media/%.PHP% and %/media/%.pHp% removed: they match Referer index.php
     # on every Joomla asset load. This rule replaces them by scoping to raw->>'url'.
-    ("%access%", "%/media/%.php%", "critical", 1, 300, "url"),
+    ("%access%",        "%/media/%.php%",                       "critical",  1,  300, "url", None),
 ]
 
 
@@ -90,7 +90,7 @@ async def create_default_rules(db: AsyncSession, server) -> tuple[int, int]:
             metric_added += 1
 
     log_added = 0
-    for source, pattern, severity, threshold, window_sec, match_field in DEFAULT_LOG_RULES:
+    for source, pattern, severity, threshold, window_sec, match_field, exclude_pattern in DEFAULT_LOG_RULES:
         exists = await db.scalar(
             select(LogAlertRule.id)
             .where(
@@ -113,6 +113,7 @@ async def create_default_rules(db: AsyncSession, server) -> tuple[int, int]:
                 cooldown_min=60,
                 enabled=True,
                 match_field=match_field,
+                exclude_pattern=exclude_pattern,
             )
         )
         log_added += 1
@@ -166,6 +167,7 @@ class LogRuleIn(BaseModel):
     window_sec: int = Field(ge=10, le=3600)
     cooldown_min: int = 60
     enabled: bool = True
+    exclude_pattern: str | None = None
 
 
 class LogRulePatch(BaseModel):
@@ -176,6 +178,7 @@ class LogRulePatch(BaseModel):
     window_sec: int | None = Field(default=None, ge=10, le=3600)
     cooldown_min: int | None = None
     enabled: bool | None = None
+    exclude_pattern: str | None = None
 
 
 class LogRuleOut(BaseModel):
@@ -190,6 +193,7 @@ class LogRuleOut(BaseModel):
     cooldown_min: int
     enabled: bool
     last_fired_at: datetime | None = None
+    exclude_pattern: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +235,7 @@ def _log_out(rule: LogAlertRule, server_name: str | None = None) -> LogRuleOut:
         cooldown_min=rule.cooldown_min,
         enabled=rule.enabled,
         last_fired_at=rule.last_fired_at,
+        exclude_pattern=rule.exclude_pattern,
     )
 
 
@@ -385,6 +390,7 @@ async def create_log_rule(body: LogRuleIn, user: AdminUser, db: AsyncSession = D
         window_sec=body.window_sec,
         cooldown_min=body.cooldown_min,
         enabled=body.enabled,
+        exclude_pattern=body.exclude_pattern,
     )
     db.add(rule)
     await db.commit()
@@ -415,6 +421,8 @@ async def update_log_rule(rule_id: str, body: LogRulePatch, user: AdminUser, db:
         rule.cooldown_min = body.cooldown_min
     if body.enabled is not None:
         rule.enabled = body.enabled
+    if body.exclude_pattern is not None:
+        rule.exclude_pattern = body.exclude_pattern or None  # empty string → NULL
 
     await db.commit()
     await db.refresh(rule)
