@@ -65,6 +65,7 @@ async def _server_to_out(server: Server, db: AsyncSession) -> ServerOut:
         last_seen_at=server.last_seen_at,
         active_alert_count=await _active_alert_count(str(server.id), db),
         logs_supported=_logs_supported(server),
+        detected_webroot=server.detected_webroot,
         created_at=server.created_at,
     )
 
@@ -174,6 +175,8 @@ async def update_server(server_id: str, body: ServerUpdate, user: AdminUser, db:
         server.ssh_key_encrypted = None
     if body.tags is not None:
         server.tags = body.tags
+    if body.detected_webroot is not None:
+        server.detected_webroot = body.detected_webroot or None  # empty string → NULL
 
     await db.commit()
     await db.refresh(server)

@@ -72,6 +72,7 @@ class ServerUpdate(BaseModel):
     ssh_key: str | None = None
     ssh_password: str | None = None
     tags: list[str] | None = None
+    detected_webroot: str | None = None
 
 
 class ReconfigureResult(BaseModel):
@@ -97,6 +98,7 @@ class ServerOut(BaseModel):
     last_seen_at: datetime | None
     active_alert_count: int
     logs_supported: bool
+    detected_webroot: str | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
