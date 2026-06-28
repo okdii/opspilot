@@ -74,6 +74,22 @@ class ServerUpdate(BaseModel):
     tags: list[str] | None = None
     detected_webroot: str | None = None
 
+    @field_validator("detected_webroot")
+    @classmethod
+    def webroot_valid(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            return None
+        if len(v) > 200:
+            raise ValueError("Web root path must not exceed 200 characters")
+        if not v.startswith("/"):
+            raise ValueError("Web root must be an absolute path")
+        if ".." in v.split("/"):
+            raise ValueError("Web root must not contain '..' components")
+        return v.rstrip("/")
+
 
 class ReconfigureResult(BaseModel):
     extra_logs_added: list[str]
